@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.DTOs;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -40,20 +41,27 @@ public class AvailabilitiesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Availability>> CreateAvailability(Availability availability)
+    public async Task<ActionResult<Availability>> CreateAvailability(CreateAvailabilityDto createAvailabilityDto)
     {
         var resourceExists = await _context.Resources
-            .AnyAsync(resource => resource.Id == availability.ResourceId);
+            .AnyAsync(resource => resource.Id == createAvailabilityDto.ResourceId);
 
         if (!resourceExists)
         {
             return BadRequest("Resource does not exist.");
         }
 
-        if (availability.EndTime <= availability.StartTime)
+        if (createAvailabilityDto.EndTime <= createAvailabilityDto.StartTime)
         {
             return BadRequest("EndTime must be after StartTime.");
         }
+
+        var availability = new Availability
+        {
+            ResourceId = createAvailabilityDto.ResourceId,
+            StartTime = createAvailabilityDto.StartTime,
+            EndTime = createAvailabilityDto.EndTime
+        };
 
         _context.Availabilities.Add(availability);
         await _context.SaveChangesAsync();
