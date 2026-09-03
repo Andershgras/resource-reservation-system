@@ -11,4 +11,5 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<Resource> Resources { get; set; }
+    public DbSet<Availability> Availabilities { get; set; }
 }
