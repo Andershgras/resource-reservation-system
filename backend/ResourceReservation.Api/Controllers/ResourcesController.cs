@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ResourceReservation.Api.Models;
+using Microsoft.EntityFrameworkCore;
+using ResourceReservation.Api.Data;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -7,39 +9,25 @@ namespace ResourceReservation.Api.Controllers;
 [Route("api/[controller]")]
 public class ResourcesController : ControllerBase
 {
-    // In-memory list of resources for demonstration purposes.
-    private static readonly List<Resource> Resources =
-    [
-        new Resource
-        {
-            Id = 1,
-            Name = "Meeting Room A",
-            Description = "A generic meeting room resource.",
-            Location = "First floor",
-            IsActive = true
-        },
-        new Resource
-        {
-            Id = 2,
-            Name = "Projector",
-            Description = "Portable presentation equipment.",
-            Location = "Storage Room",
-            IsActive = true
-        }
-    ];
+    private readonly AppDbContext _context;
+
+    public ResourcesController(AppDbContext context)
+    {
+        _context = context;
+    }
 
     [HttpGet]
-    public ActionResult<IEnumerable<Resource>> GetResources()
+    public async Task<ActionResult<IEnumerable<Resource>>> GetResources()
     {
-        return Ok(Resources);
+        return await _context.Resources.ToListAsync();
     }
 
     [HttpGet("{id}")]
-    public ActionResult<Resource> GetResource(int id)
+    public async Task<ActionResult<Resource>> GetResource(int id)
     {
-        var resource = Resources.FirstOrDefault(resource => resource.Id == id);
+        var resource = await _context.Resources.FindAsync(id);
 
-        if (resource == null)
+        if (resource is null)
         {
             return NotFound();
         }
@@ -48,24 +36,25 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<Resource> CreateResource(Resource resource)
+    public async Task<ActionResult<Resource>> CreateResource(Resource resource)
     {
-        var nextId = Resources.Count == 0
-            ? 1
-            : Resources.Max(resource => resource.Id) + 1;
-
-        resource.Id = nextId;
-        Resources.Add(resource);
+        _context.Resources.Add(resource);
+        await _context.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetResource), new { id = resource.Id }, resource);
     }
 
     [HttpPut("{id}")]
-    public IActionResult UpdateResource(int id, Resource updatedResource)
+    public async Task<IActionResult> UpdateResource(int id, Resource updatedResource)
     {
-        var resource = Resources.FirstOrDefault(resource => resource.Id == id);
+        if (id != updatedResource.Id)
+        {
+            return BadRequest();
+        }
 
-        if (resource == null)
+        var resource = await _context.Resources.FindAsync(id);
+
+        if (resource is null)
         {
             return NotFound();
         }
@@ -75,20 +64,23 @@ public class ResourcesController : ControllerBase
         resource.Location = updatedResource.Location;
         resource.IsActive = updatedResource.IsActive;
 
+        await _context.SaveChangesAsync();
+
         return NoContent();
     }
 
     [HttpDelete("{id}")]
-    public IActionResult DeleteResource(int id)
+    public async Task<IActionResult> DeleteResource(int id)
     {
-        var resource = Resources.FirstOrDefault(resource => resource.Id == id);
+        var resource = await _context.Resources.FindAsync(id);
 
-        if (resource == null)
+        if (resource is null)
         {
             return NotFound();
         }
 
-        Resources.Remove(resource);
+        _context.Resources.Remove(resource);
+        await _context.SaveChangesAsync();
 
         return NoContent();
     }
