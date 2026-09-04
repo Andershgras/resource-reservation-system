@@ -71,4 +71,52 @@ public class AvailabilitiesController : ControllerBase
             new { id = availability.Id },
             availability);
     }
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateAvailability(int id, UpdateAvailabilityDto updateAvailabilityDto)
+    {
+        var availability = await _context.Availabilities.FindAsync(id);
+
+        if (availability is null)
+        {
+            return NotFound();
+        }
+
+        var resourceExists = await _context.Resources
+            .AnyAsync(resource => resource.Id == updateAvailabilityDto.ResourceId);
+
+        if (!resourceExists)
+        {
+            return BadRequest("Resource does not exist.");
+        }
+
+        if (updateAvailabilityDto.EndTime <= updateAvailabilityDto.StartTime)
+        {
+            return BadRequest("EndTime must be after StartTime.");
+        }
+
+        availability.ResourceId = updateAvailabilityDto.ResourceId;
+        availability.StartTime = updateAvailabilityDto.StartTime;
+        availability.EndTime = updateAvailabilityDto.EndTime;
+
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteAvailability(int id)
+    {
+        var availability = await _context.Availabilities.FindAsync(id);
+
+        if (availability is null)
+        {
+            return NotFound();
+        }
+
+        _context.Availabilities.Remove(availability);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
 }
