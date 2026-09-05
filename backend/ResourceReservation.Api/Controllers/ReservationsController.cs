@@ -122,4 +122,21 @@ public class ReservationsController : ControllerBase
 
         return NoContent();
     }
+    
+    [HttpGet("resource/{resourceId}")]
+    public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByResource(int resourceId)
+    {
+        var resourceExists = await _context.Resources
+            .AnyAsync(resource => resource.Id == resourceId);
+
+        if (!resourceExists)
+        {
+            return NotFound("Resource does not exist.");
+        }
+
+        return await _context.Reservations
+            .Include(reservation => reservation.Resource)
+            .Where(reservation => reservation.ResourceId == resourceId)
+            .ToListAsync();
+    }
 }
