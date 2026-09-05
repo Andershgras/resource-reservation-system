@@ -3,6 +3,7 @@ using ResourceReservation.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using Microsoft.AspNetCore.Authorization;
+using ResourceReservation.Api.DTOs;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -18,13 +19,15 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Resource>>> GetResources()
+    public async Task<ActionResult<IEnumerable<ResourceResponseDto>>> GetResources()
     {
-        return await _context.Resources.ToListAsync();
+        return await _context.Resources
+            .Select(resource => ToResourceResponseDto(resource))
+            .ToListAsync();
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Resource>> GetResource(int id)
+    public async Task<ActionResult<ResourceResponseDto>> GetResource(int id)
     {
         var resource = await _context.Resources.FindAsync(id);
 
@@ -33,17 +36,20 @@ public class ResourcesController : ControllerBase
             return NotFound();
         }
 
-        return Ok(resource);
+        return Ok(ToResourceResponseDto(resource));
     }
 
     [HttpPost]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<Resource>> CreateResource(Resource resource)
+    public async Task<ActionResult<ResourceResponseDto>> CreateResource(Resource resource)
     {
         _context.Resources.Add(resource);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetResource), new { id = resource.Id }, resource);
+        return CreatedAtAction(
+            nameof(GetResource),
+            new { id = resource.Id },
+            ToResourceResponseDto(resource));
     }
 
     [HttpPut("{id}")]
@@ -87,5 +93,17 @@ public class ResourcesController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    private static ResourceResponseDto ToResourceResponseDto(Resource resource)
+    {
+        return new ResourceResponseDto
+        {
+            Id = resource.Id,
+            Name = resource.Name,
+            Description = resource.Description,
+            Location = resource.Location,
+            IsActive = resource.IsActive
+        };
     }
 }
