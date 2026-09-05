@@ -41,8 +41,21 @@ public class ResourcesController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<ResourceResponseDto>> CreateResource(Resource resource)
+    public async Task<ActionResult<ResourceResponseDto>> CreateResource(CreateResourceDto createResourceDto)
     {
+        if (string.IsNullOrWhiteSpace(createResourceDto.Name))
+        {
+            return BadRequest("Name is required.");
+        }
+
+        var resource = new Resource
+        {
+            Name = createResourceDto.Name.Trim(),
+            Description = NormalizeOptionalText(createResourceDto.Description),
+            Location = NormalizeOptionalText(createResourceDto.Location),
+            IsActive = true
+        };
+
         _context.Resources.Add(resource);
         await _context.SaveChangesAsync();
 
@@ -54,11 +67,11 @@ public class ResourcesController : ControllerBase
 
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateResource(int id, Resource updatedResource)
+    public async Task<IActionResult> UpdateResource(int id, UpdateResourceDto updateResourceDto)
     {
-        if (id != updatedResource.Id)
+        if (string.IsNullOrWhiteSpace(updateResourceDto.Name))
         {
-            return BadRequest();
+            return BadRequest("Name is required.");
         }
 
         var resource = await _context.Resources.FindAsync(id);
@@ -68,10 +81,10 @@ public class ResourcesController : ControllerBase
             return NotFound();
         }
 
-        resource.Name = updatedResource.Name;
-        resource.Description = updatedResource.Description;
-        resource.Location = updatedResource.Location;
-        resource.IsActive = updatedResource.IsActive;
+        resource.Name = updateResourceDto.Name.Trim();
+        resource.Description = NormalizeOptionalText(updateResourceDto.Description);
+        resource.Location = NormalizeOptionalText(updateResourceDto.Location);
+        resource.IsActive = updateResourceDto.IsActive;
 
         await _context.SaveChangesAsync();
 
@@ -105,5 +118,15 @@ public class ResourcesController : ControllerBase
             Location = resource.Location,
             IsActive = resource.IsActive
         };
+    }
+
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 }
