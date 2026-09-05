@@ -19,15 +19,16 @@ public class AvailabilitiesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Availability>>> GetAvailabilities()
+    public async Task<ActionResult<IEnumerable<AvailabilityResponseDto>>> GetAvailabilities()
     {
         return await _context.Availabilities
             .Include(availability => availability.Resource)
+            .Select(availability => ToAvailabilityResponseDto(availability))
             .ToListAsync();
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Availability>> GetAvailability(int id)
+    public async Task<ActionResult<AvailabilityResponseDto>> GetAvailability(int id)
     {
         var availability = await _context.Availabilities
             .Include(availability => availability.Resource)
@@ -38,17 +39,17 @@ public class AvailabilitiesController : ControllerBase
             return NotFound();
         }
 
-        return Ok(availability);
+        return Ok(ToAvailabilityResponseDto(availability));
     }
 
     [HttpPost]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<Availability>> CreateAvailability(CreateAvailabilityDto createAvailabilityDto)
+    public async Task<ActionResult<AvailabilityResponseDto>> CreateAvailability(CreateAvailabilityDto createAvailabilityDto)
     {
-        var resourceExists = await _context.Resources
-            .AnyAsync(resource => resource.Id == createAvailabilityDto.ResourceId);
+        var resource = await _context.Resources
+            .FirstOrDefaultAsync(resource => resource.Id == createAvailabilityDto.ResourceId);
 
-        if (!resourceExists)
+        if (resource is null)
         {
             return BadRequest("Resource does not exist.");
         }
@@ -62,7 +63,8 @@ public class AvailabilitiesController : ControllerBase
         {
             ResourceId = createAvailabilityDto.ResourceId,
             StartTime = createAvailabilityDto.StartTime,
-            EndTime = createAvailabilityDto.EndTime
+            EndTime = createAvailabilityDto.EndTime,
+            Resource = resource
         };
 
         _context.Availabilities.Add(availability);
@@ -71,7 +73,7 @@ public class AvailabilitiesController : ControllerBase
         return CreatedAtAction(
             nameof(GetAvailability),
             new { id = availability.Id },
-            availability);
+            ToAvailabilityResponseDto(availability));
     }
 
     [HttpPut("{id}")]
@@ -122,5 +124,17 @@ public class AvailabilitiesController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    private static AvailabilityResponseDto ToAvailabilityResponseDto(Availability availability)
+    {
+        return new AvailabilityResponseDto
+        {
+            Id = availability.Id,
+            ResourceId = availability.ResourceId,
+            ResourceName = availability.Resource?.Name ?? string.Empty,
+            StartTime = availability.StartTime,
+            EndTime = availability.EndTime
+        };
     }
 }
