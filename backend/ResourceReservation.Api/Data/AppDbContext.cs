@@ -13,4 +13,5 @@ public class AppDbContext : DbContext
     public DbSet<Resource> Resources { get; set; }
     public DbSet<Availability> Availabilities { get; set; }
     public DbSet<Reservation> Reservations { get; set; }
+    public DbSet<User> Users { get; set; }
 }

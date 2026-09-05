@@ -15,4 +15,5 @@ public class Reservation
     public string Status { get; set; } = "Active";
 
     public Resource? Resource { get; set; }
+    public User? User { get; set; }
 }
