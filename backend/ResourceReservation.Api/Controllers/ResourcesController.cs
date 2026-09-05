@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using ResourceReservation.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -36,6 +37,7 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<Resource>> CreateResource(Resource resource)
     {
         _context.Resources.Add(resource);
@@ -45,6 +47,7 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateResource(int id, Resource updatedResource)
     {
         if (id != updatedResource.Id)
@@ -70,6 +73,7 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteResource(int id)
     {
         var resource = await _context.Resources.FindAsync(id);

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.Models;
 using ResourceReservation.Api.DTOs;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -41,6 +42,7 @@ public class AvailabilitiesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<Availability>> CreateAvailability(CreateAvailabilityDto createAvailabilityDto)
     {
         var resourceExists = await _context.Resources
@@ -73,6 +75,7 @@ public class AvailabilitiesController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateAvailability(int id, UpdateAvailabilityDto updateAvailabilityDto)
     {
         var availability = await _context.Availabilities.FindAsync(id);
@@ -105,6 +108,7 @@ public class AvailabilitiesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteAvailability(int id)
     {
         var availability = await _context.Availabilities.FindAsync(id);

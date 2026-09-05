@@ -4,6 +4,7 @@ using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -20,6 +21,7 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<IEnumerable<Reservation>>> GetReservations()
     {
         return await _context.Reservations
@@ -39,12 +41,48 @@ public class ReservationsController : ControllerBase
             return NotFound();
         }
 
+        if (!User.IsInRole("Admin") && reservation.UserId != GetCurrentUserId())
+        {
+            return Forbid();
+        }
+
         return Ok(reservation);
+    }
+
+    [HttpGet("me")]
+    public async Task<ActionResult<IEnumerable<Reservation>>> GetMyReservations()
+    {
+        var currentUserId = GetCurrentUserId();
+
+        if (currentUserId is null)
+        {
+            return Unauthorized();
+        }
+
+        return await _context.Reservations
+            .Include(reservation => reservation.Resource)
+            .Where(reservation => reservation.UserId == currentUserId)
+            .ToListAsync();
     }
 
     [HttpPost]
     public async Task<ActionResult<Reservation>> CreateReservation(CreateReservationDto createReservationDto)
     {
+        var currentUserId = GetCurrentUserId();
+
+        if (currentUserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var userExists = await _context.Users
+            .AnyAsync(user => user.Id == currentUserId);
+
+        if (!userExists)
+        {
+            return Unauthorized("User does not exist.");
+        }
+
         var resource = await _context.Resources
             .FirstOrDefaultAsync(resource => resource.Id == createReservationDto.ResourceId);
 
@@ -89,7 +127,7 @@ public class ReservationsController : ControllerBase
         var reservation = new Reservation
         {
             ResourceId = createReservationDto.ResourceId,
-            UserId = createReservationDto.UserId,
+            UserId = currentUserId.Value,
             StartTime = createReservationDto.StartTime,
             EndTime = createReservationDto.EndTime,
             Status = "Active"
@@ -113,6 +151,11 @@ public class ReservationsController : ControllerBase
             return NotFound();
         }
 
+        if (!User.IsInRole("Admin") && reservation.UserId != GetCurrentUserId())
+        {
+            return Forbid();
+        }
+
         if (reservation.Status == "Cancelled")
         {
             return BadRequest("Reservation is already cancelled.");
@@ -126,6 +169,7 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpGet("resource/{resourceId}")]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByResource(int resourceId)
     {
         var resourceExists = await _context.Resources
@@ -143,11 +187,24 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByUser(int userId)
     {
         return await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Where(reservation => reservation.UserId == userId)
             .ToListAsync();
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!int.TryParse(userIdValue, out var userId))
+        {
+            return null;
+        }
+
+        return userId;
     }
 }
