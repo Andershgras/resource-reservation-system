@@ -101,4 +101,25 @@ public class ReservationsController : ControllerBase
             new { id = reservation.Id },
             reservation);
     }
+    [HttpPut("{id}/cancel")]
+    public async Task<IActionResult> CancelReservation(int id)
+    {
+        var reservation = await _context.Reservations.FindAsync(id);
+
+        if (reservation is null)
+        {
+            return NotFound();
+        }
+
+        if (reservation.Status == "Cancelled")
+        {
+            return BadRequest("Reservation is already cancelled.");
+        }
+
+        reservation.Status = "Cancelled";
+
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
 }
