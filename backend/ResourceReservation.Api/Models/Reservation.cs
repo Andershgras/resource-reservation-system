@@ -12,7 +12,7 @@ public class Reservation
 
     public DateTime EndTime { get; set; }
 
-    public string Status { get; set; } = "Active";
+    public string Status { get; set; } = ReservationStatuses.Active;
 
     public Resource? Resource { get; set; }
     public User? User { get; set; }

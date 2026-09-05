@@ -117,7 +117,7 @@ public class ReservationsController : ControllerBase
         var overlapsExistingReservation = await _context.Reservations
             .AnyAsync(reservation =>
                 reservation.ResourceId == createReservationDto.ResourceId &&
-                reservation.Status == "Active" &&
+                reservation.Status == ReservationStatuses.Active &&
                 createReservationDto.StartTime < reservation.EndTime &&
                 createReservationDto.EndTime > reservation.StartTime);
 
@@ -132,7 +132,7 @@ public class ReservationsController : ControllerBase
             UserId = currentUserId.Value,
             StartTime = createReservationDto.StartTime,
             EndTime = createReservationDto.EndTime,
-            Status = "Active",
+            Status = ReservationStatuses.Active,
             Resource = resource
         };
 
@@ -160,12 +160,12 @@ public class ReservationsController : ControllerBase
             return Forbid();
         }
 
-        if (reservation.Status == "Cancelled")
+        if (reservation.Status == ReservationStatuses.Cancelled)
         {
             return BadRequest("Reservation is already cancelled.");
         }
 
-        reservation.Status = "Cancelled";
+        reservation.Status = ReservationStatuses.Cancelled;
 
         await _context.SaveChangesAsync();
 
