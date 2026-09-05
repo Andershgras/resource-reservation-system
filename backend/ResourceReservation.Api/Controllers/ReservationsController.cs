@@ -22,15 +22,16 @@ public class ReservationsController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<IEnumerable<Reservation>>> GetReservations()
+    public async Task<ActionResult<IEnumerable<ReservationResponseDto>>> GetReservations()
     {
         return await _context.Reservations
             .Include(reservation => reservation.Resource)
+            .Select(reservation => ToReservationResponseDto(reservation))
             .ToListAsync();
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Reservation>> GetReservation(int id)
+    public async Task<ActionResult<ReservationResponseDto>> GetReservation(int id)
     {
         var reservation = await _context.Reservations
             .Include(reservation => reservation.Resource)
@@ -46,11 +47,11 @@ public class ReservationsController : ControllerBase
             return Forbid();
         }
 
-        return Ok(reservation);
+        return Ok(ToReservationResponseDto(reservation));
     }
 
     [HttpGet("me")]
-    public async Task<ActionResult<IEnumerable<Reservation>>> GetMyReservations()
+    public async Task<ActionResult<IEnumerable<ReservationResponseDto>>> GetMyReservations()
     {
         var currentUserId = GetCurrentUserId();
 
@@ -62,11 +63,12 @@ public class ReservationsController : ControllerBase
         return await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Where(reservation => reservation.UserId == currentUserId)
+            .Select(reservation => ToReservationResponseDto(reservation))
             .ToListAsync();
     }
 
     [HttpPost]
-    public async Task<ActionResult<Reservation>> CreateReservation(CreateReservationDto createReservationDto)
+    public async Task<ActionResult<ReservationResponseDto>> CreateReservation(CreateReservationDto createReservationDto)
     {
         var currentUserId = GetCurrentUserId();
 
@@ -130,7 +132,8 @@ public class ReservationsController : ControllerBase
             UserId = currentUserId.Value,
             StartTime = createReservationDto.StartTime,
             EndTime = createReservationDto.EndTime,
-            Status = "Active"
+            Status = "Active",
+            Resource = resource
         };
 
         _context.Reservations.Add(reservation);
@@ -139,8 +142,9 @@ public class ReservationsController : ControllerBase
         return CreatedAtAction(
             nameof(GetReservation),
             new { id = reservation.Id },
-            reservation);
+            ToReservationResponseDto(reservation));
     }
+
     [HttpPut("{id}/cancel")]
     public async Task<IActionResult> CancelReservation(int id)
     {
@@ -170,7 +174,7 @@ public class ReservationsController : ControllerBase
 
     [HttpGet("resource/{resourceId}")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByResource(int resourceId)
+    public async Task<ActionResult<IEnumerable<ReservationResponseDto>>> GetReservationsByResource(int resourceId)
     {
         var resourceExists = await _context.Resources
             .AnyAsync(resource => resource.Id == resourceId);
@@ -183,16 +187,18 @@ public class ReservationsController : ControllerBase
         return await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Where(reservation => reservation.ResourceId == resourceId)
+            .Select(reservation => ToReservationResponseDto(reservation))
             .ToListAsync();
     }
 
     [HttpGet("user/{userId}")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByUser(int userId)
+    public async Task<ActionResult<IEnumerable<ReservationResponseDto>>> GetReservationsByUser(int userId)
     {
         return await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Where(reservation => reservation.UserId == userId)
+            .Select(reservation => ToReservationResponseDto(reservation))
             .ToListAsync();
     }
 
@@ -206,5 +212,19 @@ public class ReservationsController : ControllerBase
         }
 
         return userId;
+    }
+
+    private static ReservationResponseDto ToReservationResponseDto(Reservation reservation)
+    {
+        return new ReservationResponseDto
+        {
+            Id = reservation.Id,
+            ResourceId = reservation.ResourceId,
+            ResourceName = reservation.Resource?.Name ?? string.Empty,
+            UserId = reservation.UserId,
+            StartTime = reservation.StartTime,
+            EndTime = reservation.EndTime,
+            Status = reservation.Status
+        };
     }
 }
