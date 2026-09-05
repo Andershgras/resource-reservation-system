@@ -8,6 +8,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
+using System.Net.Mail;
 
 namespace ResourceReservation.Api.Controllers;
 
@@ -27,8 +28,23 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<UserResponseDto>> Register(RegisterUserDto registerUserDto)
     {
+        if (string.IsNullOrWhiteSpace(registerUserDto.Name))
+        {
+            return BadRequest("Name is required.");
+        }
+
+        if (!TryNormalizeEmail(registerUserDto.Email, out var normalizedEmail))
+        {
+            return BadRequest("A valid email is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(registerUserDto.Password) || registerUserDto.Password.Length < 8)
+        {
+            return BadRequest("Password must be at least 8 characters.");
+        }
+
         var emailExists = await _context.Users
-            .AnyAsync(user => user.Email == registerUserDto.Email);
+            .AnyAsync(user => user.Email.ToLower() == normalizedEmail);
 
         if (emailExists)
         {
@@ -37,8 +53,8 @@ public class AuthController : ControllerBase
 
         var user = new User
         {
-            Name = registerUserDto.Name,
-            Email = registerUserDto.Email,
+            Name = registerUserDto.Name.Trim(),
+            Email = normalizedEmail,
             Role = "User"
         };
 
@@ -61,8 +77,13 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login(LoginUserDto loginUserDto)
     {
+        if (!TryNormalizeEmail(loginUserDto.Email, out var normalizedEmail))
+        {
+            return Unauthorized("Invalid email or password.");
+        }
+
         var user = await _context.Users
-            .FirstOrDefaultAsync(user => user.Email == loginUserDto.Email);
+            .FirstOrDefaultAsync(user => user.Email.ToLower() == normalizedEmail);
 
         if (user is null)
         {
@@ -95,6 +116,7 @@ public class AuthController : ControllerBase
 
         return Ok(authResponseDto);
     }
+
     private string CreateJwtToken(User user)
     {
         var jwtKey = _configuration["Jwt:Key"];
@@ -123,5 +145,26 @@ public class AuthController : ControllerBase
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static bool TryNormalizeEmail(string email, out string normalizedEmail)
+    {
+        normalizedEmail = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        try
+        {
+            var mailAddress = new MailAddress(email.Trim());
+            normalizedEmail = mailAddress.Address.ToLowerInvariant();
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 }

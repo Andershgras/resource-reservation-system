@@ -2,8 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using ResourceReservation.Api.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +59,36 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var adminEmail = configuration["SeedAdmin:Email"]?.Trim().ToLowerInvariant();
+    var adminPassword = configuration["SeedAdmin:Password"];
+    var adminName = configuration["SeedAdmin:Name"]?.Trim();
+    var adminEmailExists = string.IsNullOrWhiteSpace(adminEmail) ||
+        await context.Users.AnyAsync(user => user.Email.ToLower() == adminEmail);
+
+    if (!string.IsNullOrWhiteSpace(adminEmail) &&
+        !string.IsNullOrWhiteSpace(adminPassword) &&
+        !adminEmailExists &&
+        !await context.Users.AnyAsync(user => user.Role == "Admin"))
+    {
+        var adminUser = new User
+        {
+            Name = string.IsNullOrWhiteSpace(adminName) ? "Admin" : adminName,
+            Email = adminEmail,
+            Role = "Admin"
+        };
+
+        var passwordHasher = new PasswordHasher<User>();
+        adminUser.PasswordHash = passwordHasher.HashPassword(adminUser, adminPassword);
+
+        context.Users.Add(adminUser);
+        await context.SaveChangesAsync();
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
