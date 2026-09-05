@@ -20,7 +20,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<User>> Register(RegisterUserDto registerUserDto)
+    public async Task<ActionResult<UserResponseDto>> Register(RegisterUserDto registerUserDto)
     {
         var emailExists = await _context.Users
             .AnyAsync(user => user.Email == registerUserDto.Email);
@@ -42,6 +42,14 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(Register), new { id = user.Id }, user);
+        var userResponseDto = new UserResponseDto
+        {
+            Id = user.Id,
+            Name = user.Name,
+            Email = user.Email,
+            Role = user.Role
+        };
+
+        return CreatedAtAction(nameof(Register), new { id = user.Id }, userResponseDto);
     }
 }
