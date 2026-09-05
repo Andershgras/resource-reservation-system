@@ -122,7 +122,7 @@ public class ReservationsController : ControllerBase
 
         return NoContent();
     }
-    
+
     [HttpGet("resource/{resourceId}")]
     public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByResource(int resourceId)
     {
@@ -137,6 +137,15 @@ public class ReservationsController : ControllerBase
         return await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Where(reservation => reservation.ResourceId == resourceId)
+            .ToListAsync();
+    }
+
+    [HttpGet("user/{userId}")]
+    public async Task<ActionResult<IEnumerable<Reservation>>> GetReservationsByUser(int userId)
+    {
+        return await _context.Reservations
+            .Include(reservation => reservation.Resource)
+            .Where(reservation => reservation.UserId == userId)
             .ToListAsync();
     }
 }
