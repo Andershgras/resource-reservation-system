@@ -115,6 +115,32 @@ input:focus-visible {
   margin-bottom: 4px;
 }
 
+.resource-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resource-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.resource-list p {
+  margin-top: 4px;
+}
+
+.resource-list span {
+  color: var(--text);
+  font-size: 14px;
+}
+
 .status-message {
   min-height: 24px;
   color: var(--text-h);
@@ -132,6 +158,10 @@ input:focus-visible {
   }
 
   .home-header {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-list li {
     grid-template-columns: 1fr;
   }
 }

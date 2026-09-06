@@ -1,7 +1,8 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
-import type { UserResponse } from './api/types'
+import { getResources } from './api/resourcesApi'
+import type { ResourceResponse, UserResponse } from './api/types'
 import {
   clearAuthSession,
   getAuthUser,
@@ -21,6 +22,46 @@ function App() {
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [resources, setResources] = useState<ResourceResponse[]>([])
+  const [resourceMessage, setResourceMessage] = useState('')
+  const [isLoadingResources, setIsLoadingResources] = useState(false)
+
+  useEffect(() => {
+    if (!currentUser) {
+      setResources([])
+      setResourceMessage('')
+      return
+    }
+
+    let shouldUpdate = true
+
+    async function loadResources() {
+      setIsLoadingResources(true)
+      setResourceMessage('')
+
+      try {
+        const loadedResources = await getResources()
+
+        if (shouldUpdate) {
+          setResources(loadedResources)
+        }
+      } catch (error) {
+        if (shouldUpdate) {
+          setResourceMessage(getErrorMessage(error))
+        }
+      } finally {
+        if (shouldUpdate) {
+          setIsLoadingResources(false)
+        }
+      }
+    }
+
+    void loadResources()
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [currentUser])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -81,6 +122,29 @@ function App() {
               <p>Resource browsing and reservations will be added here.</p>
             </section>
           )}
+
+          <section className="placeholder-section" aria-labelledby="resources-title">
+            <h2 id="resources-title">Resources</h2>
+            {isLoadingResources && <p>Loading resources...</p>}
+            {resourceMessage && <p className="status-message">{resourceMessage}</p>}
+            {!isLoadingResources && !resourceMessage && resources.length === 0 && (
+              <p>No resources found.</p>
+            )}
+            {resources.length > 0 && (
+              <ul className="resource-list">
+                {resources.map((resource) => (
+                  <li key={resource.id}>
+                    <div>
+                      <strong>{resource.name}</strong>
+                      {resource.location && <p>{resource.location}</p>}
+                      {resource.description && <p>{resource.description}</p>}
+                    </div>
+                    <span>{resource.isActive ? 'Active' : 'Inactive'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </section>
       </main>
     )
