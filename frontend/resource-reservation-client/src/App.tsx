@@ -1,122 +1,161 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { type FormEvent, useState } from 'react'
+import { login, register } from './api/authApi'
+import { ApiError } from './api/client'
+import type { UserResponse } from './api/types'
+import {
+  clearAuthSession,
+  getAuthUser,
+  saveAuthSession,
+} from './auth/authStorage'
 import './App.css'
 
+type AuthMode = 'login' | 'register'
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [authMode, setAuthMode] = useState<AuthMode>('login')
+  const [currentUser, setCurrentUser] = useState<UserResponse | null>(() =>
+    getAuthUser(),
+  )
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setMessage('')
+    setIsSubmitting(true)
+
+    try {
+      if (authMode === 'login') {
+        const auth = await login({ email, password })
+        saveAuthSession(auth)
+        setCurrentUser(auth.user)
+        setPassword('')
+        setMessage('Login succeeded.')
+        return
+      }
+
+      await register({ name, email, password })
+      setAuthMode('login')
+      setName('')
+      setPassword('')
+      setMessage('Registration succeeded. You can log in now.')
+    } catch (error) {
+      setMessage(getErrorMessage(error))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function handleLogout() {
+    clearAuthSession()
+    setCurrentUser(null)
+    setMessage('You have been logged out.')
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <main className="app-shell">
+      <section className="auth-panel" aria-labelledby="auth-title">
+        <div className="auth-copy">
+          <h1 id="auth-title">Authentication</h1>
+          <p>Login or create a user account.</p>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+
+        {currentUser ? (
+          <section className="session-summary" aria-label="Current session">
+            <div>
+              <p className="label-text">Signed in</p>
+              <h2>{currentUser.name}</h2>
+              <p>{currentUser.email}</p>
+            </div>
+            <span className="role-badge">{currentUser.role}</span>
+            <button type="button" onClick={handleLogout}>
+              Logout
+            </button>
+          </section>
+        ) : (
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="mode-switch" aria-label="Authentication mode">
+              <button
+                type="button"
+                className={authMode === 'login' ? 'active' : ''}
+                onClick={() => setAuthMode('login')}
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                className={authMode === 'register' ? 'active' : ''}
+                onClick={() => setAuthMode('register')}
+              >
+                Register
+              </button>
+            </div>
+
+            {authMode === 'register' && (
+              <label>
+                Name
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  maxLength={100}
+                  required
+                />
+              </label>
+            )}
+
+            <label>
+              Email
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                maxLength={255}
+                required
+              />
+            </label>
+
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                minLength={authMode === 'register' ? 8 : undefined}
+                maxLength={100}
+                required
+              />
+            </label>
+
+            <button type="submit" disabled={isSubmitting}>
+              {isSubmitting
+                ? 'Please wait...'
+                : authMode === 'login'
+                  ? 'Login'
+                  : 'Create account'}
+            </button>
+          </form>
+        )}
+
+        {message && <p className="status-message">{message}</p>}
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    </main>
   )
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    return error.message
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Something went wrong.'
 }
 
 export default App

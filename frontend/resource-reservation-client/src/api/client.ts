@@ -1,6 +1,6 @@
 import { getAuthToken } from '../auth/authStorage'
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'https://localhost:7182/api'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5052/api'
 
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown

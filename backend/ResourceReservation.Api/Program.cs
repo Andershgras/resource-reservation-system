@@ -7,9 +7,31 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using ResourceReservation.Api.Models;
 
+const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendDevelopmentCorsPolicy, policy =>
+    {
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                {
+                    return false;
+                }
+
+                return (uri.Host == "localhost" || uri.Host == "127.0.0.1") &&
+                    uri.Port >= 5173 &&
+                    uri.Port <= 5185;
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -98,6 +120,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors(frontendDevelopmentCorsPolicy);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
