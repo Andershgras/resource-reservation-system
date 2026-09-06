@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/ResourceReservation.Api.Tests/ResourceReservation.Api.Tests.csproj" />
+    <Project Path="backend/ResourceReservation.Api/ResourceReservation.Api.csproj" />
+  </Folder>
+</Solution>
