@@ -36,7 +36,7 @@ public class AvailabilitiesController : ControllerBase
 
         if (availability is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Availability not found."));
         }
 
         return Ok(ToAvailabilityResponseDto(availability));
@@ -51,12 +51,12 @@ public class AvailabilitiesController : ControllerBase
 
         if (resource is null)
         {
-            return BadRequest("Resource does not exist.");
+            return BadRequest(ApiError("Resource does not exist."));
         }
 
         if (createAvailabilityDto.EndTime <= createAvailabilityDto.StartTime)
         {
-            return BadRequest("EndTime must be after StartTime.");
+            return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
         var availability = new Availability
@@ -84,7 +84,7 @@ public class AvailabilitiesController : ControllerBase
 
         if (availability is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Availability not found."));
         }
 
         var resourceExists = await _context.Resources
@@ -92,12 +92,12 @@ public class AvailabilitiesController : ControllerBase
 
         if (!resourceExists)
         {
-            return BadRequest("Resource does not exist.");
+            return BadRequest(ApiError("Resource does not exist."));
         }
 
         if (updateAvailabilityDto.EndTime <= updateAvailabilityDto.StartTime)
         {
-            return BadRequest("EndTime must be after StartTime.");
+            return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
         availability.ResourceId = updateAvailabilityDto.ResourceId;
@@ -117,7 +117,7 @@ public class AvailabilitiesController : ControllerBase
 
         if (availability is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Availability not found."));
         }
 
         _context.Availabilities.Remove(availability);
@@ -136,5 +136,10 @@ public class AvailabilitiesController : ControllerBase
             StartTime = availability.StartTime,
             EndTime = availability.EndTime
         };
+    }
+
+    private static ApiErrorResponseDto ApiError(string message)
+    {
+        return new ApiErrorResponseDto { Message = message };
     }
 }

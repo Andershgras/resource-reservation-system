@@ -39,12 +39,12 @@ public class ReservationsController : ControllerBase
 
         if (reservation is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Reservation not found."));
         }
 
         if (!User.IsInRole("Admin") && reservation.UserId != GetCurrentUserId())
         {
-            return Forbid();
+            return Forbidden();
         }
 
         return Ok(ToReservationResponseDto(reservation));
@@ -57,7 +57,7 @@ public class ReservationsController : ControllerBase
 
         if (currentUserId is null)
         {
-            return Unauthorized();
+            return Unauthorized(ApiError("Authentication is required."));
         }
 
         return await _context.Reservations
@@ -74,7 +74,7 @@ public class ReservationsController : ControllerBase
 
         if (currentUserId is null)
         {
-            return Unauthorized();
+            return Unauthorized(ApiError("Authentication is required."));
         }
 
         var userExists = await _context.Users
@@ -82,7 +82,7 @@ public class ReservationsController : ControllerBase
 
         if (!userExists)
         {
-            return Unauthorized("User does not exist.");
+            return Unauthorized(ApiError("User does not exist."));
         }
 
         var resource = await _context.Resources
@@ -90,17 +90,17 @@ public class ReservationsController : ControllerBase
 
         if (resource is null)
         {
-            return BadRequest("Resource does not exist.");
+            return BadRequest(ApiError("Resource does not exist."));
         }
 
         if (!resource.IsActive)
         {
-            return BadRequest("Resource is not active.");
+            return BadRequest(ApiError("Resource is not active."));
         }
 
         if (createReservationDto.EndTime <= createReservationDto.StartTime)
         {
-            return BadRequest("EndTime must be after StartTime.");
+            return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
         var isInsideAvailability = await _context.Availabilities
@@ -111,7 +111,7 @@ public class ReservationsController : ControllerBase
 
         if (!isInsideAvailability)
         {
-            return BadRequest("Resource is not available in this time period.");
+            return BadRequest(ApiError("Resource is not available in this time period."));
         }
 
         var overlapsExistingReservation = await _context.Reservations
@@ -123,7 +123,7 @@ public class ReservationsController : ControllerBase
 
         if (overlapsExistingReservation)
         {
-            return BadRequest("Resource is already reserved in this time period.");
+            return BadRequest(ApiError("Resource is already reserved in this time period."));
         }
 
         var reservation = new Reservation
@@ -152,17 +152,17 @@ public class ReservationsController : ControllerBase
 
         if (reservation is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Reservation not found."));
         }
 
         if (!User.IsInRole("Admin") && reservation.UserId != GetCurrentUserId())
         {
-            return Forbid();
+            return Forbidden();
         }
 
         if (reservation.Status == ReservationStatuses.Cancelled)
         {
-            return BadRequest("Reservation is already cancelled.");
+            return BadRequest(ApiError("Reservation is already cancelled."));
         }
 
         reservation.Status = ReservationStatuses.Cancelled;
@@ -181,7 +181,7 @@ public class ReservationsController : ControllerBase
 
         if (!resourceExists)
         {
-            return NotFound("Resource does not exist.");
+            return NotFound(ApiError("Resource does not exist."));
         }
 
         return await _context.Reservations
@@ -226,5 +226,17 @@ public class ReservationsController : ControllerBase
             EndTime = reservation.EndTime,
             Status = reservation.Status
         };
+    }
+
+    private ObjectResult Forbidden()
+    {
+        return StatusCode(
+            StatusCodes.Status403Forbidden,
+            ApiError("You do not have permission to access this resource."));
+    }
+
+    private static ApiErrorResponseDto ApiError(string message)
+    {
+        return new ApiErrorResponseDto { Message = message };
     }
 }

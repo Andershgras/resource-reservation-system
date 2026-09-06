@@ -96,15 +96,6 @@ function App() {
 
   useEffect(() => {
     if (!currentUser) {
-      setResources([])
-      setResourceMessage('')
-      setAvailabilities([])
-      setAvailabilityMessage('')
-      setReservationMessage('')
-      setReservations([])
-      setMyReservationsMessage('')
-      setAdminReservations([])
-      setAdminReservationsMessage('')
       return
     }
 
@@ -380,6 +371,18 @@ function App() {
     setAvailabilityValidationMessage('')
   }
 
+  function resetLoadedData() {
+    setResources([])
+    setResourceMessage('')
+    setAvailabilities([])
+    setAvailabilityMessage('')
+    setReservationMessage('')
+    setReservations([])
+    setMyReservationsMessage('')
+    setAdminReservations([])
+    setAdminReservationsMessage('')
+  }
+
   async function handleCreateReservation(availability: AvailabilityResponse) {
     setReservationMessage('')
     setReservingAvailabilityId(availability.id)
@@ -484,6 +487,7 @@ function App() {
 
   function handleLogout() {
     clearAuthSession()
+    resetLoadedData()
     setCurrentUser(null)
     setMessage('You have been logged out.')
   }

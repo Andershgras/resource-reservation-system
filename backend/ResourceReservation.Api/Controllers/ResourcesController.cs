@@ -33,7 +33,7 @@ public class ResourcesController : ControllerBase
 
         if (resource is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Resource not found."));
         }
 
         return Ok(ToResourceResponseDto(resource));
@@ -45,7 +45,7 @@ public class ResourcesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(createResourceDto.Name))
         {
-            return BadRequest("Name is required.");
+            return BadRequest(ApiError("Name is required."));
         }
 
         var resource = new Resource
@@ -71,14 +71,14 @@ public class ResourcesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(updateResourceDto.Name))
         {
-            return BadRequest("Name is required.");
+            return BadRequest(ApiError("Name is required."));
         }
 
         var resource = await _context.Resources.FindAsync(id);
 
         if (resource is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Resource not found."));
         }
 
         resource.Name = updateResourceDto.Name.Trim();
@@ -99,7 +99,7 @@ public class ResourcesController : ControllerBase
 
         if (resource is null)
         {
-            return NotFound();
+            return NotFound(ApiError("Resource not found."));
         }
 
         _context.Resources.Remove(resource);
@@ -128,5 +128,10 @@ public class ResourcesController : ControllerBase
         }
 
         return value.Trim();
+    }
+
+    private static ApiErrorResponseDto ApiError(string message)
+    {
+        return new ApiErrorResponseDto { Message = message };
     }
 }

@@ -72,52 +72,20 @@ Each issue should include:
 
 Keep each issue small enough that it can be implemented, verified, and committed independently.
 
-## Suggested First Issues
+## Completed User Stories
 
-### Add Backend Tests For Reservation Rules
+These GitHub issues are closed and implemented:
 
-As a developer, I want automated tests for reservation overlap rules, so that the most important booking behavior is protected.
+- [x] #1 Add Backend Tests For Reservation Rules
+- [x] #2 Add Frontend Validation For Availability Forms
+- [x] #3 Improve Frontend Feedback States
+- [x] #4 Add Demo Seed Data
+- [x] #6 Add GitHub Actions Build Workflow
+- [x] #7 Add Basic Frontend Smoke Test Plan
+- [x] #8 Add Architecture Overview Documentation
+- [x] #21 Add API Error Response Consistency
 
-Acceptance criteria:
-
-- Active overlapping reservations are rejected
-- Cancelled reservations do not block new reservations
-- Reservations must stay inside an availability window
-- `dotnet test` passes
-
-### Add Frontend Validation For Availability Forms
-
-As an admin, I want clear validation before submitting availability, so that I can fix input mistakes before the API rejects the request.
-
-Acceptance criteria:
-
-- Resource selection is required
-- Start time is required
-- End time is required
-- End time must be after start time
-- `npm run build` passes
-
-### Improve Frontend Feedback States
-
-As a user, I want consistent loading, empty, success, and error messages, so that the app is easier to understand.
-
-Acceptance criteria:
-
-- Resource, availability, and reservation sections use consistent feedback patterns
-- API errors are shown clearly
-- Empty states are understandable
-- `npm run build` passes
-
-### Add Demo Seed Data
-
-As a reviewer, I want the app to have simple demo data, so that the project can be tested quickly.
-
-Acceptance criteria:
-
-- Development seed data creates example resources
-- Development seed data creates example availability
-- Seed data does not replace real user-created data unexpectedly
-- Backend build passes
+## Open User Stories
 
 ### Add README Screenshots
 
@@ -129,16 +97,6 @@ Acceptance criteria:
 - README includes at least one User screenshot
 - Screenshots match the current MVP UI
 - README remains concise
-
-### Add GitHub Actions Build Workflow
-
-As a developer, I want GitHub to build the project automatically, so that changes are checked before they are merged.
-
-Acceptance criteria:
-
-- Backend build runs in GitHub Actions
-- Frontend build runs in GitHub Actions
-- Workflow is documented briefly
 
 ## Later Ideas
 
@@ -159,7 +117,7 @@ These ideas should wait until the MVP is stable and well documented:
 The next recommended work is:
 
 ```text
-Add Backend Tests For Reservation Rules
+Add README Screenshots
 ```
 
-Reason: reservation overlap prevention is the most important business rule in the system, and automated tests would make the project stronger before adding more features.
+Reason: the core MVP is implemented, tested, and documented. Screenshots would make the project easier to understand quickly as a portfolio piece.
