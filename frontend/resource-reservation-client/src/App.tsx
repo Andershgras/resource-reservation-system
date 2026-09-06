@@ -336,8 +336,10 @@ function App() {
         endTime: availability.endTime,
       })
       const loadedReservations = await getMyReservations()
+      const loadedAvailabilities = await getAvailabilities()
 
       setReservations(loadedReservations)
+      setAvailabilities(loadedAvailabilities)
       setReservationMessage('Reservation created.')
     } catch (error) {
       setReservationMessage(getErrorMessage(error))
@@ -361,8 +363,10 @@ function App() {
     try {
       await cancelReservation(reservation.id)
       const loadedReservations = await getMyReservations()
+      const loadedAvailabilities = await getAvailabilities()
 
       setReservations(loadedReservations)
+      setAvailabilities(loadedAvailabilities)
       setMyReservationsMessage('Reservation cancelled.')
     } catch (error) {
       setMyReservationsMessage(getErrorMessage(error))
@@ -636,51 +640,63 @@ function App() {
               availabilities.length === 0 && <p>No availability found.</p>}
             {availabilities.length > 0 && (
               <ul className="resource-list">
-                {availabilities.map((availability) => (
-                  <li key={availability.id}>
-                    <div>
-                      <strong>{availability.resourceName}</strong>
-                      <p>{formatDateTime(availability.startTime)}</p>
-                      <p>{formatDateTime(availability.endTime)}</p>
-                    </div>
-                    {currentUser.role === 'User' && (
-                      <div className="resource-actions">
-                        <button
-                          type="button"
-                          disabled={reservingAvailabilityId === availability.id}
-                          onClick={() =>
-                            void handleCreateReservation(availability)
-                          }
-                        >
-                          {reservingAvailabilityId === availability.id
-                            ? 'Reserving...'
-                            : 'Reserve'}
-                        </button>
+                {availabilities.map((availability) => {
+                  const isReservedByUser =
+                    currentUser.role === 'User' &&
+                    hasActiveReservationOverlap(availability, reservations)
+
+                  return (
+                    <li key={availability.id}>
+                      <div>
+                        <strong>{availability.resourceName}</strong>
+                        <p>{formatDateTime(availability.startTime)}</p>
+                        <p>{formatDateTime(availability.endTime)}</p>
                       </div>
-                    )}
-                    {currentUser.role === 'Admin' && (
-                      <div className="resource-actions">
-                        <button
-                          type="button"
-                          onClick={() => handleEditAvailability(availability)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={deletingAvailabilityId === availability.id}
-                          onClick={() =>
-                            void handleDeleteAvailability(availability)
-                          }
-                        >
-                          {deletingAvailabilityId === availability.id
-                            ? 'Deleting...'
-                            : 'Delete'}
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                ))}
+                      {currentUser.role === 'User' && (
+                        <div className="resource-actions">
+                          {isReservedByUser ? (
+                            <span>Reserved</span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={
+                                reservingAvailabilityId === availability.id
+                              }
+                              onClick={() =>
+                                void handleCreateReservation(availability)
+                              }
+                            >
+                              {reservingAvailabilityId === availability.id
+                                ? 'Reserving...'
+                                : 'Reserve'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {currentUser.role === 'Admin' && (
+                        <div className="resource-actions">
+                          <button
+                            type="button"
+                            onClick={() => handleEditAvailability(availability)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingAvailabilityId === availability.id}
+                            onClick={() =>
+                              void handleDeleteAvailability(availability)
+                            }
+                          >
+                            {deletingAvailabilityId === availability.id
+                              ? 'Deleting...'
+                              : 'Delete'}
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>
@@ -836,6 +852,28 @@ function toDateTimeLocalValue(value: string) {
   const date = new Date(value)
   const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
   return offsetDate.toISOString().slice(0, 16)
+}
+
+function hasActiveReservationOverlap(
+  availability: AvailabilityResponse,
+  reservations: ReservationResponse[],
+) {
+  const availabilityStart = new Date(availability.startTime).getTime()
+  const availabilityEnd = new Date(availability.endTime).getTime()
+
+  return reservations.some((reservation) => {
+    if (
+      reservation.status !== 'Active' ||
+      reservation.resourceId !== availability.resourceId
+    ) {
+      return false
+    }
+
+    const reservationStart = new Date(reservation.startTime).getTime()
+    const reservationEnd = new Date(reservation.endTime).getTime()
+
+    return availabilityStart < reservationEnd && availabilityEnd > reservationStart
+  })
 }
 
 export default App
