@@ -13,9 +13,10 @@ import {
   getResources,
   updateResource,
 } from './api/resourcesApi'
-import { createReservation } from './api/reservationsApi'
+import { createReservation, getMyReservations } from './api/reservationsApi'
 import type {
   AvailabilityResponse,
+  ReservationResponse,
   ResourceResponse,
   UserResponse,
 } from './api/types'
@@ -69,6 +70,9 @@ function App() {
     number | null
   >(null)
   const [reservationMessage, setReservationMessage] = useState('')
+  const [reservations, setReservations] = useState<ReservationResponse[]>([])
+  const [myReservationsMessage, setMyReservationsMessage] = useState('')
+  const [isLoadingReservations, setIsLoadingReservations] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -77,6 +81,8 @@ function App() {
       setAvailabilities([])
       setAvailabilityMessage('')
       setReservationMessage('')
+      setReservations([])
+      setMyReservationsMessage('')
       return
     }
 
@@ -84,6 +90,10 @@ function App() {
 
     void loadResources(() => isActive)
     void loadAvailabilities(() => isActive)
+
+    if (currentUser.role === 'User') {
+      void loadMyReservations(() => isActive)
+    }
 
     return () => {
       isActive = false
@@ -128,6 +138,27 @@ function App() {
     } finally {
       if (shouldUpdate()) {
         setIsLoadingAvailabilities(false)
+      }
+    }
+  }
+
+  async function loadMyReservations(shouldUpdate = () => true) {
+    setIsLoadingReservations(true)
+    setMyReservationsMessage('')
+
+    try {
+      const loadedReservations = await getMyReservations()
+
+      if (shouldUpdate()) {
+        setReservations(loadedReservations)
+      }
+    } catch (error) {
+      if (shouldUpdate()) {
+        setMyReservationsMessage(getErrorMessage(error))
+      }
+    } finally {
+      if (shouldUpdate()) {
+        setIsLoadingReservations(false)
       }
     }
   }
@@ -297,6 +328,9 @@ function App() {
         startTime: availability.startTime,
         endTime: availability.endTime,
       })
+      const loadedReservations = await getMyReservations()
+
+      setReservations(loadedReservations)
       setReservationMessage('Reservation created.')
     } catch (error) {
       setReservationMessage(getErrorMessage(error))
@@ -618,6 +652,38 @@ function App() {
               </ul>
             )}
           </section>
+
+          {currentUser.role === 'User' && (
+            <section
+              className="placeholder-section"
+              aria-labelledby="my-reservations-title"
+            >
+              <h2 id="my-reservations-title">My reservations</h2>
+              {isLoadingReservations && <p>Loading reservations...</p>}
+              {myReservationsMessage && (
+                <p className="status-message">{myReservationsMessage}</p>
+              )}
+              {!isLoadingReservations &&
+                !myReservationsMessage &&
+                reservations.length === 0 && <p>No reservations found.</p>}
+              {reservations.length > 0 && (
+                <ul className="resource-list">
+                  {reservations.map((reservation) => (
+                    <li key={reservation.id}>
+                      <div>
+                        <strong>{reservation.resourceName}</strong>
+                        <p>{formatDateTime(reservation.startTime)}</p>
+                        <p>{formatDateTime(reservation.endTime)}</p>
+                      </div>
+                      <div className="resource-actions">
+                        <span>{reservation.status}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
         </section>
       </main>
     )

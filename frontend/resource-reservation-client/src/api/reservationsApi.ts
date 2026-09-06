@@ -7,3 +7,7 @@ export function createReservation(request: CreateReservationRequest) {
     body: request,
   })
 }
+
+export function getMyReservations() {
+  return apiRequest<ReservationResponse[]>('/reservations/me')
+}
