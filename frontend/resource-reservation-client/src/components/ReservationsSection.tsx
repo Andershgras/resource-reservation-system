@@ -26,10 +26,14 @@ export function ReservationsSection({
   return (
     <section className="placeholder-section" aria-labelledby={titleId}>
       <h2 id={titleId}>{title}</h2>
-      {isLoading && <p>Loading reservations...</p>}
+      {isLoading && (
+        <p className="status-message" role="status">
+          Loading reservations...
+        </p>
+      )}
       {message && <p className="status-message">{message}</p>}
-      {!isLoading && !message && reservations.length === 0 && (
-        <p>No reservations found.</p>
+      {!isLoading && reservations.length === 0 && (
+        <p className="status-message">No reservations found.</p>
       )}
       {reservations.length > 0 && (
         <ul className="resource-list">

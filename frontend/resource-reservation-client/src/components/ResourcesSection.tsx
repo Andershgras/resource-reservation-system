@@ -22,10 +22,14 @@ export function ResourcesSection({
   return (
     <section className="placeholder-section" aria-labelledby="resources-title">
       <h2 id="resources-title">Resources</h2>
-      {isLoadingResources && <p>Loading resources...</p>}
+      {isLoadingResources && (
+        <p className="status-message" role="status">
+          Loading resources...
+        </p>
+      )}
       {resourceMessage && <p className="status-message">{resourceMessage}</p>}
-      {!isLoadingResources && !resourceMessage && resources.length === 0 && (
-        <p>No resources found.</p>
+      {!isLoadingResources && resources.length === 0 && (
+        <p className="status-message">No resources found.</p>
       )}
       {resources.length > 0 && (
         <ul className="resource-list">

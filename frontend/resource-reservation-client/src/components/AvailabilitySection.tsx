@@ -42,13 +42,18 @@ export function AvailabilitySection({
     <section className="placeholder-section" aria-labelledby="availabilities-title">
       <h2 id="availabilities-title">Availability</h2>
       {reservationMessage && <p className="status-message">{reservationMessage}</p>}
-      {isLoadingAvailabilities && <p>Loading availability...</p>}
+      {isLoadingAvailabilities && (
+        <p className="status-message" role="status">
+          Loading availability...
+        </p>
+      )}
       {availabilityMessage && (
         <p className="status-message">{availabilityMessage}</p>
       )}
       {!isLoadingAvailabilities &&
-        !availabilityMessage &&
-        availabilities.length === 0 && <p>No availability found.</p>}
+        availabilities.length === 0 && (
+          <p className="status-message">No availability found.</p>
+        )}
       {availabilities.length > 0 && (
         <ul className="resource-list">
           {availabilities.map((availability) => {
