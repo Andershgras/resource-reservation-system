@@ -77,26 +77,44 @@ Keep each issue small enough that it can be implemented, verified, and committed
 
 These GitHub issues are closed and implemented:
 
-- [x] #1 Add Backend Tests For Reservation Rules
-- [x] #2 Add Frontend Validation For Availability Forms
-- [x] #3 Improve Frontend Feedback States
-- [x] #4 Add Demo Seed Data
-- [x] #6 Add GitHub Actions Build Workflow
-- [x] #7 Add Basic Frontend Smoke Test Plan
-- [x] #8 Add Architecture Overview Documentation
-- [x] #21 Add API Error Response Consistency
-- [x] Add Auth Controller Tests
-- [x] Clean Backend Build Warning
-- [x] Add Frontend Smoke Tests To CI
-- [x] Improve Availability And Reservation Filtering
-- [x] Modernize Frontend Layout And Visual Design
-- [x] Improve User Reservation Time Selection
-- [x] Prevent Overlapping Availability Windows
-- [x] Protect Reservation History From Resource Deletes
-- [x] Replace Browser Confirm Dialogs
-- [x] Split Role Views Into Navigable Screens
+- Active overlapping reservations are rejected
+- Cancelled reservations do not block new reservations
+- Reservations must stay inside an availability window
+- `dotnet test` passes
 
-## Open User Stories
+### Add Frontend Validation For Availability Forms
+
+As an admin, I want clear validation before submitting availability, so that I can fix input mistakes before the API rejects the request.
+
+Acceptance criteria:
+
+- Resource selection is required
+- Start time is required
+- End time is required
+- End time must be after start time
+- `npm run build` passes
+
+### Improve Frontend Feedback States
+
+As a user, I want consistent loading, empty, success, and error messages, so that the app is easier to understand.
+
+Acceptance criteria:
+
+- Resource, availability, and reservation sections use consistent feedback patterns
+- API errors are shown clearly
+- Empty states are understandable
+- `npm run build` passes
+
+### Add Demo Seed Data
+
+As a reviewer, I want the app to have simple demo data, so that the project can be tested quickly.
+
+Acceptance criteria:
+
+- Development seed data creates example resources
+- Development seed data creates example availability
+- Seed data does not replace real user-created data unexpectedly
+- Backend build passes
 
 ### Add README Screenshots
 
