@@ -54,6 +54,20 @@ The workflow builds the backend API and installs/builds the frontend client.
 
 The goal of this project is to build a realistic full-stack web application that shows practical skills with API development, relational databases, authentication, authorization, and frontend development.
 
+## Architecture Overview
+
+The application is split into a backend API, a SQL Server database, and a React frontend.
+
+The backend is responsible for the core business rules. It exposes API endpoints for authentication, resources, availability, and reservations. It also validates reservation rules, such as active resources, availability windows, and overlap prevention.
+
+SQL Server stores the application data. Entity Framework Core maps the C# models to database tables and is used by the API to query and update users, resources, availability windows, and reservations.
+
+The frontend is responsible for the browser experience. It lets Admin users manage resources and availability, and lets normal Users view availability, create reservations, and cancel their own reservations.
+
+Authentication uses JWT. A user registers or logs in through the API, the API returns a token, and the frontend stores that token and sends it with protected API requests.
+
+Authorization is role-based at a high level. Admin users can manage resources, availability, and all reservations. Normal Users can view resources and availability, create reservations for themselves, and manage only their own reservations.
+
 ## Backend Status
 
 The first backend MVP is implemented.
