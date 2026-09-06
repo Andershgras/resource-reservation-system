@@ -589,7 +589,7 @@ function App() {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    return error.message
+    return `Error: ${error.message}`
   }
 
   if (error instanceof Error) {
