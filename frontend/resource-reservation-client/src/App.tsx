@@ -1,7 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
-import { createResource, getResources, updateResource } from './api/resourcesApi'
+import {
+  createResource,
+  deleteResource,
+  getResources,
+  updateResource,
+} from './api/resourcesApi'
 import type { ResourceResponse, UserResponse } from './api/types'
 import {
   clearAuthSession,
@@ -31,6 +36,9 @@ function App() {
   const [resourceIsActive, setResourceIsActive] = useState(true)
   const [editingResourceId, setEditingResourceId] = useState<number | null>(null)
   const [isSavingResource, setIsSavingResource] = useState(false)
+  const [deletingResourceId, setDeletingResourceId] = useState<number | null>(
+    null,
+  )
 
   useEffect(() => {
     if (!currentUser) {
@@ -109,6 +117,34 @@ function App() {
     setResourceLocation(resource.location ?? '')
     setResourceIsActive(resource.isActive)
     setResourceMessage('')
+  }
+
+  async function handleDeleteResource(resource: ResourceResponse) {
+    const shouldDelete = confirm(`Delete resource "${resource.name}"?`)
+
+    if (!shouldDelete) {
+      return
+    }
+
+    setResourceMessage('')
+    setDeletingResourceId(resource.id)
+
+    try {
+      await deleteResource(resource.id)
+      const loadedResources = await getResources()
+
+      setResources(loadedResources)
+
+      if (editingResourceId === resource.id) {
+        resetResourceForm()
+      }
+
+      setResourceMessage('Resource deleted.')
+    } catch (error) {
+      setResourceMessage(getErrorMessage(error))
+    } finally {
+      setDeletingResourceId(null)
+    }
   }
 
   function resetResourceForm() {
@@ -269,12 +305,23 @@ function App() {
                     <div className="resource-actions">
                       <span>{resource.isActive ? 'Active' : 'Inactive'}</span>
                       {currentUser.role === 'Admin' && (
-                        <button
-                          type="button"
-                          onClick={() => handleEditResource(resource)}
-                        >
-                          Edit
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleEditResource(resource)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingResourceId === resource.id}
+                            onClick={() => void handleDeleteResource(resource)}
+                          >
+                            {deletingResourceId === resource.id
+                              ? 'Deleting...'
+                              : 'Delete'}
+                          </button>
+                        </>
                       )}
                     </div>
                   </li>

@@ -22,3 +22,9 @@ export function updateResource(id: number, request: UpdateResourceRequest) {
     body: request,
   })
 }
+
+export function deleteResource(id: number) {
+  return apiRequest<void>(`/resources/${id}`, {
+    method: 'DELETE',
+  })
+}
