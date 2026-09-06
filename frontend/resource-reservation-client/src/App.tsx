@@ -55,6 +55,37 @@ function App() {
     setMessage('You have been logged out.')
   }
 
+  if (currentUser) {
+    return (
+      <main className="app-shell">
+        <section className="home-panel" aria-labelledby="home-title">
+          <header className="home-header">
+            <div>
+              <p className="label-text">Signed in as {currentUser.role}</p>
+              <h1 id="home-title">{currentUser.name}</h1>
+              <p>{currentUser.email}</p>
+            </div>
+            <button type="button" onClick={handleLogout}>
+              Logout
+            </button>
+          </header>
+
+          {currentUser.role === 'Admin' ? (
+            <section className="placeholder-section" aria-labelledby="admin-title">
+              <h2 id="admin-title">Admin home</h2>
+              <p>Resource and availability management will be added here.</p>
+            </section>
+          ) : (
+            <section className="placeholder-section" aria-labelledby="user-title">
+              <h2 id="user-title">User home</h2>
+              <p>Resource browsing and reservations will be added here.</p>
+            </section>
+          )}
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="app-shell">
       <section className="auth-panel" aria-labelledby="auth-title">
@@ -63,82 +94,68 @@ function App() {
           <p>Login or create a user account.</p>
         </div>
 
-        {currentUser ? (
-          <section className="session-summary" aria-label="Current session">
-            <div>
-              <p className="label-text">Signed in</p>
-              <h2>{currentUser.name}</h2>
-              <p>{currentUser.email}</p>
-            </div>
-            <span className="role-badge">{currentUser.role}</span>
-            <button type="button" onClick={handleLogout}>
-              Logout
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <div className="mode-switch" aria-label="Authentication mode">
+            <button
+              type="button"
+              className={authMode === 'login' ? 'active' : ''}
+              onClick={() => setAuthMode('login')}
+            >
+              Login
             </button>
-          </section>
-        ) : (
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <div className="mode-switch" aria-label="Authentication mode">
-              <button
-                type="button"
-                className={authMode === 'login' ? 'active' : ''}
-                onClick={() => setAuthMode('login')}
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                className={authMode === 'register' ? 'active' : ''}
-                onClick={() => setAuthMode('register')}
-              >
-                Register
-              </button>
-            </div>
+            <button
+              type="button"
+              className={authMode === 'register' ? 'active' : ''}
+              onClick={() => setAuthMode('register')}
+            >
+              Register
+            </button>
+          </div>
 
-            {authMode === 'register' && (
-              <label>
-                Name
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  maxLength={100}
-                  required
-                />
-              </label>
-            )}
-
+          {authMode === 'register' && (
             <label>
-              Email
+              Name
               <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                maxLength={255}
-                required
-              />
-            </label>
-
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                minLength={authMode === 'register' ? 8 : undefined}
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
                 maxLength={100}
                 required
               />
             </label>
+          )}
 
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting
-                ? 'Please wait...'
-                : authMode === 'login'
-                  ? 'Login'
-                  : 'Create account'}
-            </button>
-          </form>
-        )}
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              maxLength={255}
+              required
+            />
+          </label>
+
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              minLength={authMode === 'register' ? 8 : undefined}
+              maxLength={100}
+              required
+            />
+          </label>
+
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting
+              ? 'Please wait...'
+              : authMode === 'login'
+                ? 'Login'
+                : 'Create account'}
+          </button>
+        </form>
 
         {message && <p className="status-message">{message}</p>}
       </section>

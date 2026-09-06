@@ -6,11 +6,16 @@
   box-sizing: border-box;
 }
 
-.auth-panel {
+.auth-panel,
+.home-panel {
   width: min(100%, 420px);
   display: grid;
   gap: 16px;
   text-align: left;
+}
+
+.home-panel {
+  width: min(100%, 760px);
 }
 
 .auth-copy {
@@ -24,7 +29,8 @@
 }
 
 .auth-form,
-.session-summary {
+.home-header,
+.placeholder-section {
   display: grid;
   gap: 14px;
   padding: 16px;
@@ -100,23 +106,13 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-.session-summary {
+.home-header {
   grid-template-columns: 1fr auto;
   align-items: center;
 }
 
-.session-summary button {
-  grid-column: 1 / -1;
-}
-
-.role-badge {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 10px;
-  color: var(--text-h);
-  background: var(--muted-bg);
-  font-size: 13px;
-  font-weight: 700;
+.placeholder-section h2 {
+  margin-bottom: 4px;
 }
 
 .status-message {
@@ -130,7 +126,12 @@ input:focus-visible {
   }
 
   .auth-form,
-  .session-summary {
+  .home-header,
+  .placeholder-section {
     padding: 14px;
+  }
+
+  .home-header {
+    grid-template-columns: 1fr;
   }
 }
