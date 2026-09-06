@@ -13,7 +13,11 @@ import {
   getResources,
   updateResource,
 } from './api/resourcesApi'
-import { createReservation, getMyReservations } from './api/reservationsApi'
+import {
+  cancelReservation,
+  createReservation,
+  getMyReservations,
+} from './api/reservationsApi'
 import type {
   AvailabilityResponse,
   ReservationResponse,
@@ -73,6 +77,9 @@ function App() {
   const [reservations, setReservations] = useState<ReservationResponse[]>([])
   const [myReservationsMessage, setMyReservationsMessage] = useState('')
   const [isLoadingReservations, setIsLoadingReservations] = useState(false)
+  const [cancellingReservationId, setCancellingReservationId] = useState<
+    number | null
+  >(null)
 
   useEffect(() => {
     if (!currentUser) {
@@ -336,6 +343,31 @@ function App() {
       setReservationMessage(getErrorMessage(error))
     } finally {
       setReservingAvailabilityId(null)
+    }
+  }
+
+  async function handleCancelReservation(reservation: ReservationResponse) {
+    const shouldCancel = confirm(
+      `Cancel reservation for "${reservation.resourceName}"?`,
+    )
+
+    if (!shouldCancel) {
+      return
+    }
+
+    setMyReservationsMessage('')
+    setCancellingReservationId(reservation.id)
+
+    try {
+      await cancelReservation(reservation.id)
+      const loadedReservations = await getMyReservations()
+
+      setReservations(loadedReservations)
+      setMyReservationsMessage('Reservation cancelled.')
+    } catch (error) {
+      setMyReservationsMessage(getErrorMessage(error))
+    } finally {
+      setCancellingReservationId(null)
     }
   }
 
@@ -677,6 +709,19 @@ function App() {
                       </div>
                       <div className="resource-actions">
                         <span>{reservation.status}</span>
+                        {reservation.status === 'Active' && (
+                          <button
+                            type="button"
+                            disabled={cancellingReservationId === reservation.id}
+                            onClick={() =>
+                              void handleCancelReservation(reservation)
+                            }
+                          >
+                            {cancellingReservationId === reservation.id
+                              ? 'Cancelling...'
+                              : 'Cancel'}
+                          </button>
+                        )}
                       </div>
                     </li>
                   ))}
