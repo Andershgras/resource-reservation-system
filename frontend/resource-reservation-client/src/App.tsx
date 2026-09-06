@@ -66,6 +66,8 @@ function App() {
   const [availabilityResourceId, setAvailabilityResourceId] = useState('')
   const [availabilityStartTime, setAvailabilityStartTime] = useState('')
   const [availabilityEndTime, setAvailabilityEndTime] = useState('')
+  const [availabilityValidationMessage, setAvailabilityValidationMessage] =
+    useState('')
   const [editingAvailabilityId, setEditingAvailabilityId] = useState<
     number | null
   >(null)
@@ -244,6 +246,19 @@ function App() {
   async function handleSaveAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setAvailabilityMessage('')
+    setAvailabilityValidationMessage('')
+
+    const validationMessage = validateAvailabilityForm(
+      availabilityResourceId,
+      availabilityStartTime,
+      availabilityEndTime,
+    )
+
+    if (validationMessage) {
+      setAvailabilityValidationMessage(validationMessage)
+      return
+    }
+
     setIsSavingAvailability(true)
 
     try {
@@ -324,6 +339,7 @@ function App() {
     setAvailabilityStartTime(toDateTimeLocalValue(availability.startTime))
     setAvailabilityEndTime(toDateTimeLocalValue(availability.endTime))
     setAvailabilityMessage('')
+    setAvailabilityValidationMessage('')
   }
 
   async function handleDeleteAvailability(availability: AvailabilityResponse) {
@@ -361,6 +377,7 @@ function App() {
     setAvailabilityResourceId('')
     setAvailabilityStartTime('')
     setAvailabilityEndTime('')
+    setAvailabilityValidationMessage('')
   }
 
   async function handleCreateReservation(availability: AvailabilityResponse) {
@@ -504,6 +521,7 @@ function App() {
           setAvailabilityStartTime={setAvailabilityStartTime}
           availabilityEndTime={availabilityEndTime}
           setAvailabilityEndTime={setAvailabilityEndTime}
+          availabilityValidationMessage={availabilityValidationMessage}
           editingAvailabilityId={editingAvailabilityId}
           isSavingAvailability={isSavingAvailability}
           deletingAvailabilityId={deletingAvailabilityId}
@@ -594,6 +612,30 @@ function toDateTimeLocalValue(value: string) {
   const date = new Date(value)
   const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
   return offsetDate.toISOString().slice(0, 16)
+}
+
+function validateAvailabilityForm(
+  resourceId: string,
+  startTime: string,
+  endTime: string,
+) {
+  if (!resourceId) {
+    return 'Select a resource before saving availability.'
+  }
+
+  if (!startTime) {
+    return 'Enter a start time before saving availability.'
+  }
+
+  if (!endTime) {
+    return 'Enter an end time before saving availability.'
+  }
+
+  if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
+    return 'End time must be after start time.'
+  }
+
+  return ''
 }
 
 function hasActiveReservationOverlap(

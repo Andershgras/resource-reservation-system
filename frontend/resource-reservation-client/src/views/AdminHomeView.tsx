@@ -42,6 +42,7 @@ interface AdminHomeViewProps {
   setAvailabilityStartTime: Dispatch<SetStateAction<string>>
   availabilityEndTime: string
   setAvailabilityEndTime: Dispatch<SetStateAction<string>>
+  availabilityValidationMessage: string
   editingAvailabilityId: number | null
   isSavingAvailability: boolean
   deletingAvailabilityId: number | null
@@ -91,6 +92,7 @@ export function AdminHomeView({
   setAvailabilityStartTime,
   availabilityEndTime,
   setAvailabilityEndTime,
+  availabilityValidationMessage,
   editingAvailabilityId,
   isSavingAvailability,
   deletingAvailabilityId,
@@ -140,6 +142,7 @@ export function AdminHomeView({
           setAvailabilityStartTime={setAvailabilityStartTime}
           availabilityEndTime={availabilityEndTime}
           setAvailabilityEndTime={setAvailabilityEndTime}
+          validationMessage={availabilityValidationMessage}
           isSavingAvailability={isSavingAvailability}
           onSubmit={onSaveAvailability}
           onCancelEdit={onCancelAvailabilityEdit}
