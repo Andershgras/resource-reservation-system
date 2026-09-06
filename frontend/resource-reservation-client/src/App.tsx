@@ -1,5 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { getAvailabilities } from './api/availabilitiesApi'
+import {
+  createAvailability,
+  getAvailabilities,
+} from './api/availabilitiesApi'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
 import {
@@ -49,6 +52,10 @@ function App() {
   )
   const [availabilityMessage, setAvailabilityMessage] = useState('')
   const [isLoadingAvailabilities, setIsLoadingAvailabilities] = useState(false)
+  const [availabilityResourceId, setAvailabilityResourceId] = useState('')
+  const [availabilityStartTime, setAvailabilityStartTime] = useState('')
+  const [availabilityEndTime, setAvailabilityEndTime] = useState('')
+  const [isCreatingAvailability, setIsCreatingAvailability] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -141,6 +148,31 @@ function App() {
       setResourceMessage(getErrorMessage(error))
     } finally {
       setIsSavingResource(false)
+    }
+  }
+
+  async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAvailabilityMessage('')
+    setIsCreatingAvailability(true)
+
+    try {
+      await createAvailability({
+        resourceId: Number(availabilityResourceId),
+        startTime: availabilityStartTime,
+        endTime: availabilityEndTime,
+      })
+      const loadedAvailabilities = await getAvailabilities()
+
+      setAvailabilities(loadedAvailabilities)
+      setAvailabilityResourceId('')
+      setAvailabilityStartTime('')
+      setAvailabilityEndTime('')
+      setAvailabilityMessage('Availability created.')
+    } catch (error) {
+      setAvailabilityMessage(getErrorMessage(error))
+    } finally {
+      setIsCreatingAvailability(false)
     }
   }
 
@@ -316,6 +348,70 @@ function App() {
                     Cancel edit
                   </button>
                 )}
+              </form>
+            </section>
+          )}
+
+          {currentUser.role === 'Admin' && (
+            <section
+              className="placeholder-section"
+              aria-labelledby="create-availability-title"
+            >
+              <h2 id="create-availability-title">Create availability</h2>
+              <form
+                className="resource-form"
+                onSubmit={handleCreateAvailability}
+              >
+                <label>
+                  Resource
+                  <select
+                    value={availabilityResourceId}
+                    onChange={(event) =>
+                      setAvailabilityResourceId(event.target.value)
+                    }
+                    required
+                  >
+                    <option value="">Select resource</option>
+                    {resources.map((resource) => (
+                      <option key={resource.id} value={resource.id}>
+                        {resource.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Start time
+                  <input
+                    type="datetime-local"
+                    value={availabilityStartTime}
+                    onChange={(event) =>
+                      setAvailabilityStartTime(event.target.value)
+                    }
+                    required
+                  />
+                </label>
+
+                <label>
+                  End time
+                  <input
+                    type="datetime-local"
+                    value={availabilityEndTime}
+                    onChange={(event) =>
+                      setAvailabilityEndTime(event.target.value)
+                    }
+                    required
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={isCreatingAvailability || resources.length === 0}
+                >
+                  {isCreatingAvailability
+                    ? 'Creating...'
+                    : 'Create availability'}
+                </button>
               </form>
             </section>
           )}
