@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
-import { createResource, getResources } from './api/resourcesApi'
+import { createResource, getResources, updateResource } from './api/resourcesApi'
 import type { ResourceResponse, UserResponse } from './api/types'
 import {
   clearAuthSession,
@@ -28,7 +28,9 @@ function App() {
   const [resourceName, setResourceName] = useState('')
   const [resourceDescription, setResourceDescription] = useState('')
   const [resourceLocation, setResourceLocation] = useState('')
-  const [isCreatingResource, setIsCreatingResource] = useState(false)
+  const [resourceIsActive, setResourceIsActive] = useState(true)
+  const [editingResourceId, setEditingResourceId] = useState<number | null>(null)
+  const [isSavingResource, setIsSavingResource] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -67,29 +69,54 @@ function App() {
     }
   }
 
-  async function handleCreateResource(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveResource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setResourceMessage('')
-    setIsCreatingResource(true)
+    setIsSavingResource(true)
 
     try {
-      await createResource({
-        name: resourceName.trim(),
-        description: emptyToNull(resourceDescription),
-        location: emptyToNull(resourceLocation),
-      })
+      if (editingResourceId) {
+        await updateResource(editingResourceId, {
+          name: resourceName.trim(),
+          description: emptyToNull(resourceDescription),
+          location: emptyToNull(resourceLocation),
+          isActive: resourceIsActive,
+        })
+      } else {
+        await createResource({
+          name: resourceName.trim(),
+          description: emptyToNull(resourceDescription),
+          location: emptyToNull(resourceLocation),
+        })
+      }
+
       const loadedResources = await getResources()
 
       setResources(loadedResources)
-      setResourceName('')
-      setResourceDescription('')
-      setResourceLocation('')
-      setResourceMessage('Resource created.')
+      resetResourceForm()
+      setResourceMessage(editingResourceId ? 'Resource updated.' : 'Resource created.')
     } catch (error) {
       setResourceMessage(getErrorMessage(error))
     } finally {
-      setIsCreatingResource(false)
+      setIsSavingResource(false)
     }
+  }
+
+  function handleEditResource(resource: ResourceResponse) {
+    setEditingResourceId(resource.id)
+    setResourceName(resource.name)
+    setResourceDescription(resource.description ?? '')
+    setResourceLocation(resource.location ?? '')
+    setResourceIsActive(resource.isActive)
+    setResourceMessage('')
+  }
+
+  function resetResourceForm() {
+    setEditingResourceId(null)
+    setResourceName('')
+    setResourceDescription('')
+    setResourceLocation('')
+    setResourceIsActive(true)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -157,8 +184,10 @@ function App() {
               className="placeholder-section"
               aria-labelledby="create-resource-title"
             >
-              <h2 id="create-resource-title">Create resource</h2>
-              <form className="resource-form" onSubmit={handleCreateResource}>
+              <h2 id="create-resource-title">
+                {editingResourceId ? 'Edit resource' : 'Create resource'}
+              </h2>
+              <form className="resource-form" onSubmit={handleSaveResource}>
                 <label>
                   Name
                   <input
@@ -192,9 +221,31 @@ function App() {
                   />
                 </label>
 
-                <button type="submit" disabled={isCreatingResource}>
-                  {isCreatingResource ? 'Creating...' : 'Create resource'}
+                {editingResourceId && (
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={resourceIsActive}
+                      onChange={(event) =>
+                        setResourceIsActive(event.target.checked)
+                      }
+                    />
+                    Active
+                  </label>
+                )}
+
+                <button type="submit" disabled={isSavingResource}>
+                  {isSavingResource
+                    ? 'Saving...'
+                    : editingResourceId
+                      ? 'Save resource'
+                      : 'Create resource'}
                 </button>
+                {editingResourceId && (
+                  <button type="button" onClick={resetResourceForm}>
+                    Cancel edit
+                  </button>
+                )}
               </form>
             </section>
           )}
@@ -215,7 +266,17 @@ function App() {
                       {resource.location && <p>{resource.location}</p>}
                       {resource.description && <p>{resource.description}</p>}
                     </div>
-                    <span>{resource.isActive ? 'Active' : 'Inactive'}</span>
+                    <div className="resource-actions">
+                      <span>{resource.isActive ? 'Active' : 'Inactive'}</span>
+                      {currentUser.role === 'Admin' && (
+                        <button
+                          type="button"
+                          onClick={() => handleEditResource(resource)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
