@@ -340,25 +340,43 @@ frontend/resource-reservation-client
 
 Running `npm run build` from the parent `frontend` folder will fail because that folder does not contain `package.json`.
 
-## Frontend MVP Manual Test Checklist
+## Frontend Smoke Tests
 
-Use this checklist to verify the frontend MVP in the browser:
+The frontend includes basic Playwright smoke tests for the main browser flows.
 
-- Start the backend API
-- Start the frontend development server
-- Log in as the seeded Admin user
-- Create, edit, and delete a resource as Admin
-- Create, edit, and delete an availability window as Admin
-- Register a normal User account
-- Log in as the User
-- View resources and availability as User
-- Create a reservation as User
-- Confirm that an overlapping reservation shows an error
-- View and cancel the User's own reservation
-- Log back in as Admin
-- View reservations as Admin
-- Cancel a reservation as Admin
-- Run `npm run build` from `frontend/resource-reservation-client`
+From `frontend/resource-reservation-client`, run:
+
+```bash
+npm run test:smoke
+```
+
+The smoke tests cover Admin login and resource management, availability management, User registration/login, reservation creation and cancellation, and overlap error behavior.
+
+## Frontend Smoke Test Plan
+
+Use this checklist to verify the main frontend flows in the browser:
+
+1. Start the backend API.
+2. Start the frontend development server.
+3. Log in as the seeded Admin user.
+4. Create a resource as Admin and confirm that it appears in the resource list.
+5. Edit the resource and confirm that the updated values are shown.
+6. Create an availability window for the resource and confirm that it appears in the availability list.
+7. Edit the availability window and confirm that the updated times are shown.
+8. Register a normal User account.
+9. Log in as the User.
+10. Confirm that the User can see resources and availability.
+11. Create a reservation as the User and confirm that a success message is shown.
+12. Try to create another reservation that overlaps the active reservation and confirm that an error message is shown.
+13. View the User's reservations and cancel the reservation.
+14. Create a new reservation for the same time and confirm that the cancelled reservation no longer blocks it.
+15. Log back in as Admin.
+16. Confirm that Admin can view reservations.
+17. Cancel a reservation as Admin and confirm that a success message is shown.
+18. Delete the test availability window as Admin and confirm that it is removed from the list.
+19. Delete the test resource as Admin and confirm that it is removed from the list.
+20. Run `npm run test:smoke` from `frontend/resource-reservation-client`.
+21. Run `npm run build` from `frontend/resource-reservation-client`.
 
 ## Status
 
