@@ -25,3 +25,9 @@ export function updateAvailability(
     body: request,
   })
 }
+
+export function deleteAvailability(id: number) {
+  return apiRequest<void>(`/availabilities/${id}`, {
+    method: 'DELETE',
+  })
+}

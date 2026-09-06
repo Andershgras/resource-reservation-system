@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import {
   createAvailability,
+  deleteAvailability,
   getAvailabilities,
   updateAvailability,
 } from './api/availabilitiesApi'
@@ -60,6 +61,9 @@ function App() {
     number | null
   >(null)
   const [isSavingAvailability, setIsSavingAvailability] = useState(false)
+  const [deletingAvailabilityId, setDeletingAvailabilityId] = useState<
+    number | null
+  >(null)
 
   useEffect(() => {
     if (!currentUser) {
@@ -238,6 +242,36 @@ function App() {
     setAvailabilityStartTime(toDateTimeLocalValue(availability.startTime))
     setAvailabilityEndTime(toDateTimeLocalValue(availability.endTime))
     setAvailabilityMessage('')
+  }
+
+  async function handleDeleteAvailability(availability: AvailabilityResponse) {
+    const shouldDelete = confirm(
+      `Delete availability for "${availability.resourceName}"?`,
+    )
+
+    if (!shouldDelete) {
+      return
+    }
+
+    setAvailabilityMessage('')
+    setDeletingAvailabilityId(availability.id)
+
+    try {
+      await deleteAvailability(availability.id)
+      const loadedAvailabilities = await getAvailabilities()
+
+      setAvailabilities(loadedAvailabilities)
+
+      if (editingAvailabilityId === availability.id) {
+        resetAvailabilityForm()
+      }
+
+      setAvailabilityMessage('Availability deleted.')
+    } catch (error) {
+      setAvailabilityMessage(getErrorMessage(error))
+    } finally {
+      setDeletingAvailabilityId(null)
+    }
   }
 
   function resetAvailabilityForm() {
@@ -523,6 +557,17 @@ function App() {
                           onClick={() => handleEditAvailability(availability)}
                         >
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingAvailabilityId === availability.id}
+                          onClick={() =>
+                            void handleDeleteAvailability(availability)
+                          }
+                        >
+                          {deletingAvailabilityId === availability.id
+                            ? 'Deleting...'
+                            : 'Delete'}
                         </button>
                       </div>
                     )}
