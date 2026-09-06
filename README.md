@@ -44,6 +44,12 @@ The project is designed as a portfolio project to demonstrate backend developmen
 - SQL Server Management Studio
 - GitHub
 
+## Continuous Integration
+
+GitHub Actions runs on push and pull request.
+
+The workflow builds the backend API and installs/builds the frontend client.
+
 ## Project Goal
 
 The goal of this project is to build a realistic full-stack web application that shows practical skills with API development, relational databases, authentication, authorization, and frontend development.
