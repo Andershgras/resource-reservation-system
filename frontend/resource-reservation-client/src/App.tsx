@@ -30,9 +30,14 @@ import {
   getAuthUser,
   saveAuthSession,
 } from './auth/authStorage'
+import { AuthForm, type AuthMode } from './components/AuthForm'
+import { AvailabilityFormSection } from './components/AvailabilityFormSection'
+import { AvailabilitySection } from './components/AvailabilitySection'
+import { HomeHeader } from './components/HomeHeader'
+import { ReservationsSection } from './components/ReservationsSection'
+import { ResourceFormSection } from './components/ResourceFormSection'
+import { ResourcesSection } from './components/ResourcesSection'
 import './App.css'
-
-type AuthMode = 'login' | 'register'
 
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login')
@@ -472,17 +477,8 @@ function App() {
   if (currentUser) {
     return (
       <main className="app-shell">
-        <section className="home-panel" aria-labelledby="home-title">
-          <header className="home-header">
-            <div>
-              <p className="label-text">Signed in as {currentUser.role}</p>
-              <h1 id="home-title">{currentUser.name}</h1>
-              <p>{currentUser.email}</p>
-            </div>
-            <button type="button" onClick={handleLogout}>
-              Logout
-            </button>
-          </header>
+        <section className="home-panel">
+          <HomeHeader currentUser={currentUser} onLogout={handleLogout} />
 
           {currentUser.role === 'Admin' ? (
             <section className="placeholder-section" aria-labelledby="admin-title">
@@ -497,362 +493,93 @@ function App() {
           )}
 
           {currentUser.role === 'Admin' && (
-            <section
-              className="placeholder-section"
-              aria-labelledby="create-resource-title"
-            >
-              <h2 id="create-resource-title">
-                {editingResourceId ? 'Edit resource' : 'Create resource'}
-              </h2>
-              <form className="resource-form" onSubmit={handleSaveResource}>
-                <label>
-                  Name
-                  <input
-                    type="text"
-                    value={resourceName}
-                    onChange={(event) => setResourceName(event.target.value)}
-                    maxLength={100}
-                    required
-                  />
-                </label>
-
-                <label>
-                  Description
-                  <input
-                    type="text"
-                    value={resourceDescription}
-                    onChange={(event) =>
-                      setResourceDescription(event.target.value)
-                    }
-                    maxLength={500}
-                  />
-                </label>
-
-                <label>
-                  Location
-                  <input
-                    type="text"
-                    value={resourceLocation}
-                    onChange={(event) => setResourceLocation(event.target.value)}
-                    maxLength={200}
-                  />
-                </label>
-
-                {editingResourceId && (
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={resourceIsActive}
-                      onChange={(event) =>
-                        setResourceIsActive(event.target.checked)
-                      }
-                    />
-                    Active
-                  </label>
-                )}
-
-                <button type="submit" disabled={isSavingResource}>
-                  {isSavingResource
-                    ? 'Saving...'
-                    : editingResourceId
-                      ? 'Save resource'
-                      : 'Create resource'}
-                </button>
-                {editingResourceId && (
-                  <button type="button" onClick={resetResourceForm}>
-                    Cancel edit
-                  </button>
-                )}
-              </form>
-            </section>
+            <ResourceFormSection
+              editingResourceId={editingResourceId}
+              resourceName={resourceName}
+              setResourceName={setResourceName}
+              resourceDescription={resourceDescription}
+              setResourceDescription={setResourceDescription}
+              resourceLocation={resourceLocation}
+              setResourceLocation={setResourceLocation}
+              resourceIsActive={resourceIsActive}
+              setResourceIsActive={setResourceIsActive}
+              isSavingResource={isSavingResource}
+              onSubmit={handleSaveResource}
+              onCancelEdit={resetResourceForm}
+            />
           )}
 
           {currentUser.role === 'Admin' && (
-            <section
-              className="placeholder-section"
-              aria-labelledby="create-availability-title"
-            >
-              <h2 id="create-availability-title">
-                {editingAvailabilityId ? 'Edit availability' : 'Create availability'}
-              </h2>
-              <form
-                className="resource-form"
-                onSubmit={handleSaveAvailability}
-              >
-                <label>
-                  Resource
-                  <select
-                    value={availabilityResourceId}
-                    onChange={(event) =>
-                      setAvailabilityResourceId(event.target.value)
-                    }
-                    required
-                  >
-                    <option value="">Select resource</option>
-                    {resources.map((resource) => (
-                      <option key={resource.id} value={resource.id}>
-                        {resource.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  Start time
-                  <input
-                    type="datetime-local"
-                    value={availabilityStartTime}
-                    onChange={(event) =>
-                      setAvailabilityStartTime(event.target.value)
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  End time
-                  <input
-                    type="datetime-local"
-                    value={availabilityEndTime}
-                    onChange={(event) =>
-                      setAvailabilityEndTime(event.target.value)
-                    }
-                    required
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isSavingAvailability || resources.length === 0}
-                >
-                  {isSavingAvailability
-                    ? 'Saving...'
-                    : editingAvailabilityId
-                      ? 'Save availability'
-                      : 'Create availability'}
-                </button>
-                {editingAvailabilityId && (
-                  <button type="button" onClick={resetAvailabilityForm}>
-                    Cancel edit
-                  </button>
-                )}
-              </form>
-            </section>
+            <AvailabilityFormSection
+              editingAvailabilityId={editingAvailabilityId}
+              resources={resources}
+              availabilityResourceId={availabilityResourceId}
+              setAvailabilityResourceId={setAvailabilityResourceId}
+              availabilityStartTime={availabilityStartTime}
+              setAvailabilityStartTime={setAvailabilityStartTime}
+              availabilityEndTime={availabilityEndTime}
+              setAvailabilityEndTime={setAvailabilityEndTime}
+              isSavingAvailability={isSavingAvailability}
+              onSubmit={handleSaveAvailability}
+              onCancelEdit={resetAvailabilityForm}
+            />
           )}
 
-          <section className="placeholder-section" aria-labelledby="resources-title">
-            <h2 id="resources-title">Resources</h2>
-            {isLoadingResources && <p>Loading resources...</p>}
-            {resourceMessage && <p className="status-message">{resourceMessage}</p>}
-            {!isLoadingResources && !resourceMessage && resources.length === 0 && (
-              <p>No resources found.</p>
-            )}
-            {resources.length > 0 && (
-              <ul className="resource-list">
-                {resources.map((resource) => (
-                  <li key={resource.id}>
-                    <div>
-                      <strong>{resource.name}</strong>
-                      {resource.location && <p>{resource.location}</p>}
-                      {resource.description && <p>{resource.description}</p>}
-                    </div>
-                    <div className="resource-actions">
-                      <span>{resource.isActive ? 'Active' : 'Inactive'}</span>
-                      {currentUser.role === 'Admin' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleEditResource(resource)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingResourceId === resource.id}
-                            onClick={() => void handleDeleteResource(resource)}
-                          >
-                            {deletingResourceId === resource.id
-                              ? 'Deleting...'
-                              : 'Delete'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <ResourcesSection
+            currentUserRole={currentUser.role}
+            resources={resources}
+            isLoadingResources={isLoadingResources}
+            resourceMessage={resourceMessage}
+            deletingResourceId={deletingResourceId}
+            onEditResource={handleEditResource}
+            onDeleteResource={(resource) => void handleDeleteResource(resource)}
+          />
 
-          <section
-            className="placeholder-section"
-            aria-labelledby="availabilities-title"
-          >
-            <h2 id="availabilities-title">Availability</h2>
-            {reservationMessage && (
-              <p className="status-message">{reservationMessage}</p>
-            )}
-            {isLoadingAvailabilities && <p>Loading availability...</p>}
-            {availabilityMessage && (
-              <p className="status-message">{availabilityMessage}</p>
-            )}
-            {!isLoadingAvailabilities &&
-              !availabilityMessage &&
-              availabilities.length === 0 && <p>No availability found.</p>}
-            {availabilities.length > 0 && (
-              <ul className="resource-list">
-                {availabilities.map((availability) => {
-                  const isReservedByUser =
-                    currentUser.role === 'User' &&
-                    hasActiveReservationOverlap(availability, reservations)
-
-                  return (
-                    <li key={availability.id}>
-                      <div>
-                        <strong>{availability.resourceName}</strong>
-                        <p>{formatDateTime(availability.startTime)}</p>
-                        <p>{formatDateTime(availability.endTime)}</p>
-                      </div>
-                      {currentUser.role === 'User' && (
-                        <div className="resource-actions">
-                          {isReservedByUser ? (
-                            <span>Reserved</span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={
-                                reservingAvailabilityId === availability.id
-                              }
-                              onClick={() =>
-                                void handleCreateReservation(availability)
-                              }
-                            >
-                              {reservingAvailabilityId === availability.id
-                                ? 'Reserving...'
-                                : 'Reserve'}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {currentUser.role === 'Admin' && (
-                        <div className="resource-actions">
-                          <button
-                            type="button"
-                            onClick={() => handleEditAvailability(availability)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingAvailabilityId === availability.id}
-                            onClick={() =>
-                              void handleDeleteAvailability(availability)
-                            }
-                          >
-                            {deletingAvailabilityId === availability.id
-                              ? 'Deleting...'
-                              : 'Delete'}
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </section>
+          <AvailabilitySection
+            currentUserRole={currentUser.role}
+            availabilities={availabilities}
+            reservations={reservations}
+            isLoadingAvailabilities={isLoadingAvailabilities}
+            availabilityMessage={availabilityMessage}
+            reservationMessage={reservationMessage}
+            reservingAvailabilityId={reservingAvailabilityId}
+            deletingAvailabilityId={deletingAvailabilityId}
+            onReserve={(availability) => void handleCreateReservation(availability)}
+            onEditAvailability={handleEditAvailability}
+            onDeleteAvailability={(availability) =>
+              void handleDeleteAvailability(availability)
+            }
+            formatDateTime={formatDateTime}
+            hasActiveReservationOverlap={hasActiveReservationOverlap}
+          />
 
           {currentUser.role === 'User' && (
-            <section
-              className="placeholder-section"
-              aria-labelledby="my-reservations-title"
-            >
-              <h2 id="my-reservations-title">My reservations</h2>
-              {isLoadingReservations && <p>Loading reservations...</p>}
-              {myReservationsMessage && (
-                <p className="status-message">{myReservationsMessage}</p>
-              )}
-              {!isLoadingReservations &&
-                !myReservationsMessage &&
-                reservations.length === 0 && <p>No reservations found.</p>}
-              {reservations.length > 0 && (
-                <ul className="resource-list">
-                  {reservations.map((reservation) => (
-                    <li key={reservation.id}>
-                      <div>
-                        <strong>{reservation.resourceName}</strong>
-                        <p>{formatDateTime(reservation.startTime)}</p>
-                        <p>{formatDateTime(reservation.endTime)}</p>
-                      </div>
-                      <div className="resource-actions">
-                        <span>{reservation.status}</span>
-                        {reservation.status === 'Active' && (
-                          <button
-                            type="button"
-                            disabled={cancellingReservationId === reservation.id}
-                            onClick={() =>
-                              void handleCancelReservation(reservation)
-                            }
-                          >
-                            {cancellingReservationId === reservation.id
-                              ? 'Cancelling...'
-                              : 'Cancel'}
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+            <ReservationsSection
+              title="My reservations"
+              reservations={reservations}
+              isLoading={isLoadingReservations}
+              message={myReservationsMessage}
+              cancellingReservationId={cancellingReservationId}
+              onCancelReservation={(reservation) =>
+                void handleCancelReservation(reservation)
+              }
+              formatDateTime={formatDateTime}
+            />
           )}
 
           {currentUser.role === 'Admin' && (
-            <section
-              className="placeholder-section"
-              aria-labelledby="admin-reservations-title"
-            >
-              <h2 id="admin-reservations-title">Reservations</h2>
-              {isLoadingAdminReservations && <p>Loading reservations...</p>}
-              {adminReservationsMessage && (
-                <p className="status-message">{adminReservationsMessage}</p>
-              )}
-              {!isLoadingAdminReservations &&
-                !adminReservationsMessage &&
-                adminReservations.length === 0 && <p>No reservations found.</p>}
-              {adminReservations.length > 0 && (
-                <ul className="resource-list">
-                  {adminReservations.map((reservation) => (
-                    <li key={reservation.id}>
-                      <div>
-                        <strong>{reservation.resourceName}</strong>
-                        <p>User ID: {reservation.userId}</p>
-                        <p>{formatDateTime(reservation.startTime)}</p>
-                        <p>{formatDateTime(reservation.endTime)}</p>
-                      </div>
-                      <div className="resource-actions">
-                        <span>{reservation.status}</span>
-                        {reservation.status === 'Active' && (
-                          <button
-                            type="button"
-                            disabled={
-                              adminCancellingReservationId === reservation.id
-                            }
-                            onClick={() =>
-                              void handleAdminCancelReservation(reservation)
-                            }
-                          >
-                            {adminCancellingReservationId === reservation.id
-                              ? 'Cancelling...'
-                              : 'Cancel'}
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+            <ReservationsSection
+              title="Reservations"
+              reservations={adminReservations}
+              isLoading={isLoadingAdminReservations}
+              message={adminReservationsMessage}
+              showUserId
+              cancellingReservationId={adminCancellingReservationId}
+              onCancelReservation={(reservation) =>
+                void handleAdminCancelReservation(reservation)
+              }
+              formatDateTime={formatDateTime}
+            />
           )}
         </section>
       </main>
@@ -861,77 +588,19 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="auth-panel" aria-labelledby="auth-title">
-        <div className="auth-copy">
-          <h1 id="auth-title">Authentication</h1>
-          <p>Login or create a user account.</p>
-        </div>
-
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="mode-switch" aria-label="Authentication mode">
-            <button
-              type="button"
-              className={authMode === 'login' ? 'active' : ''}
-              onClick={() => setAuthMode('login')}
-            >
-              Login
-            </button>
-            <button
-              type="button"
-              className={authMode === 'register' ? 'active' : ''}
-              onClick={() => setAuthMode('register')}
-            >
-              Register
-            </button>
-          </div>
-
-          {authMode === 'register' && (
-            <label>
-              Name
-              <input
-                type="text"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                maxLength={100}
-                required
-              />
-            </label>
-          )}
-
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              maxLength={255}
-              required
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={authMode === 'register' ? 8 : undefined}
-              maxLength={100}
-              required
-            />
-          </label>
-
-          <button type="submit" disabled={isSubmitting}>
-            {isSubmitting
-              ? 'Please wait...'
-              : authMode === 'login'
-                ? 'Login'
-                : 'Create account'}
-          </button>
-        </form>
-
-        {message && <p className="status-message">{message}</p>}
-      </section>
+      <AuthForm
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        name={name}
+        setName={setName}
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        isSubmitting={isSubmitting}
+        message={message}
+        onSubmit={handleSubmit}
+      />
     </main>
   )
 }
