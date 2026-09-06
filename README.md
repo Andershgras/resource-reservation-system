@@ -271,7 +271,7 @@ User cannot use admin-only endpoints
 
 ## Frontend Status
 
-The first frontend MVP is in progress.
+The first frontend MVP is implemented.
 
 The frontend is located in:
 
@@ -340,6 +340,26 @@ frontend/resource-reservation-client
 
 Running `npm run build` from the parent `frontend` folder will fail because that folder does not contain `package.json`.
 
+## Frontend MVP Manual Test Checklist
+
+Use this checklist to verify the frontend MVP in the browser:
+
+- Start the backend API
+- Start the frontend development server
+- Log in as the seeded Admin user
+- Create, edit, and delete a resource as Admin
+- Create, edit, and delete an availability window as Admin
+- Register a normal User account
+- Log in as the User
+- View resources and availability as User
+- Create a reservation as User
+- Confirm that an overlapping reservation shows an error
+- View and cancel the User's own reservation
+- Log back in as Admin
+- View reservations as Admin
+- Cancel a reservation as Admin
+- Run `npm run build` from `frontend/resource-reservation-client`
+
 ## Status
 
-The backend MVP is working. The frontend MVP is in progress and connected to the API for the core resource, availability, and reservation flows.
+The backend MVP is working. The frontend MVP is implemented and connected to the API for the core resource, availability, and reservation flows.
