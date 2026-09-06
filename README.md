@@ -36,6 +36,7 @@ The project is designed as a portfolio project to demonstrate backend developmen
 
 - React
 - TypeScript
+- Vite
 
 ### Tools
 
@@ -268,6 +269,77 @@ User can rebook a cancelled time
 User cannot use admin-only endpoints
 ```
 
+## Frontend Status
+
+The first frontend MVP is in progress.
+
+The frontend is located in:
+
+```text
+frontend/resource-reservation-client
+```
+
+Implemented frontend behavior:
+
+- Login and registration forms
+- JWT session storage after login
+- Role-based Admin and User home sections
+- Resource listing for Admin and User
+- Admin resource create, edit, and delete
+- Availability listing for Admin and User
+- Admin availability create, edit, and delete
+- User reservation creation
+- User reservation listing and cancellation
+- Admin reservation listing and cancellation
+
+## Frontend API Configuration
+
+The frontend reads the API base URL from:
+
+```text
+VITE_API_BASE_URL
+```
+
+An example configuration is available in:
+
+```text
+frontend/resource-reservation-client/.env.example
+```
+
+For local development, the expected value is:
+
+```text
+VITE_API_BASE_URL=http://localhost:5052/api
+```
+
+If no environment variable is configured, the frontend uses this same local API URL by default.
+
+## Running The Frontend
+
+Start the backend first, then start the frontend.
+
+From the repository root:
+
+```bash
+cd frontend/resource-reservation-client
+npm install
+npm run dev
+```
+
+The Vite development server will print the frontend URL in the terminal, usually:
+
+```text
+http://localhost:5173
+```
+
+Frontend commands must be run from:
+
+```text
+frontend/resource-reservation-client
+```
+
+Running `npm run build` from the parent `frontend` folder will fail because that folder does not contain `package.json`.
+
 ## Status
 
-The first backend MVP is working. The next major step is building the frontend MVP and connecting it to the API.
+The backend MVP is working. The frontend MVP is in progress and connected to the API for the core resource, availability, and reservation flows.
