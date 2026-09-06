@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
+import { getAvailabilities } from './api/availabilitiesApi'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
 import {
@@ -7,7 +8,11 @@ import {
   getResources,
   updateResource,
 } from './api/resourcesApi'
-import type { ResourceResponse, UserResponse } from './api/types'
+import type {
+  AvailabilityResponse,
+  ResourceResponse,
+  UserResponse,
+} from './api/types'
 import {
   clearAuthSession,
   getAuthUser,
@@ -39,17 +44,25 @@ function App() {
   const [deletingResourceId, setDeletingResourceId] = useState<number | null>(
     null,
   )
+  const [availabilities, setAvailabilities] = useState<AvailabilityResponse[]>(
+    [],
+  )
+  const [availabilityMessage, setAvailabilityMessage] = useState('')
+  const [isLoadingAvailabilities, setIsLoadingAvailabilities] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
       setResources([])
       setResourceMessage('')
+      setAvailabilities([])
+      setAvailabilityMessage('')
       return
     }
 
     let isActive = true
 
     void loadResources(() => isActive)
+    void loadAvailabilities(() => isActive)
 
     return () => {
       isActive = false
@@ -73,6 +86,27 @@ function App() {
     } finally {
       if (shouldUpdate()) {
         setIsLoadingResources(false)
+      }
+    }
+  }
+
+  async function loadAvailabilities(shouldUpdate = () => true) {
+    setIsLoadingAvailabilities(true)
+    setAvailabilityMessage('')
+
+    try {
+      const loadedAvailabilities = await getAvailabilities()
+
+      if (shouldUpdate()) {
+        setAvailabilities(loadedAvailabilities)
+      }
+    } catch (error) {
+      if (shouldUpdate()) {
+        setAvailabilityMessage(getErrorMessage(error))
+      }
+    } finally {
+      if (shouldUpdate()) {
+        setIsLoadingAvailabilities(false)
       }
     }
   }
@@ -329,6 +363,33 @@ function App() {
               </ul>
             )}
           </section>
+
+          <section
+            className="placeholder-section"
+            aria-labelledby="availabilities-title"
+          >
+            <h2 id="availabilities-title">Availability</h2>
+            {isLoadingAvailabilities && <p>Loading availability...</p>}
+            {availabilityMessage && (
+              <p className="status-message">{availabilityMessage}</p>
+            )}
+            {!isLoadingAvailabilities &&
+              !availabilityMessage &&
+              availabilities.length === 0 && <p>No availability found.</p>}
+            {availabilities.length > 0 && (
+              <ul className="resource-list">
+                {availabilities.map((availability) => (
+                  <li key={availability.id}>
+                    <div>
+                      <strong>{availability.resourceName}</strong>
+                      <p>{formatDateTime(availability.startTime)}</p>
+                      <p>{formatDateTime(availability.endTime)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </section>
       </main>
     )
@@ -426,6 +487,10 @@ function getErrorMessage(error: unknown) {
 function emptyToNull(value: string) {
   const trimmedValue = value.trim()
   return trimmedValue.length === 0 ? null : trimmedValue
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString()
 }
 
 export default App
