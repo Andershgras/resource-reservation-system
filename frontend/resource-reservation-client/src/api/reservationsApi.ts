@@ -12,6 +12,10 @@ export function getMyReservations() {
   return apiRequest<ReservationResponse[]>('/reservations/me')
 }
 
+export function getReservations() {
+  return apiRequest<ReservationResponse[]>('/reservations')
+}
+
 export function cancelReservation(id: number) {
   return apiRequest<void>(`/reservations/${id}/cancel`, {
     method: 'PUT',

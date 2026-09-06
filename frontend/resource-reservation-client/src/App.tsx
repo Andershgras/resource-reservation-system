@@ -17,6 +17,7 @@ import {
   cancelReservation,
   createReservation,
   getMyReservations,
+  getReservations,
 } from './api/reservationsApi'
 import type {
   AvailabilityResponse,
@@ -77,6 +78,12 @@ function App() {
   const [reservations, setReservations] = useState<ReservationResponse[]>([])
   const [myReservationsMessage, setMyReservationsMessage] = useState('')
   const [isLoadingReservations, setIsLoadingReservations] = useState(false)
+  const [adminReservations, setAdminReservations] = useState<
+    ReservationResponse[]
+  >([])
+  const [adminReservationsMessage, setAdminReservationsMessage] = useState('')
+  const [isLoadingAdminReservations, setIsLoadingAdminReservations] =
+    useState(false)
   const [cancellingReservationId, setCancellingReservationId] = useState<
     number | null
   >(null)
@@ -90,6 +97,8 @@ function App() {
       setReservationMessage('')
       setReservations([])
       setMyReservationsMessage('')
+      setAdminReservations([])
+      setAdminReservationsMessage('')
       return
     }
 
@@ -100,6 +109,10 @@ function App() {
 
     if (currentUser.role === 'User') {
       void loadMyReservations(() => isActive)
+    }
+
+    if (currentUser.role === 'Admin') {
+      void loadAdminReservations(() => isActive)
     }
 
     return () => {
@@ -166,6 +179,27 @@ function App() {
     } finally {
       if (shouldUpdate()) {
         setIsLoadingReservations(false)
+      }
+    }
+  }
+
+  async function loadAdminReservations(shouldUpdate = () => true) {
+    setIsLoadingAdminReservations(true)
+    setAdminReservationsMessage('')
+
+    try {
+      const loadedReservations = await getReservations()
+
+      if (shouldUpdate()) {
+        setAdminReservations(loadedReservations)
+      }
+    } catch (error) {
+      if (shouldUpdate()) {
+        setAdminReservationsMessage(getErrorMessage(error))
+      }
+    } finally {
+      if (shouldUpdate()) {
+        setIsLoadingAdminReservations(false)
       }
     }
   }
@@ -738,6 +772,39 @@ function App() {
                               : 'Cancel'}
                           </button>
                         )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {currentUser.role === 'Admin' && (
+            <section
+              className="placeholder-section"
+              aria-labelledby="admin-reservations-title"
+            >
+              <h2 id="admin-reservations-title">Reservations</h2>
+              {isLoadingAdminReservations && <p>Loading reservations...</p>}
+              {adminReservationsMessage && (
+                <p className="status-message">{adminReservationsMessage}</p>
+              )}
+              {!isLoadingAdminReservations &&
+                !adminReservationsMessage &&
+                adminReservations.length === 0 && <p>No reservations found.</p>}
+              {adminReservations.length > 0 && (
+                <ul className="resource-list">
+                  {adminReservations.map((reservation) => (
+                    <li key={reservation.id}>
+                      <div>
+                        <strong>{reservation.resourceName}</strong>
+                        <p>User ID: {reservation.userId}</p>
+                        <p>{formatDateTime(reservation.startTime)}</p>
+                        <p>{formatDateTime(reservation.endTime)}</p>
+                      </div>
+                      <div className="resource-actions">
+                        <span>{reservation.status}</span>
                       </div>
                     </li>
                   ))}
