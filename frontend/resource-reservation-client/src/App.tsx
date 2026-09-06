@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
-import { getResources } from './api/resourcesApi'
+import { createResource, getResources } from './api/resourcesApi'
 import type { ResourceResponse, UserResponse } from './api/types'
 import {
   clearAuthSession,
@@ -25,6 +25,10 @@ function App() {
   const [resources, setResources] = useState<ResourceResponse[]>([])
   const [resourceMessage, setResourceMessage] = useState('')
   const [isLoadingResources, setIsLoadingResources] = useState(false)
+  const [resourceName, setResourceName] = useState('')
+  const [resourceDescription, setResourceDescription] = useState('')
+  const [resourceLocation, setResourceLocation] = useState('')
+  const [isCreatingResource, setIsCreatingResource] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -33,35 +37,60 @@ function App() {
       return
     }
 
-    let shouldUpdate = true
+    let isActive = true
 
-    async function loadResources() {
-      setIsLoadingResources(true)
-      setResourceMessage('')
-
-      try {
-        const loadedResources = await getResources()
-
-        if (shouldUpdate) {
-          setResources(loadedResources)
-        }
-      } catch (error) {
-        if (shouldUpdate) {
-          setResourceMessage(getErrorMessage(error))
-        }
-      } finally {
-        if (shouldUpdate) {
-          setIsLoadingResources(false)
-        }
-      }
-    }
-
-    void loadResources()
+    void loadResources(() => isActive)
 
     return () => {
-      shouldUpdate = false
+      isActive = false
     }
   }, [currentUser])
+
+  async function loadResources(shouldUpdate = () => true) {
+    setIsLoadingResources(true)
+    setResourceMessage('')
+
+    try {
+      const loadedResources = await getResources()
+
+      if (shouldUpdate()) {
+        setResources(loadedResources)
+      }
+    } catch (error) {
+      if (shouldUpdate()) {
+        setResourceMessage(getErrorMessage(error))
+      }
+    } finally {
+      if (shouldUpdate()) {
+        setIsLoadingResources(false)
+      }
+    }
+  }
+
+  async function handleCreateResource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setResourceMessage('')
+    setIsCreatingResource(true)
+
+    try {
+      await createResource({
+        name: resourceName.trim(),
+        description: emptyToNull(resourceDescription),
+        location: emptyToNull(resourceLocation),
+      })
+      const loadedResources = await getResources()
+
+      setResources(loadedResources)
+      setResourceName('')
+      setResourceDescription('')
+      setResourceLocation('')
+      setResourceMessage('Resource created.')
+    } catch (error) {
+      setResourceMessage(getErrorMessage(error))
+    } finally {
+      setIsCreatingResource(false)
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -120,6 +149,53 @@ function App() {
             <section className="placeholder-section" aria-labelledby="user-title">
               <h2 id="user-title">User home</h2>
               <p>Resource browsing and reservations will be added here.</p>
+            </section>
+          )}
+
+          {currentUser.role === 'Admin' && (
+            <section
+              className="placeholder-section"
+              aria-labelledby="create-resource-title"
+            >
+              <h2 id="create-resource-title">Create resource</h2>
+              <form className="resource-form" onSubmit={handleCreateResource}>
+                <label>
+                  Name
+                  <input
+                    type="text"
+                    value={resourceName}
+                    onChange={(event) => setResourceName(event.target.value)}
+                    maxLength={100}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Description
+                  <input
+                    type="text"
+                    value={resourceDescription}
+                    onChange={(event) =>
+                      setResourceDescription(event.target.value)
+                    }
+                    maxLength={500}
+                  />
+                </label>
+
+                <label>
+                  Location
+                  <input
+                    type="text"
+                    value={resourceLocation}
+                    onChange={(event) => setResourceLocation(event.target.value)}
+                    maxLength={200}
+                  />
+                </label>
+
+                <button type="submit" disabled={isCreatingResource}>
+                  {isCreatingResource ? 'Creating...' : 'Create resource'}
+                </button>
+              </form>
             </section>
           )}
 
@@ -237,6 +313,11 @@ function getErrorMessage(error: unknown) {
   }
 
   return 'Something went wrong.'
+}
+
+function emptyToNull(value: string) {
+  const trimmedValue = value.trim()
+  return trimmedValue.length === 0 ? null : trimmedValue
 }
 
 export default App
