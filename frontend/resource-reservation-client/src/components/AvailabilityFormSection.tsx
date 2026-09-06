@@ -10,6 +10,7 @@ interface AvailabilityFormSectionProps {
   setAvailabilityStartTime: Dispatch<SetStateAction<string>>
   availabilityEndTime: string
   setAvailabilityEndTime: Dispatch<SetStateAction<string>>
+  validationMessage: string
   isSavingAvailability: boolean
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onCancelEdit: () => void
@@ -24,6 +25,7 @@ export function AvailabilityFormSection({
   setAvailabilityStartTime,
   availabilityEndTime,
   setAvailabilityEndTime,
+  validationMessage,
   isSavingAvailability,
   onSubmit,
   onCancelEdit,
@@ -33,7 +35,7 @@ export function AvailabilityFormSection({
       <h2 id="availability-form-title">
         {editingAvailabilityId ? 'Edit availability' : 'Create availability'}
       </h2>
-      <form className="resource-form" onSubmit={onSubmit}>
+      <form className="resource-form" onSubmit={onSubmit} noValidate>
         <label>
           Resource
           <select
@@ -69,6 +71,12 @@ export function AvailabilityFormSection({
             required
           />
         </label>
+
+        {validationMessage && (
+          <p className="status-message" role="alert">
+            {validationMessage}
+          </p>
+        )}
 
         <button
           type="submit"
