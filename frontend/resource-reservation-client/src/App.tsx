@@ -87,6 +87,8 @@ function App() {
   const [cancellingReservationId, setCancellingReservationId] = useState<
     number | null
   >(null)
+  const [adminCancellingReservationId, setAdminCancellingReservationId] =
+    useState<number | null>(null)
 
   useEffect(() => {
     if (!currentUser) {
@@ -406,6 +408,31 @@ function App() {
       setMyReservationsMessage(getErrorMessage(error))
     } finally {
       setCancellingReservationId(null)
+    }
+  }
+
+  async function handleAdminCancelReservation(reservation: ReservationResponse) {
+    const shouldCancel = confirm(
+      `Cancel reservation for "${reservation.resourceName}"?`,
+    )
+
+    if (!shouldCancel) {
+      return
+    }
+
+    setAdminReservationsMessage('')
+    setAdminCancellingReservationId(reservation.id)
+
+    try {
+      await cancelReservation(reservation.id)
+      const loadedReservations = await getReservations()
+
+      setAdminReservations(loadedReservations)
+      setAdminReservationsMessage('Reservation cancelled.')
+    } catch (error) {
+      setAdminReservationsMessage(getErrorMessage(error))
+    } finally {
+      setAdminCancellingReservationId(null)
     }
   }
 
@@ -805,6 +832,21 @@ function App() {
                       </div>
                       <div className="resource-actions">
                         <span>{reservation.status}</span>
+                        {reservation.status === 'Active' && (
+                          <button
+                            type="button"
+                            disabled={
+                              adminCancellingReservationId === reservation.id
+                            }
+                            onClick={() =>
+                              void handleAdminCancelReservation(reservation)
+                            }
+                          >
+                            {adminCancellingReservationId === reservation.id
+                              ? 'Cancelling...'
+                              : 'Cancel'}
+                          </button>
+                        )}
                       </div>
                     </li>
                   ))}
