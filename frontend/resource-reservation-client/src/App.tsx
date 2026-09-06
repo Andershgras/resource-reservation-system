@@ -13,6 +13,7 @@ import {
   getResources,
   updateResource,
 } from './api/resourcesApi'
+import { createReservation } from './api/reservationsApi'
 import type {
   AvailabilityResponse,
   ResourceResponse,
@@ -64,6 +65,10 @@ function App() {
   const [deletingAvailabilityId, setDeletingAvailabilityId] = useState<
     number | null
   >(null)
+  const [reservingAvailabilityId, setReservingAvailabilityId] = useState<
+    number | null
+  >(null)
+  const [reservationMessage, setReservationMessage] = useState('')
 
   useEffect(() => {
     if (!currentUser) {
@@ -71,6 +76,7 @@ function App() {
       setResourceMessage('')
       setAvailabilities([])
       setAvailabilityMessage('')
+      setReservationMessage('')
       return
     }
 
@@ -279,6 +285,24 @@ function App() {
     setAvailabilityResourceId('')
     setAvailabilityStartTime('')
     setAvailabilityEndTime('')
+  }
+
+  async function handleCreateReservation(availability: AvailabilityResponse) {
+    setReservationMessage('')
+    setReservingAvailabilityId(availability.id)
+
+    try {
+      await createReservation({
+        resourceId: availability.resourceId,
+        startTime: availability.startTime,
+        endTime: availability.endTime,
+      })
+      setReservationMessage('Reservation created.')
+    } catch (error) {
+      setReservationMessage(getErrorMessage(error))
+    } finally {
+      setReservingAvailabilityId(null)
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -534,6 +558,9 @@ function App() {
             aria-labelledby="availabilities-title"
           >
             <h2 id="availabilities-title">Availability</h2>
+            {reservationMessage && (
+              <p className="status-message">{reservationMessage}</p>
+            )}
             {isLoadingAvailabilities && <p>Loading availability...</p>}
             {availabilityMessage && (
               <p className="status-message">{availabilityMessage}</p>
@@ -550,6 +577,21 @@ function App() {
                       <p>{formatDateTime(availability.startTime)}</p>
                       <p>{formatDateTime(availability.endTime)}</p>
                     </div>
+                    {currentUser.role === 'User' && (
+                      <div className="resource-actions">
+                        <button
+                          type="button"
+                          disabled={reservingAvailabilityId === availability.id}
+                          onClick={() =>
+                            void handleCreateReservation(availability)
+                          }
+                        >
+                          {reservingAvailabilityId === availability.id
+                            ? 'Reserving...'
+                            : 'Reserve'}
+                        </button>
+                      </div>
+                    )}
                     {currentUser.role === 'Admin' && (
                       <div className="resource-actions">
                         <button
