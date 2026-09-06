@@ -30,13 +30,10 @@ import {
   getAuthUser,
   saveAuthSession,
 } from './auth/authStorage'
-import { AuthForm, type AuthMode } from './components/AuthForm'
-import { AvailabilityFormSection } from './components/AvailabilityFormSection'
-import { AvailabilitySection } from './components/AvailabilitySection'
-import { HomeHeader } from './components/HomeHeader'
-import { ReservationsSection } from './components/ReservationsSection'
-import { ResourceFormSection } from './components/ResourceFormSection'
-import { ResourcesSection } from './components/ResourcesSection'
+import type { AuthMode } from './components/AuthForm'
+import { AdminHomeView } from './views/AdminHomeView'
+import { AuthView } from './views/AuthView'
+import { UserHomeView } from './views/UserHomeView'
 import './App.css'
 
 function App() {
@@ -475,133 +472,100 @@ function App() {
   }
 
   if (currentUser) {
+    if (currentUser.role === 'Admin') {
+      return (
+        <AdminHomeView
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          resources={resources}
+          resourceMessage={resourceMessage}
+          isLoadingResources={isLoadingResources}
+          resourceName={resourceName}
+          setResourceName={setResourceName}
+          resourceDescription={resourceDescription}
+          setResourceDescription={setResourceDescription}
+          resourceLocation={resourceLocation}
+          setResourceLocation={setResourceLocation}
+          resourceIsActive={resourceIsActive}
+          setResourceIsActive={setResourceIsActive}
+          editingResourceId={editingResourceId}
+          isSavingResource={isSavingResource}
+          deletingResourceId={deletingResourceId}
+          onSaveResource={handleSaveResource}
+          onEditResource={handleEditResource}
+          onDeleteResource={(resource) => void handleDeleteResource(resource)}
+          onCancelResourceEdit={resetResourceForm}
+          availabilities={availabilities}
+          availabilityMessage={availabilityMessage}
+          isLoadingAvailabilities={isLoadingAvailabilities}
+          availabilityResourceId={availabilityResourceId}
+          setAvailabilityResourceId={setAvailabilityResourceId}
+          availabilityStartTime={availabilityStartTime}
+          setAvailabilityStartTime={setAvailabilityStartTime}
+          availabilityEndTime={availabilityEndTime}
+          setAvailabilityEndTime={setAvailabilityEndTime}
+          editingAvailabilityId={editingAvailabilityId}
+          isSavingAvailability={isSavingAvailability}
+          deletingAvailabilityId={deletingAvailabilityId}
+          onSaveAvailability={handleSaveAvailability}
+          onEditAvailability={handleEditAvailability}
+          onDeleteAvailability={(availability) =>
+            void handleDeleteAvailability(availability)
+          }
+          onCancelAvailabilityEdit={resetAvailabilityForm}
+          adminReservations={adminReservations}
+          adminReservationsMessage={adminReservationsMessage}
+          isLoadingAdminReservations={isLoadingAdminReservations}
+          adminCancellingReservationId={adminCancellingReservationId}
+          onAdminCancelReservation={(reservation) =>
+            void handleAdminCancelReservation(reservation)
+          }
+          formatDateTime={formatDateTime}
+          hasActiveReservationOverlap={hasActiveReservationOverlap}
+        />
+      )
+    }
+
     return (
-      <main className="app-shell">
-        <section className="home-panel">
-          <HomeHeader currentUser={currentUser} onLogout={handleLogout} />
-
-          {currentUser.role === 'Admin' ? (
-            <section className="placeholder-section" aria-labelledby="admin-title">
-              <h2 id="admin-title">Admin home</h2>
-              <p>Resource and availability management will be added here.</p>
-            </section>
-          ) : (
-            <section className="placeholder-section" aria-labelledby="user-title">
-              <h2 id="user-title">User home</h2>
-              <p>Resource browsing and reservations will be added here.</p>
-            </section>
-          )}
-
-          {currentUser.role === 'Admin' && (
-            <ResourceFormSection
-              editingResourceId={editingResourceId}
-              resourceName={resourceName}
-              setResourceName={setResourceName}
-              resourceDescription={resourceDescription}
-              setResourceDescription={setResourceDescription}
-              resourceLocation={resourceLocation}
-              setResourceLocation={setResourceLocation}
-              resourceIsActive={resourceIsActive}
-              setResourceIsActive={setResourceIsActive}
-              isSavingResource={isSavingResource}
-              onSubmit={handleSaveResource}
-              onCancelEdit={resetResourceForm}
-            />
-          )}
-
-          {currentUser.role === 'Admin' && (
-            <AvailabilityFormSection
-              editingAvailabilityId={editingAvailabilityId}
-              resources={resources}
-              availabilityResourceId={availabilityResourceId}
-              setAvailabilityResourceId={setAvailabilityResourceId}
-              availabilityStartTime={availabilityStartTime}
-              setAvailabilityStartTime={setAvailabilityStartTime}
-              availabilityEndTime={availabilityEndTime}
-              setAvailabilityEndTime={setAvailabilityEndTime}
-              isSavingAvailability={isSavingAvailability}
-              onSubmit={handleSaveAvailability}
-              onCancelEdit={resetAvailabilityForm}
-            />
-          )}
-
-          <ResourcesSection
-            currentUserRole={currentUser.role}
-            resources={resources}
-            isLoadingResources={isLoadingResources}
-            resourceMessage={resourceMessage}
-            deletingResourceId={deletingResourceId}
-            onEditResource={handleEditResource}
-            onDeleteResource={(resource) => void handleDeleteResource(resource)}
-          />
-
-          <AvailabilitySection
-            currentUserRole={currentUser.role}
-            availabilities={availabilities}
-            reservations={reservations}
-            isLoadingAvailabilities={isLoadingAvailabilities}
-            availabilityMessage={availabilityMessage}
-            reservationMessage={reservationMessage}
-            reservingAvailabilityId={reservingAvailabilityId}
-            deletingAvailabilityId={deletingAvailabilityId}
-            onReserve={(availability) => void handleCreateReservation(availability)}
-            onEditAvailability={handleEditAvailability}
-            onDeleteAvailability={(availability) =>
-              void handleDeleteAvailability(availability)
-            }
-            formatDateTime={formatDateTime}
-            hasActiveReservationOverlap={hasActiveReservationOverlap}
-          />
-
-          {currentUser.role === 'User' && (
-            <ReservationsSection
-              title="My reservations"
-              reservations={reservations}
-              isLoading={isLoadingReservations}
-              message={myReservationsMessage}
-              cancellingReservationId={cancellingReservationId}
-              onCancelReservation={(reservation) =>
-                void handleCancelReservation(reservation)
-              }
-              formatDateTime={formatDateTime}
-            />
-          )}
-
-          {currentUser.role === 'Admin' && (
-            <ReservationsSection
-              title="Reservations"
-              reservations={adminReservations}
-              isLoading={isLoadingAdminReservations}
-              message={adminReservationsMessage}
-              showUserId
-              cancellingReservationId={adminCancellingReservationId}
-              onCancelReservation={(reservation) =>
-                void handleAdminCancelReservation(reservation)
-              }
-              formatDateTime={formatDateTime}
-            />
-          )}
-        </section>
-      </main>
+      <UserHomeView
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        resources={resources}
+        resourceMessage={resourceMessage}
+        isLoadingResources={isLoadingResources}
+        availabilities={availabilities}
+        availabilityMessage={availabilityMessage}
+        isLoadingAvailabilities={isLoadingAvailabilities}
+        reservations={reservations}
+        reservationMessage={reservationMessage}
+        myReservationsMessage={myReservationsMessage}
+        isLoadingReservations={isLoadingReservations}
+        reservingAvailabilityId={reservingAvailabilityId}
+        cancellingReservationId={cancellingReservationId}
+        onReserve={(availability) => void handleCreateReservation(availability)}
+        onCancelReservation={(reservation) =>
+          void handleCancelReservation(reservation)
+        }
+        formatDateTime={formatDateTime}
+        hasActiveReservationOverlap={hasActiveReservationOverlap}
+      />
     )
   }
 
   return (
-    <main className="app-shell">
-      <AuthForm
-        authMode={authMode}
-        setAuthMode={setAuthMode}
-        name={name}
-        setName={setName}
-        email={email}
-        setEmail={setEmail}
-        password={password}
-        setPassword={setPassword}
-        isSubmitting={isSubmitting}
-        message={message}
-        onSubmit={handleSubmit}
-      />
-    </main>
+    <AuthView
+      authMode={authMode}
+      setAuthMode={setAuthMode}
+      name={name}
+      setName={setName}
+      email={email}
+      setEmail={setEmail}
+      password={password}
+      setPassword={setPassword}
+      isSubmitting={isSubmitting}
+      message={message}
+      onSubmit={handleSubmit}
+    />
   )
 }
 
