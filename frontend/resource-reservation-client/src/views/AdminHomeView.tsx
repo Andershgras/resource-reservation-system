@@ -113,7 +113,7 @@ export function AdminHomeView({
 
         <section className="placeholder-section" aria-labelledby="admin-title">
           <h2 id="admin-title">Admin home</h2>
-          <p>Resource and availability management will be added here.</p>
+          <p>Manage resources, availability, and reservations.</p>
         </section>
 
         <ResourceFormSection

@@ -60,7 +60,7 @@ export function UserHomeView({
 
         <section className="placeholder-section" aria-labelledby="user-title">
           <h2 id="user-title">User home</h2>
-          <p>Resource browsing and reservations will be added here.</p>
+          <p>Browse resources, reserve availability, and manage your reservations.</p>
         </section>
 
         <ResourcesSection
