@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import {
   createAvailability,
   getAvailabilities,
+  updateAvailability,
 } from './api/availabilitiesApi'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
@@ -55,7 +56,10 @@ function App() {
   const [availabilityResourceId, setAvailabilityResourceId] = useState('')
   const [availabilityStartTime, setAvailabilityStartTime] = useState('')
   const [availabilityEndTime, setAvailabilityEndTime] = useState('')
-  const [isCreatingAvailability, setIsCreatingAvailability] = useState(false)
+  const [editingAvailabilityId, setEditingAvailabilityId] = useState<
+    number | null
+  >(null)
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -151,28 +155,35 @@ function App() {
     }
   }
 
-  async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setAvailabilityMessage('')
-    setIsCreatingAvailability(true)
+    setIsSavingAvailability(true)
 
     try {
-      await createAvailability({
+      const request = {
         resourceId: Number(availabilityResourceId),
         startTime: availabilityStartTime,
         endTime: availabilityEndTime,
-      })
+      }
+
+      if (editingAvailabilityId) {
+        await updateAvailability(editingAvailabilityId, request)
+      } else {
+        await createAvailability(request)
+      }
+
       const loadedAvailabilities = await getAvailabilities()
 
       setAvailabilities(loadedAvailabilities)
-      setAvailabilityResourceId('')
-      setAvailabilityStartTime('')
-      setAvailabilityEndTime('')
-      setAvailabilityMessage('Availability created.')
+      resetAvailabilityForm()
+      setAvailabilityMessage(
+        editingAvailabilityId ? 'Availability updated.' : 'Availability created.',
+      )
     } catch (error) {
       setAvailabilityMessage(getErrorMessage(error))
     } finally {
-      setIsCreatingAvailability(false)
+      setIsSavingAvailability(false)
     }
   }
 
@@ -219,6 +230,21 @@ function App() {
     setResourceDescription('')
     setResourceLocation('')
     setResourceIsActive(true)
+  }
+
+  function handleEditAvailability(availability: AvailabilityResponse) {
+    setEditingAvailabilityId(availability.id)
+    setAvailabilityResourceId(availability.resourceId.toString())
+    setAvailabilityStartTime(toDateTimeLocalValue(availability.startTime))
+    setAvailabilityEndTime(toDateTimeLocalValue(availability.endTime))
+    setAvailabilityMessage('')
+  }
+
+  function resetAvailabilityForm() {
+    setEditingAvailabilityId(null)
+    setAvailabilityResourceId('')
+    setAvailabilityStartTime('')
+    setAvailabilityEndTime('')
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -357,10 +383,12 @@ function App() {
               className="placeholder-section"
               aria-labelledby="create-availability-title"
             >
-              <h2 id="create-availability-title">Create availability</h2>
+              <h2 id="create-availability-title">
+                {editingAvailabilityId ? 'Edit availability' : 'Create availability'}
+              </h2>
               <form
                 className="resource-form"
-                onSubmit={handleCreateAvailability}
+                onSubmit={handleSaveAvailability}
               >
                 <label>
                   Resource
@@ -406,12 +434,19 @@ function App() {
 
                 <button
                   type="submit"
-                  disabled={isCreatingAvailability || resources.length === 0}
+                  disabled={isSavingAvailability || resources.length === 0}
                 >
-                  {isCreatingAvailability
-                    ? 'Creating...'
-                    : 'Create availability'}
+                  {isSavingAvailability
+                    ? 'Saving...'
+                    : editingAvailabilityId
+                      ? 'Save availability'
+                      : 'Create availability'}
                 </button>
+                {editingAvailabilityId && (
+                  <button type="button" onClick={resetAvailabilityForm}>
+                    Cancel edit
+                  </button>
+                )}
               </form>
             </section>
           )}
@@ -481,6 +516,16 @@ function App() {
                       <p>{formatDateTime(availability.startTime)}</p>
                       <p>{formatDateTime(availability.endTime)}</p>
                     </div>
+                    {currentUser.role === 'Admin' && (
+                      <div className="resource-actions">
+                        <button
+                          type="button"
+                          onClick={() => handleEditAvailability(availability)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -587,6 +632,12 @@ function emptyToNull(value: string) {
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString()
+}
+
+function toDateTimeLocalValue(value: string) {
+  const date = new Date(value)
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return offsetDate.toISOString().slice(0, 16)
 }
 
 export default App
