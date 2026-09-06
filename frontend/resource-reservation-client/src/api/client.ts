@@ -6,6 +6,13 @@ type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
 }
 
+interface ApiErrorResponse {
+  message?: string
+  title?: string
+  detail?: string
+  errors?: Record<string, string[]>
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -58,8 +65,17 @@ async function readErrorMessage(response: Response) {
   }
 
   try {
-    const problemDetails = JSON.parse(text) as { title?: string; detail?: string }
-    return problemDetails.detail ?? problemDetails.title ?? fallbackMessage
+    const errorResponse = JSON.parse(text) as ApiErrorResponse
+    const validationMessages = Object.values(errorResponse.errors ?? {}).flat()
+
+    if (errorResponse.message && validationMessages.length > 0) {
+      return `${errorResponse.message} ${validationMessages.join(' ')}`
+    }
+
+    return errorResponse.message ??
+      errorResponse.detail ??
+      errorResponse.title ??
+      fallbackMessage
   } catch {
     return text
   }

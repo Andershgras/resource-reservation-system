@@ -34,7 +34,9 @@ public class ReservationsControllerTests
         });
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal("Resource is already reserved in this time period.", badRequest.Value);
+        AssertApiError(
+            badRequest,
+            "Resource is already reserved in this time period.");
     }
 
     [Fact]
@@ -80,7 +82,9 @@ public class ReservationsControllerTests
         });
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal("Resource is not available in this time period.", badRequest.Value);
+        AssertApiError(
+            badRequest,
+            "Resource is not available in this time period.");
     }
 
     [Fact]
@@ -99,7 +103,63 @@ public class ReservationsControllerTests
         });
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal("Resource is not active.", badRequest.Value);
+        AssertApiError(badRequest, "Resource is not active.");
+    }
+
+    [Fact]
+    public async Task GetReservation_WhenReservationDoesNotExist_ReturnsNotFoundError()
+    {
+        await using var context = CreateContext();
+        var user = await SeedUserAsync(context);
+        var controller = CreateController(context, user.Id);
+
+        var result = await controller.GetReservation(999);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        AssertApiError(notFound, "Reservation not found.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenCurrentUserIsMissing_ReturnsUnauthorizedError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var controller = CreateController(context, null);
+
+        var result = await controller.CreateReservation(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        });
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        AssertApiError(unauthorized, "Authentication is required.");
+    }
+
+    [Fact]
+    public async Task CancelReservation_WhenReservationBelongsToAnotherUser_ReturnsForbiddenError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var reservationOwner = await SeedUserAsync(context);
+        var currentUser = await SeedUserAsync(context);
+        await SeedReservationAsync(
+            context,
+            resource.Id,
+            reservationOwner.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var controller = CreateController(context, currentUser.Id);
+
+        var result = await controller.CancelReservation(1);
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        AssertApiError(
+            forbidden,
+            "You do not have permission to access this resource.");
     }
 
     private static AppDbContext CreateContext()
@@ -113,10 +173,13 @@ public class ReservationsControllerTests
 
     private static ReservationsController CreateController(
         AppDbContext context,
-        int userId)
+        int? userId)
     {
+        var claims = userId is null
+            ? Array.Empty<Claim>()
+            : [new Claim(ClaimTypes.NameIdentifier, userId.ToString()!)];
         var user = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, userId.ToString())],
+            claims,
             "TestAuth"));
 
         return new ReservationsController(context)
@@ -126,6 +189,12 @@ public class ReservationsControllerTests
                 HttpContext = new DefaultHttpContext { User = user }
             }
         };
+    }
+
+    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
+    {
+        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
+        Assert.Equal(expectedMessage, error.Message);
     }
 
     private static async Task<Resource> SeedResourceWithAvailabilityAsync(

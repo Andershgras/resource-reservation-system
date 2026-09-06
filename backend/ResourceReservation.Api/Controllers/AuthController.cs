@@ -30,17 +30,17 @@ public class AuthController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(registerUserDto.Name))
         {
-            return BadRequest("Name is required.");
+            return BadRequest(ApiError("Name is required."));
         }
 
         if (!TryNormalizeEmail(registerUserDto.Email, out var normalizedEmail))
         {
-            return BadRequest("A valid email is required.");
+            return BadRequest(ApiError("A valid email is required."));
         }
 
         if (string.IsNullOrWhiteSpace(registerUserDto.Password) || registerUserDto.Password.Length < 8)
         {
-            return BadRequest("Password must be at least 8 characters.");
+            return BadRequest(ApiError("Password must be at least 8 characters."));
         }
 
         var emailExists = await _context.Users
@@ -48,7 +48,7 @@ public class AuthController : ControllerBase
 
         if (emailExists)
         {
-            return BadRequest("Email is already registered.");
+            return BadRequest(ApiError("Email is already registered."));
         }
 
         var user = new User
@@ -79,7 +79,7 @@ public class AuthController : ControllerBase
     {
         if (!TryNormalizeEmail(loginUserDto.Email, out var normalizedEmail))
         {
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized(ApiError("Invalid email or password."));
         }
 
         var user = await _context.Users
@@ -87,7 +87,7 @@ public class AuthController : ControllerBase
 
         if (user is null)
         {
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized(ApiError("Invalid email or password."));
         }
 
         var passwordResult = _passwordHasher.VerifyHashedPassword(
@@ -97,7 +97,7 @@ public class AuthController : ControllerBase
 
         if (passwordResult == PasswordVerificationResult.Failed)
         {
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized(ApiError("Invalid email or password."));
         }
 
         var userResponseDto = new UserResponseDto
@@ -166,5 +166,10 @@ public class AuthController : ControllerBase
         {
             return false;
         }
+    }
+
+    private static ApiErrorResponseDto ApiError(string message)
+    {
+        return new ApiErrorResponseDto { Message = message };
     }
 }

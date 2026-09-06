@@ -2,16 +2,37 @@ using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
 
 const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(modelState => modelState.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    modelState => modelState.Key,
+                    modelState => modelState.Value!.Errors
+                        .Select(error => error.ErrorMessage)
+                        .ToArray());
+
+            return new BadRequestObjectResult(new ApiErrorResponseDto
+            {
+                Message = "Validation failed.",
+                Errors = errors
+            });
+        };
+    });
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(frontendDevelopmentCorsPolicy, policy =>
@@ -54,6 +75,30 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+
+                return context.Response.WriteAsJsonAsync(new ApiErrorResponseDto
+                {
+                    Message = "Authentication is required."
+                });
+            },
+            OnForbidden = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json";
+
+                return context.Response.WriteAsJsonAsync(new ApiErrorResponseDto
+                {
+                    Message = "You do not have permission to access this resource."
+                });
+            }
         };
     });
 
