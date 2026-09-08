@@ -12,6 +12,15 @@ import { HomeHeader } from '../components/HomeHeader'
 import { ReservationsSection } from '../components/ReservationsSection'
 import { ResourceFormSection } from '../components/ResourceFormSection'
 import { ResourcesSection } from '../components/ResourcesSection'
+import { RoleTabs } from '../components/RoleTabs'
+
+type AdminScreen = 'resources' | 'availability' | 'reservations'
+
+const adminTabs: { id: AdminScreen; label: string }[] = [
+  { id: 'resources', label: 'Resources' },
+  { id: 'availability', label: 'Availability' },
+  { id: 'reservations', label: 'Reservations' },
+]
 
 interface AdminHomeViewProps {
   currentUser: UserResponse
@@ -109,6 +118,7 @@ export function AdminHomeView({
   formatDateTime,
   hasActiveReservationOverlap,
 }: AdminHomeViewProps) {
+  const [activeScreen, setActiveScreen] = useState<AdminScreen>('resources')
   const [reservationResourceFilter, setReservationResourceFilter] = useState('')
   const [reservationStatusFilter, setReservationStatusFilter] = useState<
     '' | ReservationStatus
@@ -140,87 +150,292 @@ export function AdminHomeView({
           <p>Manage resources, availability, and reservations.</p>
         </section>
 
-        <ResourceFormSection
-          editingResourceId={editingResourceId}
-          resourceName={resourceName}
-          setResourceName={setResourceName}
-          resourceDescription={resourceDescription}
-          setResourceDescription={setResourceDescription}
-          resourceLocation={resourceLocation}
-          setResourceLocation={setResourceLocation}
-          resourceIsActive={resourceIsActive}
-          setResourceIsActive={setResourceIsActive}
-          isSavingResource={isSavingResource}
-          onSubmit={onSaveResource}
-          onCancelEdit={onCancelResourceEdit}
+        <RoleTabs
+          tabs={adminTabs}
+          activeTab={activeScreen}
+          onTabChange={setActiveScreen}
         />
 
-        <AvailabilityFormSection
-          editingAvailabilityId={editingAvailabilityId}
-          resources={resources}
-          availabilityResourceId={availabilityResourceId}
-          setAvailabilityResourceId={setAvailabilityResourceId}
-          availabilityStartTime={availabilityStartTime}
-          setAvailabilityStartTime={setAvailabilityStartTime}
-          availabilityEndTime={availabilityEndTime}
-          setAvailabilityEndTime={setAvailabilityEndTime}
-          validationMessage={availabilityValidationMessage}
-          isSavingAvailability={isSavingAvailability}
-          onSubmit={onSaveAvailability}
-          onCancelEdit={onCancelAvailabilityEdit}
-        />
+        {activeScreen === 'resources' && (
+          <AdminResourcesScreen
+            resources={resources}
+            resourceMessage={resourceMessage}
+            isLoadingResources={isLoadingResources}
+            resourceName={resourceName}
+            setResourceName={setResourceName}
+            resourceDescription={resourceDescription}
+            setResourceDescription={setResourceDescription}
+            resourceLocation={resourceLocation}
+            setResourceLocation={setResourceLocation}
+            resourceIsActive={resourceIsActive}
+            setResourceIsActive={setResourceIsActive}
+            editingResourceId={editingResourceId}
+            isSavingResource={isSavingResource}
+            deletingResourceId={deletingResourceId}
+            onSaveResource={onSaveResource}
+            onEditResource={onEditResource}
+            onDeleteResource={onDeleteResource}
+            onCancelResourceEdit={onCancelResourceEdit}
+          />
+        )}
 
-        <ResourcesSection
-          currentUserRole="Admin"
-          resources={resources}
-          isLoadingResources={isLoadingResources}
-          resourceMessage={resourceMessage}
-          deletingResourceId={deletingResourceId}
-          onEditResource={onEditResource}
-          onDeleteResource={onDeleteResource}
-        />
+        {activeScreen === 'availability' && (
+          <AdminAvailabilityScreen
+            resources={resources}
+            availabilities={availabilities}
+            availabilityMessage={availabilityMessage}
+            isLoadingAvailabilities={isLoadingAvailabilities}
+            availabilityResourceId={availabilityResourceId}
+            setAvailabilityResourceId={setAvailabilityResourceId}
+            availabilityStartTime={availabilityStartTime}
+            setAvailabilityStartTime={setAvailabilityStartTime}
+            availabilityEndTime={availabilityEndTime}
+            setAvailabilityEndTime={setAvailabilityEndTime}
+            availabilityValidationMessage={availabilityValidationMessage}
+            editingAvailabilityId={editingAvailabilityId}
+            isSavingAvailability={isSavingAvailability}
+            deletingAvailabilityId={deletingAvailabilityId}
+            onSaveAvailability={onSaveAvailability}
+            onEditAvailability={onEditAvailability}
+            onDeleteAvailability={onDeleteAvailability}
+            onCancelAvailabilityEdit={onCancelAvailabilityEdit}
+            formatDateTime={formatDateTime}
+            hasActiveReservationOverlap={hasActiveReservationOverlap}
+          />
+        )}
 
-        <AvailabilitySection
-          currentUserRole="Admin"
-          availabilities={availabilities}
-          reservations={[]}
-          isLoadingAvailabilities={isLoadingAvailabilities}
-          availabilityMessage={availabilityMessage}
-          reservationMessage=""
-          reservingAvailabilityId={null}
-          deletingAvailabilityId={deletingAvailabilityId}
-          onReserve={() => undefined}
-          onEditAvailability={onEditAvailability}
-          onDeleteAvailability={onDeleteAvailability}
-          formatDateTime={formatDateTime}
-          hasActiveReservationOverlap={hasActiveReservationOverlap}
-        />
-
-        <ReservationsSection
-          title="Reservations"
-          reservations={filteredAdminReservations}
-          isLoading={isLoadingAdminReservations}
-          message={adminReservationsMessage}
-          showUserId
-          filterResources={resources}
-          selectedResourceId={reservationResourceFilter}
-          selectedStatus={reservationStatusFilter}
-          onSelectedResourceIdChange={setReservationResourceFilter}
-          onSelectedStatusChange={setReservationStatusFilter}
-          onClearFilters={() => {
-            setReservationResourceFilter('')
-            setReservationStatusFilter('')
-          }}
-          emptyMessage={
-            hasReservationFilters
-              ? 'No reservations match the selected filters.'
-              : 'No reservations found.'
-          }
-          cancellingReservationId={adminCancellingReservationId}
-          onCancelReservation={onAdminCancelReservation}
-          formatDateTime={formatDateTime}
-        />
+        {activeScreen === 'reservations' && (
+          <AdminReservationsScreen
+            resources={resources}
+            reservations={filteredAdminReservations}
+            message={adminReservationsMessage}
+            isLoading={isLoadingAdminReservations}
+            selectedResourceId={reservationResourceFilter}
+            selectedStatus={reservationStatusFilter}
+            hasReservationFilters={hasReservationFilters}
+            cancellingReservationId={adminCancellingReservationId}
+            onSelectedResourceIdChange={setReservationResourceFilter}
+            onSelectedStatusChange={setReservationStatusFilter}
+            onClearFilters={() => {
+              setReservationResourceFilter('')
+              setReservationStatusFilter('')
+            }}
+            onCancelReservation={onAdminCancelReservation}
+            formatDateTime={formatDateTime}
+          />
+        )}
       </section>
     </main>
+  )
+}
+
+interface AdminResourcesScreenProps {
+  resources: ResourceResponse[]
+  resourceMessage: string
+  isLoadingResources: boolean
+  resourceName: string
+  setResourceName: Dispatch<SetStateAction<string>>
+  resourceDescription: string
+  setResourceDescription: Dispatch<SetStateAction<string>>
+  resourceLocation: string
+  setResourceLocation: Dispatch<SetStateAction<string>>
+  resourceIsActive: boolean
+  setResourceIsActive: Dispatch<SetStateAction<boolean>>
+  editingResourceId: number | null
+  isSavingResource: boolean
+  deletingResourceId: number | null
+  onSaveResource: (event: FormEvent<HTMLFormElement>) => void
+  onEditResource: (resource: ResourceResponse) => void
+  onDeleteResource: (resource: ResourceResponse) => void
+  onCancelResourceEdit: () => void
+}
+
+function AdminResourcesScreen({
+  resources,
+  resourceMessage,
+  isLoadingResources,
+  resourceName,
+  setResourceName,
+  resourceDescription,
+  setResourceDescription,
+  resourceLocation,
+  setResourceLocation,
+  resourceIsActive,
+  setResourceIsActive,
+  editingResourceId,
+  isSavingResource,
+  deletingResourceId,
+  onSaveResource,
+  onEditResource,
+  onDeleteResource,
+  onCancelResourceEdit,
+}: AdminResourcesScreenProps) {
+  return (
+    <>
+      <ResourceFormSection
+        editingResourceId={editingResourceId}
+        resourceName={resourceName}
+        setResourceName={setResourceName}
+        resourceDescription={resourceDescription}
+        setResourceDescription={setResourceDescription}
+        resourceLocation={resourceLocation}
+        setResourceLocation={setResourceLocation}
+        resourceIsActive={resourceIsActive}
+        setResourceIsActive={setResourceIsActive}
+        isSavingResource={isSavingResource}
+        onSubmit={onSaveResource}
+        onCancelEdit={onCancelResourceEdit}
+      />
+
+      <ResourcesSection
+        currentUserRole="Admin"
+        resources={resources}
+        isLoadingResources={isLoadingResources}
+        resourceMessage={resourceMessage}
+        deletingResourceId={deletingResourceId}
+        onEditResource={onEditResource}
+        onDeleteResource={onDeleteResource}
+      />
+    </>
+  )
+}
+
+interface AdminAvailabilityScreenProps {
+  resources: ResourceResponse[]
+  availabilities: AvailabilityResponse[]
+  availabilityMessage: string
+  isLoadingAvailabilities: boolean
+  availabilityResourceId: string
+  setAvailabilityResourceId: Dispatch<SetStateAction<string>>
+  availabilityStartTime: string
+  setAvailabilityStartTime: Dispatch<SetStateAction<string>>
+  availabilityEndTime: string
+  setAvailabilityEndTime: Dispatch<SetStateAction<string>>
+  availabilityValidationMessage: string
+  editingAvailabilityId: number | null
+  isSavingAvailability: boolean
+  deletingAvailabilityId: number | null
+  onSaveAvailability: (event: FormEvent<HTMLFormElement>) => void
+  onEditAvailability: (availability: AvailabilityResponse) => void
+  onDeleteAvailability: (availability: AvailabilityResponse) => void
+  onCancelAvailabilityEdit: () => void
+  formatDateTime: (value: string) => string
+  hasActiveReservationOverlap: (
+    availability: AvailabilityResponse,
+    reservations: ReservationResponse[],
+  ) => boolean
+}
+
+function AdminAvailabilityScreen({
+  resources,
+  availabilities,
+  availabilityMessage,
+  isLoadingAvailabilities,
+  availabilityResourceId,
+  setAvailabilityResourceId,
+  availabilityStartTime,
+  setAvailabilityStartTime,
+  availabilityEndTime,
+  setAvailabilityEndTime,
+  availabilityValidationMessage,
+  editingAvailabilityId,
+  isSavingAvailability,
+  deletingAvailabilityId,
+  onSaveAvailability,
+  onEditAvailability,
+  onDeleteAvailability,
+  onCancelAvailabilityEdit,
+  formatDateTime,
+  hasActiveReservationOverlap,
+}: AdminAvailabilityScreenProps) {
+  return (
+    <>
+      <AvailabilityFormSection
+        editingAvailabilityId={editingAvailabilityId}
+        resources={resources}
+        availabilityResourceId={availabilityResourceId}
+        setAvailabilityResourceId={setAvailabilityResourceId}
+        availabilityStartTime={availabilityStartTime}
+        setAvailabilityStartTime={setAvailabilityStartTime}
+        availabilityEndTime={availabilityEndTime}
+        setAvailabilityEndTime={setAvailabilityEndTime}
+        validationMessage={availabilityValidationMessage}
+        isSavingAvailability={isSavingAvailability}
+        onSubmit={onSaveAvailability}
+        onCancelEdit={onCancelAvailabilityEdit}
+      />
+
+      <AvailabilitySection
+        currentUserRole="Admin"
+        availabilities={availabilities}
+        reservations={[]}
+        isLoadingAvailabilities={isLoadingAvailabilities}
+        availabilityMessage={availabilityMessage}
+        reservationMessage=""
+        reservingAvailabilityId={null}
+        deletingAvailabilityId={deletingAvailabilityId}
+        onReserve={() => undefined}
+        onEditAvailability={onEditAvailability}
+        onDeleteAvailability={onDeleteAvailability}
+        formatDateTime={formatDateTime}
+        hasActiveReservationOverlap={hasActiveReservationOverlap}
+      />
+    </>
+  )
+}
+
+interface AdminReservationsScreenProps {
+  resources: ResourceResponse[]
+  reservations: ReservationResponse[]
+  message: string
+  isLoading: boolean
+  selectedResourceId: string
+  selectedStatus: '' | ReservationStatus
+  hasReservationFilters: boolean
+  cancellingReservationId: number | null
+  onSelectedResourceIdChange: (resourceId: string) => void
+  onSelectedStatusChange: (status: '' | ReservationStatus) => void
+  onClearFilters: () => void
+  onCancelReservation: (reservation: ReservationResponse) => void
+  formatDateTime: (value: string) => string
+}
+
+function AdminReservationsScreen({
+  resources,
+  reservations,
+  message,
+  isLoading,
+  selectedResourceId,
+  selectedStatus,
+  hasReservationFilters,
+  cancellingReservationId,
+  onSelectedResourceIdChange,
+  onSelectedStatusChange,
+  onClearFilters,
+  onCancelReservation,
+  formatDateTime,
+}: AdminReservationsScreenProps) {
+  return (
+    <ReservationsSection
+      title="Reservations"
+      reservations={reservations}
+      isLoading={isLoading}
+      message={message}
+      showUserId
+      filterResources={resources}
+      selectedResourceId={selectedResourceId}
+      selectedStatus={selectedStatus}
+      onSelectedResourceIdChange={onSelectedResourceIdChange}
+      onSelectedStatusChange={onSelectedStatusChange}
+      onClearFilters={onClearFilters}
+      emptyMessage={
+        hasReservationFilters
+          ? 'No reservations match the selected filters.'
+          : 'No reservations found.'
+      }
+      cancellingReservationId={cancellingReservationId}
+      onCancelReservation={onCancelReservation}
+      formatDateTime={formatDateTime}
+    />
   )
 }

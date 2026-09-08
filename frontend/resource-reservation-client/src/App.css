@@ -66,6 +66,28 @@
   color: var(--text-h);
 }
 
+.role-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.role-tabs button {
+  min-height: 40px;
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.role-tabs button.active {
+  background: var(--muted-bg);
+  color: var(--text-h);
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -258,6 +280,10 @@ select:focus-visible {
   }
 
   .reservation-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .role-tabs {
     grid-template-columns: 1fr;
   }
 
