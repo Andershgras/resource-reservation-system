@@ -87,6 +87,7 @@ These GitHub issues are closed and implemented:
 - [x] #21 Add API Error Response Consistency
 - [x] Add Auth Controller Tests
 - [x] Clean Backend Build Warning
+- [x] Replace Browser Confirm Dialogs
 - [x] Split Role Views Into Navigable Screens
 
 ## Open User Stories
