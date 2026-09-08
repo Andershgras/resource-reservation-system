@@ -48,8 +48,11 @@ export function ReservationsSection({
   const hasActiveFilters = selectedResourceId !== '' || selectedStatus !== ''
 
   return (
-    <section className="placeholder-section" aria-labelledby={titleId}>
-      <h2 id={titleId}>{title}</h2>
+    <section className="panel-section" aria-labelledby={titleId}>
+      <div className="section-heading">
+        <h2 id={titleId}>{title}</h2>
+        <span className="count-badge">{reservations.length}</span>
+      </div>
       {showFilters && (
         <div className="reservation-filters" aria-label="Reservation filters">
           <label>
@@ -108,7 +111,7 @@ export function ReservationsSection({
               key={reservation.id}
               className={`reservation-item reservation-item-${reservation.status.toLowerCase()}`}
             >
-              <div>
+              <div className="item-main">
                 <strong>{reservation.resourceName}</strong>
                 {showUserId && <p>User ID: {reservation.userId}</p>}
                 <div className="reservation-dates">

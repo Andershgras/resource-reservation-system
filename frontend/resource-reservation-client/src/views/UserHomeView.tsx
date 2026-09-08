@@ -79,15 +79,36 @@ export function UserHomeView({
   formatDateTimeInput,
 }: UserHomeViewProps) {
   const [activeScreen, setActiveScreen] = useState<UserScreen>('resources')
+  const activeReservationCount = reservations.filter(
+    (reservation) => reservation.status === 'Active',
+  ).length
 
   return (
     <main className="app-shell">
       <section className="home-panel">
         <HomeHeader currentUser={currentUser} onLogout={onLogout} />
 
-        <section className="placeholder-section" aria-labelledby="user-title">
-          <h2 id="user-title">User home</h2>
-          <p>Browse resources, reserve availability, and manage your reservations.</p>
+        <section className="panel-section overview-panel" aria-labelledby="user-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">User overview</p>
+              <h2 id="user-title">Your booking space</h2>
+            </div>
+          </div>
+          <div className="summary-grid" aria-label="User summary">
+            <div>
+              <span>{resources.length}</span>
+              <p>Resources</p>
+            </div>
+            <div>
+              <span>{availabilities.length}</span>
+              <p>Availability windows</p>
+            </div>
+            <div>
+              <span>{activeReservationCount}</span>
+              <p>Active reservations</p>
+            </div>
+          </div>
         </section>
 
         <RoleTabs

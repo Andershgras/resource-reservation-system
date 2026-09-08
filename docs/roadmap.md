@@ -88,6 +88,7 @@ These GitHub issues are closed and implemented:
 - [x] Add Auth Controller Tests
 - [x] Clean Backend Build Warning
 - [x] Improve Availability And Reservation Filtering
+- [x] Modernize Frontend Layout And Visual Design
 - [x] Improve User Reservation Time Selection
 - [x] Prevent Overlapping Availability Windows
 - [x] Protect Reservation History From Resource Deletes
