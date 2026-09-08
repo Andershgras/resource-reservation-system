@@ -66,10 +66,6 @@ interface AdminHomeViewProps {
   adminCancellingReservationId: number | null
   onAdminCancelReservation: (reservation: ReservationResponse) => void
   formatDateTime: (value: string) => string
-  hasActiveReservationOverlap: (
-    availability: AvailabilityResponse,
-    reservations: ReservationResponse[],
-  ) => boolean
 }
 
 export function AdminHomeView({
@@ -116,7 +112,6 @@ export function AdminHomeView({
   adminCancellingReservationId,
   onAdminCancelReservation,
   formatDateTime,
-  hasActiveReservationOverlap,
 }: AdminHomeViewProps) {
   const [activeScreen, setActiveScreen] = useState<AdminScreen>('resources')
   const [reservationResourceFilter, setReservationResourceFilter] = useState('')
@@ -218,7 +213,6 @@ export function AdminHomeView({
             onDeleteAvailability={onDeleteAvailability}
             onCancelAvailabilityEdit={onCancelAvailabilityEdit}
             formatDateTime={formatDateTime}
-            hasActiveReservationOverlap={hasActiveReservationOverlap}
           />
         )}
 
@@ -338,10 +332,6 @@ interface AdminAvailabilityScreenProps {
   onDeleteAvailability: (availability: AvailabilityResponse) => void
   onCancelAvailabilityEdit: () => void
   formatDateTime: (value: string) => string
-  hasActiveReservationOverlap: (
-    availability: AvailabilityResponse,
-    reservations: ReservationResponse[],
-  ) => boolean
 }
 
 function AdminAvailabilityScreen({
@@ -364,7 +354,6 @@ function AdminAvailabilityScreen({
   onDeleteAvailability,
   onCancelAvailabilityEdit,
   formatDateTime,
-  hasActiveReservationOverlap,
 }: AdminAvailabilityScreenProps) {
   return (
     <>
@@ -386,7 +375,6 @@ function AdminAvailabilityScreen({
       <AvailabilitySection
         currentUserRole="Admin"
         availabilities={availabilities}
-        reservations={[]}
         isLoadingAvailabilities={isLoadingAvailabilities}
         availabilityMessage={availabilityMessage}
         reservationMessage=""
@@ -396,7 +384,6 @@ function AdminAvailabilityScreen({
         onEditAvailability={onEditAvailability}
         onDeleteAvailability={onDeleteAvailability}
         formatDateTime={formatDateTime}
-        hasActiveReservationOverlap={hasActiveReservationOverlap}
       />
     </>
   )

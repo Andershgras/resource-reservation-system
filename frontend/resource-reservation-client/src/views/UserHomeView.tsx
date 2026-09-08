@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import type {
   AvailabilityResponse,
   ReservationResponse,
@@ -30,17 +30,24 @@ interface UserHomeViewProps {
   isLoadingAvailabilities: boolean
   reservations: ReservationResponse[]
   reservationMessage: string
+  reservationValidationMessage: string
   myReservationsMessage: string
   isLoadingReservations: boolean
   reservingAvailabilityId: number | null
+  selectedReservationAvailabilityId: number | null
+  reservationStartTime: string
+  setReservationStartTime: Dispatch<SetStateAction<string>>
+  reservationEndTime: string
+  setReservationEndTime: Dispatch<SetStateAction<string>>
   cancellingReservationId: number | null
   onReserve: (availability: AvailabilityResponse) => void
+  onSelectAvailabilityForReservation: (
+    availability: AvailabilityResponse,
+  ) => void
+  onCancelReservationTimeSelection: () => void
   onCancelReservation: (reservation: ReservationResponse) => void
   formatDateTime: (value: string) => string
-  hasActiveReservationOverlap: (
-    availability: AvailabilityResponse,
-    reservations: ReservationResponse[],
-  ) => boolean
+  formatDateTimeInput: (value: string) => string
 }
 
 export function UserHomeView({
@@ -54,14 +61,22 @@ export function UserHomeView({
   isLoadingAvailabilities,
   reservations,
   reservationMessage,
+  reservationValidationMessage,
   myReservationsMessage,
   isLoadingReservations,
   reservingAvailabilityId,
+  selectedReservationAvailabilityId,
+  reservationStartTime,
+  setReservationStartTime,
+  reservationEndTime,
+  setReservationEndTime,
   cancellingReservationId,
   onReserve,
+  onSelectAvailabilityForReservation,
+  onCancelReservationTimeSelection,
   onCancelReservation,
   formatDateTime,
-  hasActiveReservationOverlap,
+  formatDateTimeInput,
 }: UserHomeViewProps) {
   const [activeScreen, setActiveScreen] = useState<UserScreen>('resources')
 
@@ -94,12 +109,21 @@ export function UserHomeView({
             availabilities={availabilities}
             availabilityMessage={availabilityMessage}
             isLoadingAvailabilities={isLoadingAvailabilities}
-            reservations={reservations}
             reservationMessage={reservationMessage}
+            reservationValidationMessage={reservationValidationMessage}
             reservingAvailabilityId={reservingAvailabilityId}
+            selectedReservationAvailabilityId={selectedReservationAvailabilityId}
+            reservationStartTime={reservationStartTime}
+            setReservationStartTime={setReservationStartTime}
+            reservationEndTime={reservationEndTime}
+            setReservationEndTime={setReservationEndTime}
             onReserve={onReserve}
+            onSelectAvailabilityForReservation={
+              onSelectAvailabilityForReservation
+            }
+            onCancelReservationTimeSelection={onCancelReservationTimeSelection}
             formatDateTime={formatDateTime}
-            hasActiveReservationOverlap={hasActiveReservationOverlap}
+            formatDateTimeInput={formatDateTimeInput}
           />
         )}
 
@@ -146,43 +170,63 @@ interface UserAvailabilityScreenProps {
   availabilities: AvailabilityResponse[]
   availabilityMessage: string
   isLoadingAvailabilities: boolean
-  reservations: ReservationResponse[]
   reservationMessage: string
+  reservationValidationMessage: string
   reservingAvailabilityId: number | null
+  selectedReservationAvailabilityId: number | null
+  reservationStartTime: string
+  setReservationStartTime: Dispatch<SetStateAction<string>>
+  reservationEndTime: string
+  setReservationEndTime: Dispatch<SetStateAction<string>>
   onReserve: (availability: AvailabilityResponse) => void
-  formatDateTime: (value: string) => string
-  hasActiveReservationOverlap: (
+  onSelectAvailabilityForReservation: (
     availability: AvailabilityResponse,
-    reservations: ReservationResponse[],
-  ) => boolean
+  ) => void
+  onCancelReservationTimeSelection: () => void
+  formatDateTime: (value: string) => string
+  formatDateTimeInput: (value: string) => string
 }
 
 function UserAvailabilityScreen({
   availabilities,
   availabilityMessage,
   isLoadingAvailabilities,
-  reservations,
   reservationMessage,
+  reservationValidationMessage,
   reservingAvailabilityId,
+  selectedReservationAvailabilityId,
+  reservationStartTime,
+  setReservationStartTime,
+  reservationEndTime,
+  setReservationEndTime,
   onReserve,
+  onSelectAvailabilityForReservation,
+  onCancelReservationTimeSelection,
   formatDateTime,
-  hasActiveReservationOverlap,
+  formatDateTimeInput,
 }: UserAvailabilityScreenProps) {
   return (
     <AvailabilitySection
       currentUserRole="User"
       availabilities={availabilities}
-      reservations={reservations}
       isLoadingAvailabilities={isLoadingAvailabilities}
       availabilityMessage={availabilityMessage}
       reservationMessage={reservationMessage}
+      reservationValidationMessage={reservationValidationMessage}
       reservingAvailabilityId={reservingAvailabilityId}
+      selectedReservationAvailabilityId={selectedReservationAvailabilityId}
+      reservationStartTime={reservationStartTime}
+      setReservationStartTime={setReservationStartTime}
+      reservationEndTime={reservationEndTime}
+      setReservationEndTime={setReservationEndTime}
       deletingAvailabilityId={null}
       onReserve={onReserve}
+      onSelectAvailabilityForReservation={onSelectAvailabilityForReservation}
+      onCancelReservationTimeSelection={onCancelReservationTimeSelection}
       onEditAvailability={() => undefined}
       onDeleteAvailability={() => undefined}
       formatDateTime={formatDateTime}
-      hasActiveReservationOverlap={hasActiveReservationOverlap}
+      formatDateTimeInput={formatDateTimeInput}
     />
   )
 }
