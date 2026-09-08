@@ -104,10 +104,14 @@ test('main frontend reservation flow', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Logout' }).click()
   await login(page, 'admin@example.com', 'Admin1234')
+  const adminReservationsSection = sectionByHeading(page, 'Reservations')
   await expect(
-    sectionByHeading(page, 'Reservations').getByText('Smoke Test Room Updated').first(),
+    adminReservationsSection
+      .locator('li')
+      .filter({ hasText: 'Smoke Test Room Updated' })
+      .first(),
   ).toBeVisible()
-  await sectionByHeading(page, 'Reservations').getByRole('button', { name: 'Cancel' }).first().click()
+  await adminReservationsSection.getByRole('button', { name: 'Cancel' }).first().click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Delete' }).click()

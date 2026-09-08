@@ -1,7 +1,8 @@
-import type { Dispatch, FormEvent, SetStateAction } from 'react'
+import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import type {
   AvailabilityResponse,
   ReservationResponse,
+  ReservationStatus,
   ResourceResponse,
   UserResponse,
 } from '../api/types'
@@ -108,6 +109,27 @@ export function AdminHomeView({
   formatDateTime,
   hasActiveReservationOverlap,
 }: AdminHomeViewProps) {
+  const [reservationResourceFilter, setReservationResourceFilter] = useState('')
+  const [reservationStatusFilter, setReservationStatusFilter] = useState<
+    '' | ReservationStatus
+  >('')
+  const hasReservationFilters =
+    reservationResourceFilter !== '' || reservationStatusFilter !== ''
+  const filteredAdminReservations = useMemo(
+    () =>
+      adminReservations.filter((reservation) => {
+        const matchesResource =
+          reservationResourceFilter === '' ||
+          reservation.resourceId === Number(reservationResourceFilter)
+        const matchesStatus =
+          reservationStatusFilter === '' ||
+          reservation.status === reservationStatusFilter
+
+        return matchesResource && matchesStatus
+      }),
+    [adminReservations, reservationResourceFilter, reservationStatusFilter],
+  )
+
   return (
     <main className="app-shell">
       <section className="home-panel">
@@ -176,10 +198,24 @@ export function AdminHomeView({
 
         <ReservationsSection
           title="Reservations"
-          reservations={adminReservations}
+          reservations={filteredAdminReservations}
           isLoading={isLoadingAdminReservations}
           message={adminReservationsMessage}
           showUserId
+          filterResources={resources}
+          selectedResourceId={reservationResourceFilter}
+          selectedStatus={reservationStatusFilter}
+          onSelectedResourceIdChange={setReservationResourceFilter}
+          onSelectedStatusChange={setReservationStatusFilter}
+          onClearFilters={() => {
+            setReservationResourceFilter('')
+            setReservationStatusFilter('')
+          }}
+          emptyMessage={
+            hasReservationFilters
+              ? 'No reservations match the selected filters.'
+              : 'No reservations found.'
+          }
           cancellingReservationId={adminCancellingReservationId}
           onCancelReservation={onAdminCancelReservation}
           formatDateTime={formatDateTime}
