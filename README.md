@@ -334,6 +334,16 @@ VITE_API_BASE_URL=http://localhost:5052/api
 
 If no environment variable is configured, the frontend uses this same local API URL by default.
 
+## Deployment Preparation
+
+This project is prepared as a portfolio application, not a live production deployment.
+
+To run outside local development, the backend needs an ASP.NET Core hosting environment that supports the target .NET version and can reach a SQL Server database. The backend should be configured with a production `ConnectionStrings:DefaultConnection` value instead of the LocalDB development connection string.
+
+The frontend can be built as static files and hosted separately. Its production build should set `VITE_API_BASE_URL` to the deployed backend API URL, for example `https://your-api-host.example.com/api`.
+
+Production connection strings, JWT keys, admin seed passwords, and other secrets should be configured through the hosting provider or secret storage. They should not be committed to the repository.
+
 ## Running The Frontend
 
 Start the backend first, then start the frontend.
