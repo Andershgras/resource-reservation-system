@@ -153,6 +153,39 @@ select:focus-visible {
   margin-top: 4px;
 }
 
+.reservation-item-active {
+  border-left: 4px solid #16a34a;
+}
+
+.reservation-item-cancelled {
+  border-left: 4px solid #9ca3af;
+  background: var(--muted-bg);
+}
+
+.reservation-item-cancelled strong,
+.reservation-item-cancelled .reservation-dates {
+  color: var(--text);
+}
+
+.reservation-dates {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.reservation-dates p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.reservation-dates span {
+  min-width: 40px;
+  color: var(--text-h);
+  font-weight: 700;
+}
+
 .reservation-filters {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
@@ -173,6 +206,26 @@ select:focus-visible {
 .resource-actions span {
   color: var(--text);
   font-size: 14px;
+}
+
+.reservation-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 9px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.reservation-status-active {
+  border-color: #86efac;
+  color: #166534;
+  background: #dcfce7;
+}
+
+.reservation-status-cancelled {
+  border-color: #d1d5db;
+  color: #4b5563;
+  background: #f9fafb;
 }
 
 .resource-actions button {

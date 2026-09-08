@@ -104,15 +104,30 @@ export function ReservationsSection({
       {reservations.length > 0 && (
         <ul className="resource-list">
           {reservations.map((reservation) => (
-            <li key={reservation.id}>
+            <li
+              key={reservation.id}
+              className={`reservation-item reservation-item-${reservation.status.toLowerCase()}`}
+            >
               <div>
                 <strong>{reservation.resourceName}</strong>
                 {showUserId && <p>User ID: {reservation.userId}</p>}
-                <p>{formatDateTime(reservation.startTime)}</p>
-                <p>{formatDateTime(reservation.endTime)}</p>
+                <div className="reservation-dates">
+                  <p>
+                    <span>Start</span>
+                    {formatDateTime(reservation.startTime)}
+                  </p>
+                  <p>
+                    <span>End</span>
+                    {formatDateTime(reservation.endTime)}
+                  </p>
+                </div>
               </div>
               <div className="resource-actions">
-                <span>{reservation.status}</span>
+                <span
+                  className={`reservation-status reservation-status-${reservation.status.toLowerCase()}`}
+                >
+                  {reservation.status}
+                </span>
                 {reservation.status === 'Active' && (
                   <button
                     type="button"
