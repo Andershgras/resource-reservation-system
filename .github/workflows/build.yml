@@ -50,3 +50,11 @@ jobs:
       - name: Build frontend
         working-directory: frontend/resource-reservation-client
         run: npm run build
+
+      - name: Install Playwright browsers
+        working-directory: frontend/resource-reservation-client
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend smoke tests
+        working-directory: frontend/resource-reservation-client
+        run: npm run test:smoke
