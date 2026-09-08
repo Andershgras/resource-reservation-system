@@ -85,6 +85,7 @@ These GitHub issues are closed and implemented:
 - [x] #7 Add Basic Frontend Smoke Test Plan
 - [x] #8 Add Architecture Overview Documentation
 - [x] #21 Add API Error Response Consistency
+- [x] Add Auth Controller Tests
 - [x] Split Role Views Into Navigable Screens
 
 ## Open User Stories
