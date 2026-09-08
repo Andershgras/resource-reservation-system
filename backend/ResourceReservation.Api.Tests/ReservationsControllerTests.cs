@@ -120,6 +120,78 @@ public class ReservationsControllerTests
     }
 
     [Fact]
+    public async Task GetReservation_WhenReservationBelongsToCurrentUser_ReturnsReservation()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            user.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var controller = CreateController(context, user.Id);
+
+        var result = await controller.GetReservation(reservation.Id);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ReservationResponseDto>(ok.Value);
+        Assert.Equal(reservation.Id, response.Id);
+        Assert.Equal(user.Id, response.UserId);
+    }
+
+    [Fact]
+    public async Task GetReservation_WhenReservationBelongsToAnotherUser_ReturnsForbiddenError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var reservationOwner = await SeedUserAsync(context);
+        var currentUser = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            reservationOwner.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var controller = CreateController(context, currentUser.Id);
+
+        var result = await controller.GetReservation(reservation.Id);
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        AssertApiError(
+            forbidden,
+            "You do not have permission to access this resource.");
+    }
+
+    [Fact]
+    public async Task GetReservation_WhenCurrentUserIsAdmin_ReturnsAnyReservation()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var reservationOwner = await SeedUserAsync(context);
+        var admin = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            reservationOwner.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var controller = CreateController(context, admin.Id, isAdmin: true);
+
+        var result = await controller.GetReservation(reservation.Id);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ReservationResponseDto>(ok.Value);
+        Assert.Equal(reservation.Id, response.Id);
+        Assert.Equal(reservationOwner.Id, response.UserId);
+    }
+
+    [Fact]
     public async Task CreateReservation_WhenCurrentUserIsMissing_ReturnsUnauthorizedError()
     {
         await using var context = CreateContext();
@@ -138,13 +210,36 @@ public class ReservationsControllerTests
     }
 
     [Fact]
+    public async Task CancelReservation_WhenReservationBelongsToCurrentUser_CancelsReservation()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            user.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var controller = CreateController(context, user.Id);
+
+        var result = await controller.CancelReservation(reservation.Id);
+
+        Assert.IsType<NoContentResult>(result);
+        var cancelledReservation = await context.Reservations.FindAsync(reservation.Id);
+        Assert.NotNull(cancelledReservation);
+        Assert.Equal(ReservationStatuses.Cancelled, cancelledReservation.Status);
+    }
+
+    [Fact]
     public async Task CancelReservation_WhenReservationBelongsToAnotherUser_ReturnsForbiddenError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityAsync(context);
         var reservationOwner = await SeedUserAsync(context);
         var currentUser = await SeedUserAsync(context);
-        await SeedReservationAsync(
+        var reservation = await SeedReservationAsync(
             context,
             resource.Id,
             reservationOwner.Id,
@@ -153,13 +248,37 @@ public class ReservationsControllerTests
             ReservationStatuses.Active);
         var controller = CreateController(context, currentUser.Id);
 
-        var result = await controller.CancelReservation(1);
+        var result = await controller.CancelReservation(reservation.Id);
 
         var forbidden = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
         AssertApiError(
             forbidden,
             "You do not have permission to access this resource.");
+    }
+
+    [Fact]
+    public async Task CancelReservation_WhenCurrentUserIsAdmin_CancelsAnyReservation()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var reservationOwner = await SeedUserAsync(context);
+        var admin = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            reservationOwner.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var controller = CreateController(context, admin.Id, isAdmin: true);
+
+        var result = await controller.CancelReservation(reservation.Id);
+
+        Assert.IsType<NoContentResult>(result);
+        var cancelledReservation = await context.Reservations.FindAsync(reservation.Id);
+        Assert.NotNull(cancelledReservation);
+        Assert.Equal(ReservationStatuses.Cancelled, cancelledReservation.Status);
     }
 
     private static AppDbContext CreateContext()
@@ -173,11 +292,20 @@ public class ReservationsControllerTests
 
     private static ReservationsController CreateController(
         AppDbContext context,
-        int? userId)
+        int? userId,
+        bool isAdmin = false)
     {
-        var claims = userId is null
-            ? Array.Empty<Claim>()
-            : [new Claim(ClaimTypes.NameIdentifier, userId.ToString()!)];
+        var claims = new List<Claim>();
+        if (userId is not null)
+        {
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.ToString()!));
+        }
+
+        if (isAdmin)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+        }
+
         var user = new ClaimsPrincipal(new ClaimsIdentity(
             claims,
             "TestAuth"));
@@ -236,7 +364,7 @@ public class ReservationsControllerTests
         return user;
     }
 
-    private static async Task SeedReservationAsync(
+    private static async Task<Reservation> SeedReservationAsync(
         AppDbContext context,
         int resourceId,
         int userId,
@@ -244,15 +372,18 @@ public class ReservationsControllerTests
         DateTime endTime,
         string status)
     {
-        context.Reservations.Add(new Reservation
+        var reservation = new Reservation
         {
             ResourceId = resourceId,
             UserId = userId,
             StartTime = startTime,
             EndTime = endTime,
             Status = status
-        });
+        };
 
+        context.Reservations.Add(reservation);
         await context.SaveChangesAsync();
+
+        return reservation;
     }
 }
