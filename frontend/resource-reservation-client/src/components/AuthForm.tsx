@@ -31,12 +31,30 @@ export function AuthForm({
 }: AuthFormProps) {
   return (
     <section className="auth-panel" aria-labelledby="auth-title">
-      <div className="auth-copy">
-        <h1 id="auth-title">Authentication</h1>
-        <p>Login or create a user account.</p>
+      <div className="auth-brand">
+        <div className="app-mark" aria-hidden="true">
+          RR
+        </div>
+        <div className="auth-copy">
+          <p className="eyebrow">Portfolio booking app</p>
+          <h1 id="auth-title">Resource Reservation</h1>
+          <p>Clean scheduling for shared rooms, equipment, and bookable resources.</p>
+        </div>
+        <div className="auth-highlights" aria-label="Project highlights">
+          <span>JWT auth</span>
+          <span>Role-based views</span>
+          <span>Reservation rules</span>
+        </div>
       </div>
 
       <form className="auth-form" onSubmit={onSubmit}>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">{authMode === 'login' ? 'Welcome back' : 'New account'}</p>
+            <h2>{authMode === 'login' ? 'Sign in' : 'Create account'}</h2>
+          </div>
+        </div>
+
         <div className="mode-switch" aria-label="Authentication mode">
           <button
             type="button"

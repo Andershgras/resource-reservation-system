@@ -31,7 +31,7 @@ export function AvailabilityFormSection({
   onCancelEdit,
 }: AvailabilityFormSectionProps) {
   return (
-    <section className="placeholder-section" aria-labelledby="availability-form-title">
+    <section className="panel-section" aria-labelledby="availability-form-title">
       <h2 id="availability-form-title">
         {editingAvailabilityId ? 'Edit availability' : 'Create availability'}
       </h2>

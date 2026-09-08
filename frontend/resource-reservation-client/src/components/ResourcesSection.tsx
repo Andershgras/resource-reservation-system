@@ -20,8 +20,11 @@ export function ResourcesSection({
   onDeleteResource,
 }: ResourcesSectionProps) {
   return (
-    <section className="placeholder-section" aria-labelledby="resources-title">
-      <h2 id="resources-title">Resources</h2>
+    <section className="panel-section" aria-labelledby="resources-title">
+      <div className="section-heading">
+        <h2 id="resources-title">Resources</h2>
+        <span className="count-badge">{resources.length}</span>
+      </div>
       {isLoadingResources && (
         <p className="status-message" role="status">
           Loading resources...
@@ -34,14 +37,20 @@ export function ResourcesSection({
       {resources.length > 0 && (
         <ul className="resource-list">
           {resources.map((resource) => (
-            <li key={resource.id}>
-              <div>
+            <li key={resource.id} className="resource-item">
+              <div className="item-main">
                 <strong>{resource.name}</strong>
                 {resource.location && <p>{resource.location}</p>}
                 {resource.description && <p>{resource.description}</p>}
               </div>
               <div className="resource-actions">
-                <span>{resource.isActive ? 'Active' : 'Inactive'}</span>
+                <span
+                  className={`status-pill ${
+                    resource.isActive ? 'status-pill-active' : 'status-pill-muted'
+                  }`}
+                >
+                  {resource.isActive ? 'Active' : 'Inactive'}
+                </span>
                 {currentUserRole === 'Admin' && (
                   <>
                     <button type="button" onClick={() => onEditResource(resource)}>

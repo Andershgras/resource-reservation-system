@@ -49,8 +49,11 @@ export function AvailabilitySection({
   formatDateTimeInput,
 }: AvailabilitySectionProps) {
   return (
-    <section className="placeholder-section" aria-labelledby="availabilities-title">
-      <h2 id="availabilities-title">Availability</h2>
+    <section className="panel-section" aria-labelledby="availabilities-title">
+      <div className="section-heading">
+        <h2 id="availabilities-title">Availability</h2>
+        <span className="count-badge">{availabilities.length}</span>
+      </div>
       {reservationMessage && <p className="status-message">{reservationMessage}</p>}
       {reservationValidationMessage && (
         <p className="status-message" role="alert">
@@ -82,8 +85,8 @@ export function AvailabilitySection({
               formatDateTimeInput
 
             return (
-              <li key={availability.id}>
-                <div>
+              <li key={availability.id} className="resource-item">
+                <div className="item-main">
                   <strong>{availability.resourceName}</strong>
                   <div className="availability-dates">
                     <p>

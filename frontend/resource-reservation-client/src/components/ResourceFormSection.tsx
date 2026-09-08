@@ -30,7 +30,7 @@ export function ResourceFormSection({
   onCancelEdit,
 }: ResourceFormSectionProps) {
   return (
-    <section className="placeholder-section" aria-labelledby="resource-form-title">
+    <section className="panel-section" aria-labelledby="resource-form-title">
       <h2 id="resource-form-title">
         {editingResourceId ? 'Edit resource' : 'Create resource'}
       </h2>

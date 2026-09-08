@@ -118,6 +118,10 @@ export function AdminHomeView({
   const [reservationStatusFilter, setReservationStatusFilter] = useState<
     '' | ReservationStatus
   >('')
+  const activeResourceCount = resources.filter((resource) => resource.isActive).length
+  const activeReservationCount = adminReservations.filter(
+    (reservation) => reservation.status === 'Active',
+  ).length
   const hasReservationFilters =
     reservationResourceFilter !== '' || reservationStatusFilter !== ''
   const filteredAdminReservations = useMemo(
@@ -158,9 +162,27 @@ export function AdminHomeView({
       <section className="home-panel">
         <HomeHeader currentUser={currentUser} onLogout={onLogout} />
 
-        <section className="placeholder-section" aria-labelledby="admin-title">
-          <h2 id="admin-title">Admin home</h2>
-          <p>Manage resources, availability, and reservations.</p>
+        <section className="panel-section overview-panel" aria-labelledby="admin-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Admin overview</p>
+              <h2 id="admin-title">Booking operations</h2>
+            </div>
+          </div>
+          <div className="summary-grid" aria-label="Admin summary">
+            <div>
+              <span>{activeResourceCount}</span>
+              <p>Active resources</p>
+            </div>
+            <div>
+              <span>{availabilities.length}</span>
+              <p>Availability windows</p>
+            </div>
+            <div>
+              <span>{activeReservationCount}</span>
+              <p>Active reservations</p>
+            </div>
+          </div>
         </section>
 
         <RoleTabs
