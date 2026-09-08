@@ -65,8 +65,16 @@ export function AvailabilitySection({
               <li key={availability.id}>
                 <div>
                   <strong>{availability.resourceName}</strong>
-                  <p>{formatDateTime(availability.startTime)}</p>
-                  <p>{formatDateTime(availability.endTime)}</p>
+                  <div className="availability-dates">
+                    <p>
+                      <span>Start</span>
+                      {formatDateTime(availability.startTime)}
+                    </p>
+                    <p>
+                      <span>End</span>
+                      {formatDateTime(availability.endTime)}
+                    </p>
+                  </div>
                 </div>
                 {currentUserRole === 'User' && (
                   <div className="resource-actions">
