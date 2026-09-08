@@ -59,6 +59,15 @@ public class AvailabilitiesController : ControllerBase
             return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
+        if (await HasOverlappingAvailability(
+            createAvailabilityDto.ResourceId,
+            createAvailabilityDto.StartTime,
+            createAvailabilityDto.EndTime))
+        {
+            return BadRequest(ApiError(
+                "Availability overlaps an existing window for this resource."));
+        }
+
         var availability = new Availability
         {
             ResourceId = createAvailabilityDto.ResourceId,
@@ -100,6 +109,16 @@ public class AvailabilitiesController : ControllerBase
             return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
+        if (await HasOverlappingAvailability(
+            updateAvailabilityDto.ResourceId,
+            updateAvailabilityDto.StartTime,
+            updateAvailabilityDto.EndTime,
+            id))
+        {
+            return BadRequest(ApiError(
+                "Availability overlaps an existing window for this resource."));
+        }
+
         availability.ResourceId = updateAvailabilityDto.ResourceId;
         availability.StartTime = updateAvailabilityDto.StartTime;
         availability.EndTime = updateAvailabilityDto.EndTime;
@@ -136,6 +155,20 @@ public class AvailabilitiesController : ControllerBase
             StartTime = availability.StartTime,
             EndTime = availability.EndTime
         };
+    }
+
+    private Task<bool> HasOverlappingAvailability(
+        int resourceId,
+        DateTime startTime,
+        DateTime endTime,
+        int? ignoredAvailabilityId = null)
+    {
+        return _context.Availabilities
+            .AnyAsync(availability =>
+                availability.ResourceId == resourceId &&
+                availability.Id != ignoredAvailabilityId &&
+                startTime < availability.EndTime &&
+                endTime > availability.StartTime);
     }
 
     private static ApiErrorResponseDto ApiError(string message)
