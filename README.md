@@ -48,7 +48,7 @@ The project is designed as a portfolio project to demonstrate backend developmen
 
 GitHub Actions runs on push and pull request.
 
-The workflow builds the backend API and installs/builds the frontend client.
+The workflow runs the backend tests, then installs the frontend dependencies and runs lint/build checks. Pull requests fail if any check fails.
 
 ## Project Goal
 
