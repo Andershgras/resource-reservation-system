@@ -87,6 +87,7 @@ These GitHub issues are closed and implemented:
 - [x] #21 Add API Error Response Consistency
 - [x] Add Auth Controller Tests
 - [x] Clean Backend Build Warning
+- [x] Add Frontend Smoke Tests To CI
 - [x] Improve Availability And Reservation Filtering
 - [x] Modernize Frontend Layout And Visual Design
 - [x] Improve User Reservation Time Selection
