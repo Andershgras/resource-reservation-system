@@ -63,6 +63,7 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(page.getByText('Resource updated.')).toBeVisible()
   await expect(resourcesSection.getByText('Smoke Test Room Updated')).toBeVisible()
 
+  await selectRoleTab(page, 'Availability')
   const availabilityForm = sectionByHeading(page, 'Create availability')
   await availabilityForm.getByLabel('Resource').selectOption({ label: 'Smoke Test Room Updated' })
   await availabilityForm.getByLabel('Start time').fill('2030-01-15T09:00')
@@ -90,20 +91,27 @@ test('main frontend reservation flow', async ({ page }) => {
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'User home' })).toBeVisible()
   await expect(sectionByHeading(page, 'Resources').getByText('Smoke Test Room Updated')).toBeVisible()
+
+  await selectRoleTab(page, 'Availability')
   await expect(sectionByHeading(page, 'Availability').getByText('Smoke Test Room Updated')).toBeVisible()
 
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
   await expect(page.getByText('Reservation created.')).toBeVisible()
+
+  await selectRoleTab(page, 'My reservations')
   await expect(sectionByHeading(page, 'My reservations').getByText('Smoke Test Room Updated')).toBeVisible()
 
   await sectionByHeading(page, 'My reservations').getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
+  await selectRoleTab(page, 'Availability')
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
   await expect(page.getByText('Reservation created.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
   await login(page, 'admin@example.com', 'Admin1234')
+
+  await selectRoleTab(page, 'Reservations')
   const adminReservationsSection = sectionByHeading(page, 'Reservations')
   await expect(
     adminReservationsSection
@@ -114,10 +122,12 @@ test('main frontend reservation flow', async ({ page }) => {
   await adminReservationsSection.getByRole('button', { name: 'Cancel' }).first().click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
+  await selectRoleTab(page, 'Availability')
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByText('Availability deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Availability').getByText('No availability found.')).toBeVisible()
 
+  await selectRoleTab(page, 'Resources')
   await sectionByHeading(page, 'Resources').getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByText('Resource deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Resources').getByText('No resources found.')).toBeVisible()
@@ -133,6 +143,7 @@ test('overlap error is shown when an active reservation already exists', async (
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'User home' })).toBeVisible()
 
+  await selectRoleTab(page, 'Availability')
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
   await expect(
     page.getByText('Error: Resource is already reserved in this time period.'),
@@ -143,6 +154,10 @@ function sectionByHeading(page: Page, heading: string) {
   return page.locator('section.placeholder-section').filter({
     has: page.getByRole('heading', { name: heading, exact: true }),
   }).first()
+}
+
+async function selectRoleTab(page: Page, tabName: string) {
+  await page.getByRole('button', { name: tabName, exact: true }).click()
 }
 
 async function login(page: Page, email: string, password: string) {

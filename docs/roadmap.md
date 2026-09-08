@@ -27,6 +27,7 @@ Completed frontend areas:
 - Login and registration UI
 - JWT session storage
 - Role-based Admin and User views
+- Simple navigation between role workflow screens
 - Resource listing
 - Admin resource management
 - Availability listing
@@ -84,6 +85,7 @@ These GitHub issues are closed and implemented:
 - [x] #7 Add Basic Frontend Smoke Test Plan
 - [x] #8 Add Architecture Overview Documentation
 - [x] #21 Add API Error Response Consistency
+- [x] Split Role Views Into Navigable Screens
 
 ## Open User Stories
 
