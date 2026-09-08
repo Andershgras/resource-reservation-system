@@ -222,6 +222,25 @@ select:focus-visible {
   min-height: 40px;
 }
 
+.reservation-time-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: min(100%, 360px);
+}
+
+.reservation-time-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: end;
+  gap: 8px;
+}
+
+.reservation-time-actions button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
 .resource-actions {
   display: flex;
   align-items: center;
@@ -320,6 +339,15 @@ select:focus-visible {
 
   .reservation-filters {
     grid-template-columns: 1fr;
+  }
+
+  .reservation-time-form {
+    grid-template-columns: 1fr;
+    min-width: 100%;
+  }
+
+  .reservation-time-actions {
+    flex-direction: column-reverse;
   }
 
   .role-tabs {

@@ -1,47 +1,62 @@
-import type {
-  AvailabilityResponse,
-  ReservationResponse,
-  UserRole,
-} from '../api/types'
+import type { Dispatch, SetStateAction } from 'react'
+import type { AvailabilityResponse, UserRole } from '../api/types'
 
 interface AvailabilitySectionProps {
   currentUserRole: UserRole
   availabilities: AvailabilityResponse[]
-  reservations: ReservationResponse[]
   isLoadingAvailabilities: boolean
   availabilityMessage: string
   reservationMessage: string
+  reservationValidationMessage?: string
   reservingAvailabilityId: number | null
+  selectedReservationAvailabilityId?: number | null
+  reservationStartTime?: string
+  setReservationStartTime?: Dispatch<SetStateAction<string>>
+  reservationEndTime?: string
+  setReservationEndTime?: Dispatch<SetStateAction<string>>
   deletingAvailabilityId: number | null
   onReserve: (availability: AvailabilityResponse) => void
+  onSelectAvailabilityForReservation?: (
+    availability: AvailabilityResponse,
+  ) => void
+  onCancelReservationTimeSelection?: () => void
   onEditAvailability: (availability: AvailabilityResponse) => void
   onDeleteAvailability: (availability: AvailabilityResponse) => void
   formatDateTime: (value: string) => string
-  hasActiveReservationOverlap: (
-    availability: AvailabilityResponse,
-    reservations: ReservationResponse[],
-  ) => boolean
+  formatDateTimeInput?: (value: string) => string
 }
 
 export function AvailabilitySection({
   currentUserRole,
   availabilities,
-  reservations,
   isLoadingAvailabilities,
   availabilityMessage,
   reservationMessage,
+  reservationValidationMessage = '',
   reservingAvailabilityId,
+  selectedReservationAvailabilityId = null,
+  reservationStartTime = '',
+  setReservationStartTime,
+  reservationEndTime = '',
+  setReservationEndTime,
   deletingAvailabilityId,
   onReserve,
+  onSelectAvailabilityForReservation,
+  onCancelReservationTimeSelection,
   onEditAvailability,
   onDeleteAvailability,
   formatDateTime,
-  hasActiveReservationOverlap,
+  formatDateTimeInput,
 }: AvailabilitySectionProps) {
   return (
     <section className="placeholder-section" aria-labelledby="availabilities-title">
       <h2 id="availabilities-title">Availability</h2>
       {reservationMessage && <p className="status-message">{reservationMessage}</p>}
+      {reservationValidationMessage && (
+        <p className="status-message" role="alert">
+          {reservationValidationMessage}
+        </p>
+      )}
       {isLoadingAvailabilities && (
         <p className="status-message" role="status">
           Loading availability...
@@ -57,9 +72,14 @@ export function AvailabilitySection({
       {availabilities.length > 0 && (
         <ul className="resource-list">
           {availabilities.map((availability) => {
-            const isReservedByUser =
-              currentUserRole === 'User' &&
-              hasActiveReservationOverlap(availability, reservations)
+            const isSelectingReservationTime =
+              selectedReservationAvailabilityId === availability.id
+            const canSelectReservationTime =
+              onSelectAvailabilityForReservation &&
+              onCancelReservationTimeSelection &&
+              setReservationStartTime &&
+              setReservationEndTime &&
+              formatDateTimeInput
 
             return (
               <li key={availability.id}>
@@ -78,17 +98,59 @@ export function AvailabilitySection({
                 </div>
                 {currentUserRole === 'User' && (
                   <div className="resource-actions">
-                    {isReservedByUser ? (
-                      <span>Reserved</span>
+                    {isSelectingReservationTime && canSelectReservationTime ? (
+                      <div className="reservation-time-form">
+                        <label>
+                          <span className="label-text">Start</span>
+                          <input
+                            type="datetime-local"
+                            min={formatDateTimeInput(availability.startTime)}
+                            max={formatDateTimeInput(availability.endTime)}
+                            value={reservationStartTime}
+                            onChange={(event) =>
+                              setReservationStartTime(event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          <span className="label-text">End</span>
+                          <input
+                            type="datetime-local"
+                            min={formatDateTimeInput(availability.startTime)}
+                            max={formatDateTimeInput(availability.endTime)}
+                            value={reservationEndTime}
+                            onChange={(event) =>
+                              setReservationEndTime(event.target.value)
+                            }
+                          />
+                        </label>
+                        <div className="reservation-time-actions">
+                          <button
+                            type="button"
+                            onClick={onCancelReservationTimeSelection}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={reservingAvailabilityId === availability.id}
+                            onClick={() => onReserve(availability)}
+                          >
+                            {reservingAvailabilityId === availability.id
+                              ? 'Reserving...'
+                              : 'Reserve'}
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <button
                         type="button"
                         disabled={reservingAvailabilityId === availability.id}
-                        onClick={() => onReserve(availability)}
+                        onClick={() =>
+                          onSelectAvailabilityForReservation?.(availability)
+                        }
                       >
-                        {reservingAvailabilityId === availability.id
-                          ? 'Reserving...'
-                          : 'Reserve'}
+                        Choose time
                       </button>
                     )}
                   </div>
