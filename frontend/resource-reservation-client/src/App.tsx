@@ -36,6 +36,13 @@ import { AuthView } from './views/AuthView'
 import { UserHomeView } from './views/UserHomeView'
 import './App.css'
 
+type ConfirmationRequest = {
+  title: string
+  message: string
+  confirmLabel: string
+  onConfirm: () => Promise<void>
+}
+
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(() =>
@@ -93,6 +100,9 @@ function App() {
   >(null)
   const [adminCancellingReservationId, setAdminCancellingReservationId] =
     useState<number | null>(null)
+  const [confirmationRequest, setConfirmationRequest] =
+    useState<ConfirmationRequest | null>(null)
+  const [isConfirmingAction, setIsConfirmingAction] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -288,13 +298,7 @@ function App() {
     setResourceMessage('')
   }
 
-  async function handleDeleteResource(resource: ResourceResponse) {
-    const shouldDelete = confirm(`Delete resource "${resource.name}"?`)
-
-    if (!shouldDelete) {
-      return
-    }
-
+  async function deleteResourceAfterConfirmation(resource: ResourceResponse) {
     setResourceMessage('')
     setDeletingResourceId(resource.id)
 
@@ -316,6 +320,15 @@ function App() {
     }
   }
 
+  function handleDeleteResource(resource: ResourceResponse) {
+    setConfirmationRequest({
+      title: 'Delete resource',
+      message: `Delete resource "${resource.name}"?`,
+      confirmLabel: 'Delete resource',
+      onConfirm: () => deleteResourceAfterConfirmation(resource),
+    })
+  }
+
   function resetResourceForm() {
     setEditingResourceId(null)
     setResourceName('')
@@ -333,15 +346,9 @@ function App() {
     setAvailabilityValidationMessage('')
   }
 
-  async function handleDeleteAvailability(availability: AvailabilityResponse) {
-    const shouldDelete = confirm(
-      `Delete availability for "${availability.resourceName}"?`,
-    )
-
-    if (!shouldDelete) {
-      return
-    }
-
+  async function deleteAvailabilityAfterConfirmation(
+    availability: AvailabilityResponse,
+  ) {
     setAvailabilityMessage('')
     setDeletingAvailabilityId(availability.id)
 
@@ -361,6 +368,15 @@ function App() {
     } finally {
       setDeletingAvailabilityId(null)
     }
+  }
+
+  function handleDeleteAvailability(availability: AvailabilityResponse) {
+    setConfirmationRequest({
+      title: 'Delete availability',
+      message: `Delete availability for "${availability.resourceName}"?`,
+      confirmLabel: 'Delete availability',
+      onConfirm: () => deleteAvailabilityAfterConfirmation(availability),
+    })
   }
 
   function resetAvailabilityForm() {
@@ -406,15 +422,9 @@ function App() {
     }
   }
 
-  async function handleCancelReservation(reservation: ReservationResponse) {
-    const shouldCancel = confirm(
-      `Cancel reservation for "${reservation.resourceName}"?`,
-    )
-
-    if (!shouldCancel) {
-      return
-    }
-
+  async function cancelReservationAfterConfirmation(
+    reservation: ReservationResponse,
+  ) {
     setMyReservationsMessage('')
     setCancellingReservationId(reservation.id)
 
@@ -433,15 +443,18 @@ function App() {
     }
   }
 
-  async function handleAdminCancelReservation(reservation: ReservationResponse) {
-    const shouldCancel = confirm(
-      `Cancel reservation for "${reservation.resourceName}"?`,
-    )
+  function handleCancelReservation(reservation: ReservationResponse) {
+    setConfirmationRequest({
+      title: 'Cancel reservation',
+      message: `Cancel reservation for "${reservation.resourceName}"?`,
+      confirmLabel: 'Cancel reservation',
+      onConfirm: () => cancelReservationAfterConfirmation(reservation),
+    })
+  }
 
-    if (!shouldCancel) {
-      return
-    }
-
+  async function adminCancelReservationAfterConfirmation(
+    reservation: ReservationResponse,
+  ) {
     setAdminReservationsMessage('')
     setAdminCancellingReservationId(reservation.id)
 
@@ -456,6 +469,38 @@ function App() {
     } finally {
       setAdminCancellingReservationId(null)
     }
+  }
+
+  function handleAdminCancelReservation(reservation: ReservationResponse) {
+    setConfirmationRequest({
+      title: 'Cancel reservation',
+      message: `Cancel reservation for "${reservation.resourceName}"?`,
+      confirmLabel: 'Cancel reservation',
+      onConfirm: () => adminCancelReservationAfterConfirmation(reservation),
+    })
+  }
+
+  async function handleConfirmAction() {
+    if (!confirmationRequest) {
+      return
+    }
+
+    setIsConfirmingAction(true)
+
+    try {
+      await confirmationRequest.onConfirm()
+      setConfirmationRequest(null)
+    } finally {
+      setIsConfirmingAction(false)
+    }
+  }
+
+  function handleCancelConfirmation() {
+    if (isConfirmingAction) {
+      return
+    }
+
+    setConfirmationRequest(null)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -495,82 +540,92 @@ function App() {
   if (currentUser) {
     if (currentUser.role === 'Admin') {
       return (
-        <AdminHomeView
+        <>
+          <AdminHomeView
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            resources={resources}
+            resourceMessage={resourceMessage}
+            isLoadingResources={isLoadingResources}
+            resourceName={resourceName}
+            setResourceName={setResourceName}
+            resourceDescription={resourceDescription}
+            setResourceDescription={setResourceDescription}
+            resourceLocation={resourceLocation}
+            setResourceLocation={setResourceLocation}
+            resourceIsActive={resourceIsActive}
+            setResourceIsActive={setResourceIsActive}
+            editingResourceId={editingResourceId}
+            isSavingResource={isSavingResource}
+            deletingResourceId={deletingResourceId}
+            onSaveResource={handleSaveResource}
+            onEditResource={handleEditResource}
+            onDeleteResource={handleDeleteResource}
+            onCancelResourceEdit={resetResourceForm}
+            availabilities={availabilities}
+            availabilityMessage={availabilityMessage}
+            isLoadingAvailabilities={isLoadingAvailabilities}
+            availabilityResourceId={availabilityResourceId}
+            setAvailabilityResourceId={setAvailabilityResourceId}
+            availabilityStartTime={availabilityStartTime}
+            setAvailabilityStartTime={setAvailabilityStartTime}
+            availabilityEndTime={availabilityEndTime}
+            setAvailabilityEndTime={setAvailabilityEndTime}
+            availabilityValidationMessage={availabilityValidationMessage}
+            editingAvailabilityId={editingAvailabilityId}
+            isSavingAvailability={isSavingAvailability}
+            deletingAvailabilityId={deletingAvailabilityId}
+            onSaveAvailability={handleSaveAvailability}
+            onEditAvailability={handleEditAvailability}
+            onDeleteAvailability={handleDeleteAvailability}
+            onCancelAvailabilityEdit={resetAvailabilityForm}
+            adminReservations={adminReservations}
+            adminReservationsMessage={adminReservationsMessage}
+            isLoadingAdminReservations={isLoadingAdminReservations}
+            adminCancellingReservationId={adminCancellingReservationId}
+            onAdminCancelReservation={handleAdminCancelReservation}
+            formatDateTime={formatDateTime}
+            hasActiveReservationOverlap={hasActiveReservationOverlap}
+          />
+          <ConfirmationDialog
+            request={confirmationRequest}
+            isConfirming={isConfirmingAction}
+            onConfirm={() => void handleConfirmAction()}
+            onCancel={handleCancelConfirmation}
+          />
+        </>
+      )
+    }
+
+    return (
+      <>
+        <UserHomeView
           currentUser={currentUser}
           onLogout={handleLogout}
           resources={resources}
           resourceMessage={resourceMessage}
           isLoadingResources={isLoadingResources}
-          resourceName={resourceName}
-          setResourceName={setResourceName}
-          resourceDescription={resourceDescription}
-          setResourceDescription={setResourceDescription}
-          resourceLocation={resourceLocation}
-          setResourceLocation={setResourceLocation}
-          resourceIsActive={resourceIsActive}
-          setResourceIsActive={setResourceIsActive}
-          editingResourceId={editingResourceId}
-          isSavingResource={isSavingResource}
-          deletingResourceId={deletingResourceId}
-          onSaveResource={handleSaveResource}
-          onEditResource={handleEditResource}
-          onDeleteResource={(resource) => void handleDeleteResource(resource)}
-          onCancelResourceEdit={resetResourceForm}
           availabilities={availabilities}
           availabilityMessage={availabilityMessage}
           isLoadingAvailabilities={isLoadingAvailabilities}
-          availabilityResourceId={availabilityResourceId}
-          setAvailabilityResourceId={setAvailabilityResourceId}
-          availabilityStartTime={availabilityStartTime}
-          setAvailabilityStartTime={setAvailabilityStartTime}
-          availabilityEndTime={availabilityEndTime}
-          setAvailabilityEndTime={setAvailabilityEndTime}
-          availabilityValidationMessage={availabilityValidationMessage}
-          editingAvailabilityId={editingAvailabilityId}
-          isSavingAvailability={isSavingAvailability}
-          deletingAvailabilityId={deletingAvailabilityId}
-          onSaveAvailability={handleSaveAvailability}
-          onEditAvailability={handleEditAvailability}
-          onDeleteAvailability={(availability) =>
-            void handleDeleteAvailability(availability)
-          }
-          onCancelAvailabilityEdit={resetAvailabilityForm}
-          adminReservations={adminReservations}
-          adminReservationsMessage={adminReservationsMessage}
-          isLoadingAdminReservations={isLoadingAdminReservations}
-          adminCancellingReservationId={adminCancellingReservationId}
-          onAdminCancelReservation={(reservation) =>
-            void handleAdminCancelReservation(reservation)
-          }
+          reservations={reservations}
+          reservationMessage={reservationMessage}
+          myReservationsMessage={myReservationsMessage}
+          isLoadingReservations={isLoadingReservations}
+          reservingAvailabilityId={reservingAvailabilityId}
+          cancellingReservationId={cancellingReservationId}
+          onReserve={(availability) => void handleCreateReservation(availability)}
+          onCancelReservation={handleCancelReservation}
           formatDateTime={formatDateTime}
           hasActiveReservationOverlap={hasActiveReservationOverlap}
         />
-      )
-    }
-
-    return (
-      <UserHomeView
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        resources={resources}
-        resourceMessage={resourceMessage}
-        isLoadingResources={isLoadingResources}
-        availabilities={availabilities}
-        availabilityMessage={availabilityMessage}
-        isLoadingAvailabilities={isLoadingAvailabilities}
-        reservations={reservations}
-        reservationMessage={reservationMessage}
-        myReservationsMessage={myReservationsMessage}
-        isLoadingReservations={isLoadingReservations}
-        reservingAvailabilityId={reservingAvailabilityId}
-        cancellingReservationId={cancellingReservationId}
-        onReserve={(availability) => void handleCreateReservation(availability)}
-        onCancelReservation={(reservation) =>
-          void handleCancelReservation(reservation)
-        }
-        formatDateTime={formatDateTime}
-        hasActiveReservationOverlap={hasActiveReservationOverlap}
-      />
+        <ConfirmationDialog
+          request={confirmationRequest}
+          isConfirming={isConfirmingAction}
+          onConfirm={() => void handleConfirmAction()}
+          onCancel={handleCancelConfirmation}
+        />
+      </>
     )
   }
 
@@ -588,6 +643,46 @@ function App() {
       message={message}
       onSubmit={handleSubmit}
     />
+  )
+}
+
+interface ConfirmationDialogProps {
+  request: ConfirmationRequest | null
+  isConfirming: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+function ConfirmationDialog({
+  request,
+  isConfirming,
+  onConfirm,
+  onCancel,
+}: ConfirmationDialogProps) {
+  if (!request) {
+    return null
+  }
+
+  return (
+    <div className="confirm-backdrop" role="presentation">
+      <div
+        className="confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+      >
+        <h2 id="confirm-dialog-title">{request.title}</h2>
+        <p>{request.message}</p>
+        <div className="confirm-actions">
+          <button type="button" disabled={isConfirming} onClick={onCancel}>
+            Keep unchanged
+          </button>
+          <button type="button" disabled={isConfirming} onClick={onConfirm}>
+            {isConfirming ? 'Working...' : request.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
