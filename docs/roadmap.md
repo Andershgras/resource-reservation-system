@@ -87,6 +87,7 @@ These GitHub issues are closed and implemented:
 - [x] #21 Add API Error Response Consistency
 - [x] Add Auth Controller Tests
 - [x] Clean Backend Build Warning
+- [x] Improve Availability And Reservation Filtering
 - [x] Prevent Overlapping Availability Windows
 - [x] Protect Reservation History From Resource Deletes
 - [x] Replace Browser Confirm Dialogs

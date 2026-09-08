@@ -189,12 +189,14 @@ select:focus-visible {
   color: var(--text);
 }
 
+.availability-dates,
 .reservation-dates {
   display: grid;
   gap: 3px;
   margin-top: 8px;
 }
 
+.availability-dates p,
 .reservation-dates p {
   display: flex;
   flex-wrap: wrap;
@@ -202,6 +204,7 @@ select:focus-visible {
   margin: 0;
 }
 
+.availability-dates span,
 .reservation-dates span {
   min-width: 40px;
   color: var(--text-h);

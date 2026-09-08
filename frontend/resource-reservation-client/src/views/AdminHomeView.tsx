@@ -139,6 +139,24 @@ export function AdminHomeView({
       }),
     [adminReservations, reservationResourceFilter, reservationStatusFilter],
   )
+  const sortedAvailabilities = useMemo(
+    () =>
+      [...availabilities].sort((firstAvailability, secondAvailability) => {
+        const resourceComparison = firstAvailability.resourceName.localeCompare(
+          secondAvailability.resourceName,
+        )
+
+        if (resourceComparison !== 0) {
+          return resourceComparison
+        }
+
+        return (
+          new Date(firstAvailability.startTime).getTime() -
+          new Date(secondAvailability.startTime).getTime()
+        )
+      }),
+    [availabilities],
+  )
 
   return (
     <main className="app-shell">
@@ -182,7 +200,7 @@ export function AdminHomeView({
         {activeScreen === 'availability' && (
           <AdminAvailabilityScreen
             resources={resources}
-            availabilities={availabilities}
+            availabilities={sortedAvailabilities}
             availabilityMessage={availabilityMessage}
             isLoadingAvailabilities={isLoadingAvailabilities}
             availabilityResourceId={availabilityResourceId}
