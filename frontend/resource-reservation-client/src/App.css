@@ -153,6 +153,17 @@ select:focus-visible {
   margin-top: 4px;
 }
 
+.reservation-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.reservation-filters button {
+  min-height: 40px;
+}
+
 .resource-actions {
   display: flex;
   align-items: center;
@@ -190,6 +201,10 @@ select:focus-visible {
   }
 
   .resource-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .reservation-filters {
     grid-template-columns: 1fr;
   }
 
