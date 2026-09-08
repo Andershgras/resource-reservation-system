@@ -102,6 +102,15 @@ public class ResourcesController : ControllerBase
             return NotFound(ApiError("Resource not found."));
         }
 
+        var hasReservationHistory = await _context.Reservations
+            .AnyAsync(reservation => reservation.ResourceId == id);
+
+        if (hasReservationHistory)
+        {
+            return BadRequest(ApiError(
+                "Resource has reservation history and cannot be deleted. Mark it inactive instead."));
+        }
+
         _context.Resources.Remove(resource);
         await _context.SaveChangesAsync();
 
