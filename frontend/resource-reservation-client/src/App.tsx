@@ -5,6 +5,12 @@ import {
   getAvailabilities,
   updateAvailability,
 } from './api/availabilitiesApi'
+import {
+  createAvailabilityRule,
+  deleteAvailabilityRule,
+  getAvailabilityRules,
+  updateAvailabilityRule,
+} from './api/availabilityRulesApi'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
 import {
@@ -21,6 +27,7 @@ import {
 } from './api/reservationsApi'
 import type {
   AvailabilityResponse,
+  AvailabilityRuleResponse,
   ReservationResponse,
   ResourceResponse,
   UserResponse,
@@ -82,6 +89,27 @@ function App() {
   const [deletingAvailabilityId, setDeletingAvailabilityId] = useState<
     number | null
   >(null)
+  const [availabilityRules, setAvailabilityRules] = useState<
+    AvailabilityRuleResponse[]
+  >([])
+  const [availabilityRuleMessage, setAvailabilityRuleMessage] = useState('')
+  const [isLoadingAvailabilityRules, setIsLoadingAvailabilityRules] =
+    useState(false)
+  const [availabilityRuleResourceId, setAvailabilityRuleResourceId] =
+    useState('')
+  const [availabilityRuleDayOfWeek, setAvailabilityRuleDayOfWeek] = useState('')
+  const [availabilityRuleStartTime, setAvailabilityRuleStartTime] = useState('')
+  const [availabilityRuleEndTime, setAvailabilityRuleEndTime] = useState('')
+  const [availabilityRuleValidationMessage, setAvailabilityRuleValidationMessage] =
+    useState('')
+  const [editingAvailabilityRuleId, setEditingAvailabilityRuleId] = useState<
+    number | null
+  >(null)
+  const [isSavingAvailabilityRule, setIsSavingAvailabilityRule] =
+    useState(false)
+  const [deletingAvailabilityRuleId, setDeletingAvailabilityRuleId] = useState<
+    number | null
+  >(null)
   const [reservingAvailabilityId, setReservingAvailabilityId] = useState<
     number | null
   >(null)
@@ -125,6 +153,7 @@ function App() {
     }
 
     if (currentUser.role === 'Admin') {
+      void loadAvailabilityRules(() => isActive)
       void loadAdminReservations(() => isActive)
     }
 
@@ -171,6 +200,27 @@ function App() {
     } finally {
       if (shouldUpdate()) {
         setIsLoadingAvailabilities(false)
+      }
+    }
+  }
+
+  async function loadAvailabilityRules(shouldUpdate = () => true) {
+    setIsLoadingAvailabilityRules(true)
+    setAvailabilityRuleMessage('')
+
+    try {
+      const loadedAvailabilityRules = await getAvailabilityRules()
+
+      if (shouldUpdate()) {
+        setAvailabilityRules(loadedAvailabilityRules)
+      }
+    } catch (error) {
+      if (shouldUpdate()) {
+        setAvailabilityRuleMessage(getErrorMessage(error))
+      }
+    } finally {
+      if (shouldUpdate()) {
+        setIsLoadingAvailabilityRules(false)
       }
     }
   }
@@ -241,6 +291,11 @@ function App() {
       const loadedResources = await getResources()
 
       setResources(loadedResources)
+
+      if (currentUser?.role === 'Admin') {
+        setAvailabilityRules(await getAvailabilityRules())
+      }
+
       resetResourceForm()
       setResourceMessage(editingResourceId ? 'Resource updated.' : 'Resource created.')
     } catch (error) {
@@ -314,6 +369,10 @@ function App() {
 
       setResources(loadedResources)
 
+      if (currentUser?.role === 'Admin') {
+        setAvailabilityRules(await getAvailabilityRules())
+      }
+
       if (editingResourceId === resource.id) {
         resetResourceForm()
       }
@@ -323,6 +382,55 @@ function App() {
       setResourceMessage(getErrorMessage(error))
     } finally {
       setDeletingResourceId(null)
+    }
+  }
+
+  async function handleSaveAvailabilityRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAvailabilityRuleMessage('')
+    setAvailabilityRuleValidationMessage('')
+
+    const validationMessage = validateAvailabilityRuleForm(
+      availabilityRuleResourceId,
+      availabilityRuleDayOfWeek,
+      availabilityRuleStartTime,
+      availabilityRuleEndTime,
+    )
+
+    if (validationMessage) {
+      setAvailabilityRuleValidationMessage(validationMessage)
+      return
+    }
+
+    setIsSavingAvailabilityRule(true)
+
+    try {
+      const request = {
+        resourceId: Number(availabilityRuleResourceId),
+        dayOfWeek: Number(availabilityRuleDayOfWeek),
+        startTime: availabilityRuleStartTime,
+        endTime: availabilityRuleEndTime,
+      }
+
+      if (editingAvailabilityRuleId) {
+        await updateAvailabilityRule(editingAvailabilityRuleId, request)
+      } else {
+        await createAvailabilityRule(request)
+      }
+
+      const loadedAvailabilityRules = await getAvailabilityRules()
+
+      setAvailabilityRules(loadedAvailabilityRules)
+      resetAvailabilityRuleForm()
+      setAvailabilityRuleMessage(
+        editingAvailabilityRuleId
+          ? 'Weekly schedule updated.'
+          : 'Weekly schedule created.',
+      )
+    } catch (error) {
+      setAvailabilityRuleMessage(getErrorMessage(error))
+    } finally {
+      setIsSavingAvailabilityRule(false)
     }
   }
 
@@ -393,11 +501,65 @@ function App() {
     setAvailabilityValidationMessage('')
   }
 
+  function handleEditAvailabilityRule(rule: AvailabilityRuleResponse) {
+    setEditingAvailabilityRuleId(rule.id)
+    setAvailabilityRuleResourceId(rule.resourceId.toString())
+    setAvailabilityRuleDayOfWeek(rule.dayOfWeek.toString())
+    setAvailabilityRuleStartTime(toTimeInputValue(rule.startTime))
+    setAvailabilityRuleEndTime(toTimeInputValue(rule.endTime))
+    setAvailabilityRuleMessage('')
+    setAvailabilityRuleValidationMessage('')
+  }
+
+  async function deleteAvailabilityRuleAfterConfirmation(
+    rule: AvailabilityRuleResponse,
+  ) {
+    setAvailabilityRuleMessage('')
+    setDeletingAvailabilityRuleId(rule.id)
+
+    try {
+      await deleteAvailabilityRule(rule.id)
+      const loadedAvailabilityRules = await getAvailabilityRules()
+
+      setAvailabilityRules(loadedAvailabilityRules)
+
+      if (editingAvailabilityRuleId === rule.id) {
+        resetAvailabilityRuleForm()
+      }
+
+      setAvailabilityRuleMessage('Weekly schedule deleted.')
+    } catch (error) {
+      setAvailabilityRuleMessage(getErrorMessage(error))
+    } finally {
+      setDeletingAvailabilityRuleId(null)
+    }
+  }
+
+  function handleDeleteAvailabilityRule(rule: AvailabilityRuleResponse) {
+    setConfirmationRequest({
+      title: 'Delete weekly schedule',
+      message: `Delete ${rule.dayName} schedule for "${rule.resourceName}"?`,
+      confirmLabel: 'Delete weekly schedule',
+      onConfirm: () => deleteAvailabilityRuleAfterConfirmation(rule),
+    })
+  }
+
+  function resetAvailabilityRuleForm() {
+    setEditingAvailabilityRuleId(null)
+    setAvailabilityRuleResourceId('')
+    setAvailabilityRuleDayOfWeek('')
+    setAvailabilityRuleStartTime('')
+    setAvailabilityRuleEndTime('')
+    setAvailabilityRuleValidationMessage('')
+  }
+
   function resetLoadedData() {
     setResources([])
     setResourceMessage('')
     setAvailabilities([])
     setAvailabilityMessage('')
+    setAvailabilityRules([])
+    setAvailabilityRuleMessage('')
     setReservationMessage('')
     resetReservationTimeSelection()
     setReservations([])
@@ -617,6 +779,27 @@ function App() {
             onEditAvailability={handleEditAvailability}
             onDeleteAvailability={handleDeleteAvailability}
             onCancelAvailabilityEdit={resetAvailabilityForm}
+            availabilityRules={availabilityRules}
+            availabilityRuleMessage={availabilityRuleMessage}
+            isLoadingAvailabilityRules={isLoadingAvailabilityRules}
+            availabilityRuleResourceId={availabilityRuleResourceId}
+            setAvailabilityRuleResourceId={setAvailabilityRuleResourceId}
+            availabilityRuleDayOfWeek={availabilityRuleDayOfWeek}
+            setAvailabilityRuleDayOfWeek={setAvailabilityRuleDayOfWeek}
+            availabilityRuleStartTime={availabilityRuleStartTime}
+            setAvailabilityRuleStartTime={setAvailabilityRuleStartTime}
+            availabilityRuleEndTime={availabilityRuleEndTime}
+            setAvailabilityRuleEndTime={setAvailabilityRuleEndTime}
+            availabilityRuleValidationMessage={
+              availabilityRuleValidationMessage
+            }
+            editingAvailabilityRuleId={editingAvailabilityRuleId}
+            isSavingAvailabilityRule={isSavingAvailabilityRule}
+            deletingAvailabilityRuleId={deletingAvailabilityRuleId}
+            onSaveAvailabilityRule={handleSaveAvailabilityRule}
+            onEditAvailabilityRule={handleEditAvailabilityRule}
+            onDeleteAvailabilityRule={handleDeleteAvailabilityRule}
+            onCancelAvailabilityRuleEdit={resetAvailabilityRuleForm}
             adminReservations={adminReservations}
             adminReservationsMessage={adminReservationsMessage}
             isLoadingAdminReservations={isLoadingAdminReservations}
@@ -760,6 +943,10 @@ function toDateTimeLocalValue(value: string) {
   return offsetDate.toISOString().slice(0, 16)
 }
 
+function toTimeInputValue(value: string) {
+  return value.slice(0, 5)
+}
+
 function validateAvailabilityForm(
   resourceId: string,
   startTime: string,
@@ -778,6 +965,35 @@ function validateAvailabilityForm(
   }
 
   if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
+    return 'End time must be after start time.'
+  }
+
+  return ''
+}
+
+function validateAvailabilityRuleForm(
+  resourceId: string,
+  dayOfWeek: string,
+  startTime: string,
+  endTime: string,
+) {
+  if (!resourceId) {
+    return 'Select a resource before saving a weekly schedule.'
+  }
+
+  if (!dayOfWeek) {
+    return 'Select a weekday before saving a weekly schedule.'
+  }
+
+  if (!startTime) {
+    return 'Enter a start time before saving a weekly schedule.'
+  }
+
+  if (!endTime) {
+    return 'Enter an end time before saving a weekly schedule.'
+  }
+
+  if (endTime <= startTime) {
     return 'End time must be after start time.'
   }
 

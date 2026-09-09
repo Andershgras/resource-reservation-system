@@ -155,6 +155,21 @@ Acceptance criteria:
 - The response includes reserved slots without exposing user details
 - `dotnet test ResourceReservationSystem.slnx` passes
 
+### Add Admin Weekly Schedule UI
+
+As an admin, I want to manage weekly resource schedules in the frontend, so that I can set practical opening hours like Monday to Friday from 08:00 to 16:00.
+
+Acceptance criteria:
+
+- Admins can view a weekly schedule screen
+- Admins can create weekly schedule rules for a resource and weekday
+- Admins can edit weekly schedule times
+- Admins can delete weekly schedule rules after confirmation
+- Client-side validation catches missing resource, weekday, start time, end time, and invalid time order
+- `npm run lint` passes
+- `npm run build` passes
+- `npm run test:smoke` passes
+
 ## Later Ideas
 
 These ideas should wait until the MVP is stable and well documented:
@@ -176,7 +191,7 @@ These ideas should wait until the MVP is stable and well documented:
 The next recommended work is:
 
 ```text
-Add Admin Weekly Schedule UI
+Create Resource-First Booking Flow
 ```
 
-Reason: the backend can now generate bookable resource schedules, so admins need a practical interface for creating and maintaining weekly availability rules.
+Reason: admins can now maintain weekly schedules, so users should book by choosing a resource first and then selecting from generated availability.

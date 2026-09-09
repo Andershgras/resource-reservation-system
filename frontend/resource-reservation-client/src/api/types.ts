@@ -59,6 +59,25 @@ export interface CreateAvailabilityRequest {
 
 export type UpdateAvailabilityRequest = CreateAvailabilityRequest
 
+export interface AvailabilityRuleResponse {
+  id: number
+  resourceId: number
+  resourceName: string
+  dayOfWeek: number
+  dayName: string
+  startTime: string
+  endTime: string
+}
+
+export interface CreateAvailabilityRuleRequest {
+  resourceId: number
+  dayOfWeek: number
+  startTime: string
+  endTime: string
+}
+
+export type UpdateAvailabilityRuleRequest = CreateAvailabilityRuleRequest
+
 export interface ReservationResponse {
   id: number
   resourceId: number
