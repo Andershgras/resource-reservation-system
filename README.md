@@ -23,20 +23,21 @@ The project intentionally stays generic. A resource can represent a meeting room
 
 ## Screenshots
 
-Add screenshots manually in this section when the final images are ready.
+### Admin Resource Management
 
-Suggested screenshots:
+![Admin resource management](docs/screenshots/admin-resources.png)
 
-- Admin resource management: `docs/screenshots/admin-resources.png`
-- Admin weekly schedule management: `docs/screenshots/admin-weekly-schedule.png`
-- User resource-first booking flow: `docs/screenshots/user-book-resource.png`
-- User reservations view: `docs/screenshots/user-reservations.png`
+### Admin Weekly Schedule
 
-Example format:
-
-```md
 ![Admin weekly schedule](docs/screenshots/admin-weekly-schedule.png)
-```
+
+### User Resource Booking
+
+![User resource-first booking flow](docs/screenshots/user-book-resource.png)
+
+### User Reservations
+
+![User reservations](docs/screenshots/user-reservations.png)
 
 ## Features
 
