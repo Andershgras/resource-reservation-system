@@ -127,6 +127,20 @@ Acceptance criteria:
 - Screenshots match the current MVP UI
 - README remains concise
 
+### Add Weekly Availability Rules
+
+As an admin, I want to define weekly availability for a resource, so that resources can follow real opening hours instead of only one-off date ranges.
+
+Acceptance criteria:
+
+- Admins can create, edit, and delete weekly availability rules
+- Weekly rules store resource, weekday, start time, and end time
+- Overlapping rules for the same resource and weekday are rejected
+- Reservations can be created inside a matching weekly rule
+- Reservations outside a matching weekly rule are rejected
+- Existing one-off availability windows still work
+- `dotnet test ResourceReservationSystem.slnx` passes
+
 ## Later Ideas
 
 These ideas should wait until the MVP is stable and well documented:
@@ -135,7 +149,9 @@ These ideas should wait until the MVP is stable and well documented:
 - Reservation history filters
 - Admin view by resource
 - User reservation editing
-- Recurring availability
+- Availability exceptions
+- Resource-first booking flow
+- Calendar availability view
 - Email notifications
 - Calendar export
 - Docker setup
@@ -146,7 +162,7 @@ These ideas should wait until the MVP is stable and well documented:
 The next recommended work is:
 
 ```text
-Add README Screenshots
+Generate Bookable Resource Schedule
 ```
 
-Reason: the core MVP is implemented, tested, and documented. Screenshots would make the project easier to understand quickly as a portfolio piece.
+Reason: weekly availability rules are now supported by the backend, so the next useful step is returning concrete bookable slots for a selected resource and date range.

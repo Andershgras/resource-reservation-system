@@ -88,6 +88,68 @@ public class ReservationsControllerTests
     }
 
     [Fact]
+    public async Task CreateReservation_WhenInsideAvailabilityRule_CreatesReservation()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityRuleAsync(context);
+        var user = await SeedUserAsync(context);
+        var controller = CreateController(context, user.Id);
+
+        var result = await controller.CreateReservation(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 16, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 16, 11, 0, 0)
+        });
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var response = Assert.IsType<ReservationResponseDto>(created.Value);
+        Assert.Equal(ReservationStatuses.Active, response.Status);
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenOutsideAvailabilityRule_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityRuleAsync(context);
+        var user = await SeedUserAsync(context);
+        var controller = CreateController(context, user.Id);
+
+        var result = await controller.CreateReservation(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 16, 15, 30, 0),
+            EndTime = new DateTime(2030, 1, 16, 16, 30, 0)
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(
+            badRequest,
+            "Resource is not available in this time period.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenAvailabilityRuleIsForDifferentDay_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityRuleAsync(context);
+        var user = await SeedUserAsync(context);
+        var controller = CreateController(context, user.Id);
+
+        var result = await controller.CreateReservation(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 19, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 19, 11, 0, 0)
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(
+            badRequest,
+            "Resource is not available in this time period.");
+    }
+
+    [Fact]
     public async Task CreateReservation_WhenResourceIsInactive_ReturnsBadRequest()
     {
         await using var context = CreateContext();
@@ -343,6 +405,30 @@ public class ReservationsControllerTests
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 9, 0, 0),
             EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
+        });
+        await context.SaveChangesAsync();
+
+        return resource;
+    }
+
+    private static async Task<Resource> SeedResourceWithAvailabilityRuleAsync(
+        AppDbContext context)
+    {
+        var resource = new Resource
+        {
+            Name = "Test Resource",
+            IsActive = true
+        };
+
+        context.Resources.Add(resource);
+        await context.SaveChangesAsync();
+
+        context.AvailabilityRules.Add(new AvailabilityRule
+        {
+            ResourceId = resource.Id,
+            DayOfWeek = DayOfWeek.Wednesday,
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(16, 0)
         });
         await context.SaveChangesAsync();
 

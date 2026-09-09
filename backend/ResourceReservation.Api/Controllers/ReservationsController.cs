@@ -103,11 +103,10 @@ public class ReservationsController : ControllerBase
             return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
-        var isInsideAvailability = await _context.Availabilities
-            .AnyAsync(availability =>
-                availability.ResourceId == createReservationDto.ResourceId &&
-                createReservationDto.StartTime >= availability.StartTime &&
-                createReservationDto.EndTime <= availability.EndTime);
+        var isInsideAvailability = await IsInsideAvailability(
+            createReservationDto.ResourceId,
+            createReservationDto.StartTime,
+            createReservationDto.EndTime);
 
         if (!isInsideAvailability)
         {
@@ -212,6 +211,38 @@ public class ReservationsController : ControllerBase
         }
 
         return userId;
+    }
+
+    private async Task<bool> IsInsideAvailability(
+        int resourceId,
+        DateTime startTime,
+        DateTime endTime)
+    {
+        var isInsideAvailabilityWindow = await _context.Availabilities
+            .AnyAsync(availability =>
+                availability.ResourceId == resourceId &&
+                startTime >= availability.StartTime &&
+                endTime <= availability.EndTime);
+
+        if (isInsideAvailabilityWindow)
+        {
+            return true;
+        }
+
+        if (startTime.Date != endTime.Date)
+        {
+            return false;
+        }
+
+        var startClockTime = TimeOnly.FromDateTime(startTime);
+        var endClockTime = TimeOnly.FromDateTime(endTime);
+
+        return await _context.AvailabilityRules
+            .AnyAsync(rule =>
+                rule.ResourceId == resourceId &&
+                rule.DayOfWeek == startTime.DayOfWeek &&
+                startClockTime >= rule.StartTime &&
+                endClockTime <= rule.EndTime);
     }
 
     private static ReservationResponseDto ToReservationResponseDto(Reservation reservation)
