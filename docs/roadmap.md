@@ -141,6 +141,20 @@ Acceptance criteria:
 - Existing one-off availability windows still work
 - `dotnet test ResourceReservationSystem.slnx` passes
 
+### Generate Bookable Resource Schedule
+
+As a user, I want to view generated bookable time for a selected resource and date range, so that the booking flow can show real available intervals instead of raw availability records.
+
+Acceptance criteria:
+
+- A resource schedule endpoint accepts a from date and to date
+- Weekly availability rules generate concrete bookable intervals
+- Existing one-off availability windows are included
+- Active reservations are subtracted from bookable intervals
+- Cancelled reservations do not block bookable intervals
+- The response includes reserved slots without exposing user details
+- `dotnet test ResourceReservationSystem.slnx` passes
+
 ## Later Ideas
 
 These ideas should wait until the MVP is stable and well documented:
@@ -162,7 +176,7 @@ These ideas should wait until the MVP is stable and well documented:
 The next recommended work is:
 
 ```text
-Generate Bookable Resource Schedule
+Add Admin Weekly Schedule UI
 ```
 
-Reason: weekly availability rules are now supported by the backend, so the next useful step is returning concrete bookable slots for a selected resource and date range.
+Reason: the backend can now generate bookable resource schedules, so admins need a practical interface for creating and maintaining weekly availability rules.
