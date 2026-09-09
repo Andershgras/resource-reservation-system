@@ -1,25 +1,82 @@
 # Resource Reservation System
 
-A full-stack resource reservation system built with ASP.NET Core Web API, SQL Server, React, TypeScript, and JWT authentication.
+A finished full-stack MVP for reserving shared resources, built with ASP.NET Core Web API, SQL Server, React, TypeScript, and JWT authentication.
 
-## About
+The project is designed as a portfolio project. It demonstrates practical backend development, relational database design, authentication, role-based authorization, frontend integration, validation, and automated verification in a realistic booking workflow.
 
-Resource Reservation System is a generic booking platform where users can reserve available time slots for different resources.
+## MVP Status
 
-The project is designed as a portfolio project to demonstrate backend development, database design, authentication, authorization, and frontend integration in a realistic full-stack application.
+This project is complete as an MVP.
 
-## Planned Features
+The application supports the core flow for a generic resource reservation system:
 
-- User registration and login
-- JWT authentication
-- Role-based access for admins and users
-- Admins can create and manage resources
-- Admins can define resource availability
-- Users can view resources and available time slots
-- Users can create reservations
-- Users can view and cancel their own reservations
-- Admins can view and manage reservations
-- Reservation overlap prevention
+- Admins manage bookable resources
+- Admins define one-off availability windows
+- Admins define weekly availability rules, such as Monday to Friday from 08:00 to 16:00
+- Users choose a resource first, then view generated bookable times
+- Users create and cancel their own reservations
+- Admins view and manage all reservations
+- The backend prevents overlapping active reservations
+- Cancelled reservations no longer block new reservations
+
+The project intentionally stays generic. A resource can represent a meeting room, workspace, vehicle, sports court, equipment item, or another shared asset.
+
+## Screenshots
+
+Add screenshots manually in this section when the final images are ready.
+
+Suggested screenshots:
+
+- Admin resource management: `docs/screenshots/admin-resources.png`
+- Admin weekly schedule management: `docs/screenshots/admin-weekly-schedule.png`
+- User resource-first booking flow: `docs/screenshots/user-book-resource.png`
+- User reservations view: `docs/screenshots/user-reservations.png`
+
+Example format:
+
+```md
+![Admin weekly schedule](docs/screenshots/admin-weekly-schedule.png)
+```
+
+## Features
+
+### Authentication And Authorization
+
+- User registration
+- User login
+- JWT-based authentication
+- Role-based access for Admin and User behavior
+- Seeded development Admin account
+
+### Admin Features
+
+- Create, edit, and delete resources
+- Mark resources active or inactive
+- Create, edit, and delete one-off availability windows
+- Create, edit, and delete weekly availability rules
+- View all reservations
+- Filter reservations by resource and status
+- Cancel any active reservation
+
+### User Features
+
+- View active resources
+- Select a resource before choosing a reservation time
+- Load generated bookable times for a date range
+- View schedule-style availability grouped by day
+- Choose a time inside a bookable slot
+- Create reservations
+- View own reservations
+- Cancel own active reservations
+
+### Backend Rules
+
+- Reservations require an active resource
+- Reservation end time must be after start time
+- Reservations must fit inside either a one-off availability window or a weekly availability rule
+- Active overlapping reservations are rejected
+- Cancelled reservations do not block new reservations
+- Resources with reservation history cannot be deleted and should be marked inactive instead
 
 ## Tech Stack
 
@@ -31,158 +88,70 @@ The project is designed as a portfolio project to demonstrate backend developmen
 - SQL Server LocalDB
 - JWT authentication
 - Swagger / OpenAPI
+- xUnit tests
 
 ### Frontend
 
 - React
 - TypeScript
 - Vite
+- Playwright smoke tests
+- ESLint
 
-### Tools
+### Tooling
 
-- Visual Studio
+- GitHub Actions
+- Visual Studio / .NET CLI
+- SQL Server LocalDB
 - SQL Server Management Studio
-- GitHub
 
-## Continuous Integration
+## Project Structure
 
-GitHub Actions runs on push and pull request.
+```text
+backend/
+  ResourceReservation.Api/
+    Controllers/
+    Data/
+    DTOs/
+    Migrations/
+    Models/
 
-The workflow runs the backend tests, then installs the frontend dependencies and runs lint/build checks. Pull requests fail if any check fails.
+  ResourceReservation.Api.Tests/
 
-## Project Goal
+frontend/
+  resource-reservation-client/
+    src/
+      api/
+      auth/
+      components/
+      views/
+    tests/
+      smoke/
 
-The goal of this project is to build a realistic full-stack web application that shows practical skills with API development, relational databases, authentication, authorization, and frontend development.
+docs/
+  planning.md
+  roadmap.md
+```
 
 ## Architecture Overview
 
 The application is split into a backend API, a SQL Server database, and a React frontend.
 
-The backend is responsible for the core business rules. It exposes API endpoints for authentication, resources, availability, and reservations. It also validates reservation rules, such as active resources, availability windows, and overlap prevention.
+The backend owns the business rules. It exposes endpoints for authentication, resources, availability windows, weekly availability rules, generated resource schedules, and reservations.
 
-SQL Server stores the application data. Entity Framework Core maps the C# models to database tables and is used by the API to query and update users, resources, availability windows, and reservations.
+SQL Server stores users, resources, availability windows, weekly rules, and reservations. Entity Framework Core maps the C# models to database tables and manages migrations.
 
-The frontend is responsible for the browser experience. It lets Admin users manage resources and availability, and lets normal Users view availability, create reservations, and cancel their own reservations.
+The frontend provides role-based workflows. Admin users manage the booking setup. Normal users select a resource, view generated availability, and reserve a valid time slot.
 
-Authentication uses JWT. A user registers or logs in through the API, the API returns a token, and the frontend stores that token and sends it with protected API requests.
-
-Authorization is role-based at a high level. Admin users can manage resources, availability, and all reservations. Normal Users can view resources and availability, create reservations for themselves, and manage only their own reservations.
-
-## Backend Status
-
-The first backend MVP is implemented.
-
-The backend is located in:
-
-```text
-backend/ResourceReservation.Api
-```
-
-It contains:
-
-- ASP.NET Core Web API controllers
-- Entity Framework Core database access
-- SQL Server LocalDB persistence
-- JWT login and protected endpoints
-- Role-based authorization for Admin and User behavior
-- Swagger setup with JWT authorization support
-- DTOs for request and response contracts
-
-## Backend Structure
-
-```text
-backend/ResourceReservation.Api
-├── Controllers
-│   ├── AuthController.cs
-│   ├── ResourcesController.cs
-│   ├── AvailabilitiesController.cs
-│   └── ReservationsController.cs
-├── Data
-│   └── AppDbContext.cs
-├── DTOs
-│   ├── AuthResponseDto.cs
-│   ├── UserResponseDto.cs
-│   ├── CreateResourceDto.cs
-│   ├── UpdateResourceDto.cs
-│   ├── ResourceResponseDto.cs
-│   ├── CreateAvailabilityDto.cs
-│   ├── UpdateAvailabilityDto.cs
-│   ├── AvailabilityResponseDto.cs
-│   ├── CreateReservationDto.cs
-│   └── ReservationResponseDto.cs
-├── Models
-│   ├── User.cs
-│   ├── Resource.cs
-│   ├── Availability.cs
-│   ├── Reservation.cs
-│   └── ReservationStatuses.cs
-└── Migrations
-```
-
-## Backend Domain
-
-The backend is built around four main models:
+## Domain Model
 
 - `User` - a person who can log in and create reservations
 - `Resource` - something that can be reserved
-- `Availability` - a time window where a resource can be reserved
-- `Reservation` - a booking made by a user for a resource
+- `Availability` - a one-off date/time window where a resource can be booked
+- `AvailabilityRule` - a recurring weekly rule for a resource, such as Monday 08:00-16:00
+- `Reservation` - a concrete booking made by a user for a resource
 
-The system uses generic resource-reservation language so it can fit different domains, such as rooms, equipment, vehicles, courts, or workspaces.
-
-## Authentication And Authorization
-
-Users can register and log in through `AuthController`.
-
-Passwords are hashed with `PasswordHasher<User>`. Login returns a JWT containing the user's id, email, name, and role.
-
-Public registration always creates a normal `User`. Admin access is created through development seed configuration, not through the public registration request body.
-
-Admin-only behavior:
-
-- Create, update, and delete resources
-- Create, update, and delete availability windows
-- View all reservations
-- View reservations by resource
-- View reservations by user
-- Cancel any reservation
-
-User behavior:
-
-- View resources
-- View availability windows
-- Create reservations for themselves
-- View their own reservations through `/api/reservations/me`
-- Cancel their own reservations
-
-## Reservation Rules
-
-A reservation can only be created when:
-
-- the resource exists
-- the resource is active
-- `EndTime` is after `StartTime`
-- the requested time is inside an availability window
-- no active reservation overlaps the requested time
-
-Overlap prevention uses this rule:
-
-```text
-newStart < existingEnd
-and
-newEnd > existingStart
-```
-
-Cancelled reservations do not block new reservations.
-
-Reservation status values are centralized in `ReservationStatuses`:
-
-```text
-Active
-Cancelled
-```
-
-## API Endpoints
+## API Overview
 
 ### Auth
 
@@ -196,12 +165,13 @@ POST /api/auth/login
 ```text
 GET    /api/resources
 GET    /api/resources/{id}
+GET    /api/resources/{id}/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD
 POST   /api/resources        Admin only
 PUT    /api/resources/{id}   Admin only
 DELETE /api/resources/{id}   Admin only
 ```
 
-### Availabilities
+### Availability Windows
 
 ```text
 GET    /api/availabilities
@@ -209,6 +179,16 @@ GET    /api/availabilities/{id}
 POST   /api/availabilities        Admin only
 PUT    /api/availabilities/{id}   Admin only
 DELETE /api/availabilities/{id}   Admin only
+```
+
+### Weekly Availability Rules
+
+```text
+GET    /api/availabilityrules
+GET    /api/availabilityrules/{id}
+POST   /api/availabilityrules        Admin only
+PUT    /api/availabilityrules/{id}   Admin only
+DELETE /api/availabilityrules/{id}   Admin only
 ```
 
 ### Reservations
@@ -223,9 +203,29 @@ GET /api/reservations/resource/{id}      Admin only
 GET /api/reservations/user/{id}          Admin only
 ```
 
-## Database
+## Local Setup
 
-The backend uses SQL Server LocalDB through Entity Framework Core.
+### Prerequisites
+
+- .NET SDK matching the project target framework
+- Node.js
+- SQL Server LocalDB
+
+### Backend
+
+From the repository root:
+
+```bash
+dotnet restore ResourceReservationSystem.slnx
+dotnet ef database update --project backend/ResourceReservation.Api --startup-project backend/ResourceReservation.Api
+dotnet run --project backend/ResourceReservation.Api/ResourceReservation.Api.csproj
+```
+
+Swagger is available in development at:
+
+```text
+http://localhost:5052/swagger
+```
 
 Development connection string:
 
@@ -233,15 +233,9 @@ Development connection string:
 Server=(localdb)\MSSQLLocalDB;Database=ResourceReservationDb;Trusted_Connection=True;TrustServerCertificate=True
 ```
 
-Database migrations are stored in:
+### Development Admin User
 
-```text
-backend/ResourceReservation.Api/Migrations
-```
-
-## Development Admin User
-
-The first admin user can be seeded through `appsettings.Development.json`:
+The development Admin user is seeded from `appsettings.Development.json`:
 
 ```json
 "SeedAdmin": {
@@ -251,104 +245,9 @@ The first admin user can be seeded through `appsettings.Development.json`:
 }
 ```
 
-After starting the API, log in with that email and password through Swagger and use the returned JWT in the Swagger Authorize button.
+### Frontend
 
-## Running The Backend
-
-From the repository root:
-
-```bash
-dotnet run --project backend/ResourceReservation.Api/ResourceReservation.Api.csproj
-```
-
-Swagger is available when running in development:
-
-```text
-http://localhost:5052/swagger
-```
-
-## Verification
-
-The backend has been checked with:
-
-```bash
-dotnet build backend/ResourceReservation.Api/ResourceReservation.Api.csproj
-```
-
-The full MVP flow has also been tested manually in Swagger:
-
-```text
-Admin creates Resource
-Admin creates Availability
-User registers and logs in
-User views Resource and Availability
-User creates Reservation
-User views own reservations
-User cancels Reservation
-User can rebook a cancelled time
-User cannot use admin-only endpoints
-```
-
-## Frontend Status
-
-The first frontend MVP is implemented.
-
-The frontend is located in:
-
-```text
-frontend/resource-reservation-client
-```
-
-Implemented frontend behavior:
-
-- Login and registration forms
-- JWT session storage after login
-- Role-based Admin and User home sections
-- Resource listing for Admin and User
-- Admin resource create, edit, and delete
-- Availability listing for Admin and User
-- Admin availability create, edit, and delete
-- User reservation creation
-- User reservation listing and cancellation
-- Admin reservation listing and cancellation
-
-## Frontend API Configuration
-
-The frontend reads the API base URL from:
-
-```text
-VITE_API_BASE_URL
-```
-
-An example configuration is available in:
-
-```text
-frontend/resource-reservation-client/.env.example
-```
-
-For local development, the expected value is:
-
-```text
-VITE_API_BASE_URL=http://localhost:5052/api
-```
-
-If no environment variable is configured, the frontend uses this same local API URL by default.
-
-## Deployment Preparation
-
-This project is prepared as a portfolio application, not a live production deployment.
-
-To run outside local development, the backend needs an ASP.NET Core hosting environment that supports the target .NET version and can reach a SQL Server database. The backend should be configured with a production `ConnectionStrings:DefaultConnection` value instead of the LocalDB development connection string.
-
-The frontend can be built as static files and hosted separately. Its production build should set `VITE_API_BASE_URL` to the deployed backend API URL, for example `https://your-api-host.example.com/api`.
-
-Production connection strings, JWT keys, admin seed passwords, and other secrets should be configured through the hosting provider or secret storage. They should not be committed to the repository.
-
-## Running The Frontend
-
-Start the backend first, then start the frontend.
-
-From the repository root:
+Start the backend first. Then run:
 
 ```bash
 cd frontend/resource-reservation-client
@@ -356,58 +255,83 @@ npm install
 npm run dev
 ```
 
-The Vite development server will print the frontend URL in the terminal, usually:
+The Vite development server usually runs at:
 
 ```text
 http://localhost:5173
 ```
 
-Frontend commands must be run from:
+The frontend expects the API at:
 
 ```text
-frontend/resource-reservation-client
+http://localhost:5052/api
 ```
 
-Running `npm run build` from the parent `frontend` folder will fail because that folder does not contain `package.json`.
+This can be overridden with `VITE_API_BASE_URL`.
 
-## Frontend Smoke Tests
+## Verification
 
-The frontend includes basic Playwright smoke tests for the main browser flows.
-
-From `frontend/resource-reservation-client`, run:
+Backend tests:
 
 ```bash
+dotnet test ResourceReservationSystem.slnx
+```
+
+Frontend checks:
+
+```bash
+cd frontend/resource-reservation-client
+npm run lint
+npm run build
 npm run test:smoke
 ```
 
-The smoke tests cover Admin login and resource management, availability management, User registration/login, reservation creation and cancellation, and overlap error behavior.
+The Playwright smoke tests cover the main browser flow: Admin login, resource management, weekly schedule management, availability management, User registration/login, resource-first booking, reservation cancellation, and overlap error handling.
 
-## Frontend Smoke Test Plan
+## Continuous Integration
 
-Use this checklist to verify the main frontend flows in the browser:
+GitHub Actions runs on push and pull request.
 
-1. Start the backend API.
-2. Start the frontend development server.
-3. Log in as the seeded Admin user.
-4. Create a resource as Admin and confirm that it appears in the resource list.
-5. Edit the resource and confirm that the updated values are shown.
-6. Create an availability window for the resource and confirm that it appears in the availability list.
-7. Edit the availability window and confirm that the updated times are shown.
-8. Register a normal User account.
-9. Log in as the User.
-10. Confirm that the User can see resources and availability.
-11. Create a reservation as the User and confirm that a success message is shown.
-12. Try to create another reservation that overlaps the active reservation and confirm that an error message is shown.
-13. View the User's reservations and cancel the reservation.
-14. Create a new reservation for the same time and confirm that the cancelled reservation no longer blocks it.
-15. Log back in as Admin.
-16. Confirm that Admin can view reservations.
-17. Cancel a reservation as Admin and confirm that a success message is shown.
-18. Delete the test availability window as Admin and confirm that it is removed from the list.
-19. Delete the test resource as Admin and confirm that it is removed from the list.
-20. Run `npm run test:smoke` from `frontend/resource-reservation-client`.
-21. Run `npm run build` from `frontend/resource-reservation-client`.
+The workflow restores and tests the backend, installs frontend dependencies, runs lint, and builds the frontend. Pull requests fail if any check fails.
 
-## Status
+## Deployment Notes
 
-The backend MVP is working. The frontend MVP is implemented and connected to the API for the core resource, availability, and reservation flows.
+This project is prepared as a portfolio application, not a live production deployment.
+
+For production-like hosting:
+
+- Use a real SQL Server database instead of LocalDB
+- Configure `ConnectionStrings:DefaultConnection` through the hosting environment
+- Configure JWT settings and secrets outside source control
+- Set `VITE_API_BASE_URL` to the deployed backend URL
+- Build the frontend as static files with `npm run build`
+
+## Potential Future Improvements
+
+These are intentionally outside the finished MVP, but would make good future issues:
+
+- Availability exceptions for holidays, maintenance, or one-off closures
+- Resource categories and filtering
+- Better calendar controls for week/month navigation
+- Reservation editing or rescheduling
+- Admin analytics or utilization overview
+- Calendar export
+- Email notifications
+- Docker setup
+- Production deployment
+- Multi-tenant organization support
+
+## Portfolio Notes
+
+This project is meant to show a complete, understandable MVP rather than an oversized production system.
+
+It demonstrates:
+
+- Full-stack feature development
+- API design with DTOs
+- Entity Framework Core migrations
+- SQL Server persistence
+- Authentication and authorization
+- Business-rule validation
+- Frontend state management
+- Automated backend and frontend verification
