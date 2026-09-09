@@ -389,6 +389,80 @@ select:focus-visible {
   gap: 4px;
 }
 
+.schedule-day-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.schedule-day {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted-bg);
+}
+
+.schedule-day-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.schedule-day-heading h3 {
+  margin: 0;
+  color: var(--text-h);
+  font-size: 16px;
+}
+
+.schedule-day-heading span {
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reserved-slots,
+.schedule-slot-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reserved-slots span {
+  display: block;
+  padding: 7px 9px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.schedule-slot-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schedule-slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--success-border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.schedule-slot .resource-actions {
+  justify-content: start;
+}
+
 .reservation-time-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

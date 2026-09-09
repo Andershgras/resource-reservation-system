@@ -186,6 +186,21 @@ Acceptance criteria:
 - `npm run build` passes
 - `npm run test:smoke` passes
 
+### Polish Calendar Availability View
+
+As a user, I want bookable times grouped by day, so that I can scan a selected resource's schedule like a practical calendar instead of reading a flat list of availability records.
+
+Acceptance criteria:
+
+- Bookable slots are grouped by schedule day
+- Each day shows open slot counts
+- Reserved times are shown for context
+- The user booking flow no longer exposes the raw availability tab
+- The schedule remains usable on mobile and desktop layouts
+- `npm run lint` passes
+- `npm run build` passes
+- `npm run test:smoke` passes
+
 ## Later Ideas
 
 These ideas should wait until the MVP is stable and well documented:
@@ -195,7 +210,6 @@ These ideas should wait until the MVP is stable and well documented:
 - Admin view by resource
 - User reservation editing
 - Availability exceptions
-- Calendar availability view
 - Email notifications
 - Calendar export
 - Docker setup
@@ -206,7 +220,7 @@ These ideas should wait until the MVP is stable and well documented:
 The next recommended work is:
 
 ```text
-Polish Calendar Availability View
+Add README Screenshots
 ```
 
-Reason: users can now book from a selected resource schedule, so the next improvement is making that schedule easier to scan with a calendar-style layout and removing the old raw availability booking path.
+Reason: the core booking flow now matches the resource-first schedule model, so screenshots can show a more realistic portfolio-ready workflow.

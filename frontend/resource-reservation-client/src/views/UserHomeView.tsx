@@ -1,23 +1,20 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import type {
-  AvailabilityResponse,
   BookableSlotResponse,
   ReservationResponse,
   ResourceScheduleResponse,
   ResourceResponse,
   UserResponse,
 } from '../api/types'
-import { AvailabilitySection } from '../components/AvailabilitySection'
 import { HomeHeader } from '../components/HomeHeader'
 import { ReservationsSection } from '../components/ReservationsSection'
 import { ResourceBookingSection } from '../components/ResourceBookingSection'
 import { RoleTabs } from '../components/RoleTabs'
 
-type UserScreen = 'resources' | 'availability' | 'my-reservations'
+type UserScreen = 'resources' | 'my-reservations'
 
 const userTabs: { id: UserScreen; label: string }[] = [
   { id: 'resources', label: 'Book resource' },
-  { id: 'availability', label: 'Availability' },
   { id: 'my-reservations', label: 'My reservations' },
 ]
 
@@ -27,9 +24,6 @@ interface UserHomeViewProps {
   resources: ResourceResponse[]
   resourceMessage: string
   isLoadingResources: boolean
-  availabilities: AvailabilityResponse[]
-  availabilityMessage: string
-  isLoadingAvailabilities: boolean
   reservations: ReservationResponse[]
   reservationMessage: string
   reservationValidationMessage: string
@@ -45,23 +39,16 @@ interface UserHomeViewProps {
   reservingScheduleSlotKey: string | null
   myReservationsMessage: string
   isLoadingReservations: boolean
-  reservingAvailabilityId: number | null
-  selectedReservationAvailabilityId: number | null
   reservationStartTime: string
   setReservationStartTime: Dispatch<SetStateAction<string>>
   reservationEndTime: string
   setReservationEndTime: Dispatch<SetStateAction<string>>
   cancellingReservationId: number | null
-  onReserve: (availability: AvailabilityResponse) => void
   onSelectResourceForSchedule: (resource: ResourceResponse) => void
   onLoadResourceSchedule: () => void
   onSelectScheduleSlot: (slot: BookableSlotResponse) => void
   onCancelScheduleSlotSelection: () => void
   onReserveScheduleSlot: (slot: BookableSlotResponse) => void
-  onSelectAvailabilityForReservation: (
-    availability: AvailabilityResponse,
-  ) => void
-  onCancelReservationTimeSelection: () => void
   onCancelReservation: (reservation: ReservationResponse) => void
   formatDateTime: (value: string) => string
   formatDateTimeInput: (value: string) => string
@@ -73,9 +60,6 @@ export function UserHomeView({
   resources,
   resourceMessage,
   isLoadingResources,
-  availabilities,
-  availabilityMessage,
-  isLoadingAvailabilities,
   reservations,
   reservationMessage,
   reservationValidationMessage,
@@ -91,21 +75,16 @@ export function UserHomeView({
   reservingScheduleSlotKey,
   myReservationsMessage,
   isLoadingReservations,
-  reservingAvailabilityId,
-  selectedReservationAvailabilityId,
   reservationStartTime,
   setReservationStartTime,
   reservationEndTime,
   setReservationEndTime,
   cancellingReservationId,
-  onReserve,
   onSelectResourceForSchedule,
   onLoadResourceSchedule,
   onSelectScheduleSlot,
   onCancelScheduleSlotSelection,
   onReserveScheduleSlot,
-  onSelectAvailabilityForReservation,
-  onCancelReservationTimeSelection,
   onCancelReservation,
   formatDateTime,
   formatDateTimeInput,
@@ -133,8 +112,8 @@ export function UserHomeView({
               <p>Resources</p>
             </div>
             <div>
-              <span>{availabilities.length}</span>
-              <p>Availability windows</p>
+              <span>{resourceSchedule?.bookableSlots.length ?? 0}</span>
+              <p>Bookable slots</p>
             </div>
             <div>
               <span>{activeReservationCount}</span>
@@ -175,30 +154,6 @@ export function UserHomeView({
             onSelectScheduleSlot={onSelectScheduleSlot}
             onCancelScheduleSlotSelection={onCancelScheduleSlotSelection}
             onReserveScheduleSlot={onReserveScheduleSlot}
-            formatDateTime={formatDateTime}
-            formatDateTimeInput={formatDateTimeInput}
-          />
-        )}
-
-        {activeScreen === 'availability' && (
-          <UserAvailabilityScreen
-            availabilities={availabilities}
-            availabilityMessage={availabilityMessage}
-            isLoadingAvailabilities={isLoadingAvailabilities}
-            reservationMessage={reservationMessage}
-            reservationValidationMessage={reservationValidationMessage}
-            reservingAvailabilityId={reservingAvailabilityId}
-            selectedReservationAvailabilityId={selectedReservationAvailabilityId}
-            reservationStartTime={reservationStartTime}
-            setReservationStartTime={setReservationStartTime}
-            reservationEndTime={reservationEndTime}
-            setReservationEndTime={setReservationEndTime}
-            onReserve={onReserve}
-            onSelectAvailabilityForReservation={
-              onSelectAvailabilityForReservation
-            }
-            onCancelReservationTimeSelection={onCancelReservationTimeSelection}
-            formatDateTime={formatDateTime}
             formatDateTimeInput={formatDateTimeInput}
           />
         )}
@@ -243,7 +198,6 @@ interface UserResourceBookingScreenProps {
   onSelectScheduleSlot: (slot: BookableSlotResponse) => void
   onCancelScheduleSlotSelection: () => void
   onReserveScheduleSlot: (slot: BookableSlotResponse) => void
-  formatDateTime: (value: string) => string
   formatDateTimeInput: (value: string) => string
 }
 
@@ -272,7 +226,6 @@ function UserResourceBookingScreen({
   onSelectScheduleSlot,
   onCancelScheduleSlotSelection,
   onReserveScheduleSlot,
-  formatDateTime,
   formatDateTimeInput,
 }: UserResourceBookingScreenProps) {
   return (
@@ -301,72 +254,6 @@ function UserResourceBookingScreen({
       onSelectScheduleSlot={onSelectScheduleSlot}
       onCancelScheduleSlotSelection={onCancelScheduleSlotSelection}
       onReserveScheduleSlot={onReserveScheduleSlot}
-      formatDateTime={formatDateTime}
-      formatDateTimeInput={formatDateTimeInput}
-    />
-  )
-}
-
-interface UserAvailabilityScreenProps {
-  availabilities: AvailabilityResponse[]
-  availabilityMessage: string
-  isLoadingAvailabilities: boolean
-  reservationMessage: string
-  reservationValidationMessage: string
-  reservingAvailabilityId: number | null
-  selectedReservationAvailabilityId: number | null
-  reservationStartTime: string
-  setReservationStartTime: Dispatch<SetStateAction<string>>
-  reservationEndTime: string
-  setReservationEndTime: Dispatch<SetStateAction<string>>
-  onReserve: (availability: AvailabilityResponse) => void
-  onSelectAvailabilityForReservation: (
-    availability: AvailabilityResponse,
-  ) => void
-  onCancelReservationTimeSelection: () => void
-  formatDateTime: (value: string) => string
-  formatDateTimeInput: (value: string) => string
-}
-
-function UserAvailabilityScreen({
-  availabilities,
-  availabilityMessage,
-  isLoadingAvailabilities,
-  reservationMessage,
-  reservationValidationMessage,
-  reservingAvailabilityId,
-  selectedReservationAvailabilityId,
-  reservationStartTime,
-  setReservationStartTime,
-  reservationEndTime,
-  setReservationEndTime,
-  onReserve,
-  onSelectAvailabilityForReservation,
-  onCancelReservationTimeSelection,
-  formatDateTime,
-  formatDateTimeInput,
-}: UserAvailabilityScreenProps) {
-  return (
-    <AvailabilitySection
-      currentUserRole="User"
-      availabilities={availabilities}
-      isLoadingAvailabilities={isLoadingAvailabilities}
-      availabilityMessage={availabilityMessage}
-      reservationMessage={reservationMessage}
-      reservationValidationMessage={reservationValidationMessage}
-      reservingAvailabilityId={reservingAvailabilityId}
-      selectedReservationAvailabilityId={selectedReservationAvailabilityId}
-      reservationStartTime={reservationStartTime}
-      setReservationStartTime={setReservationStartTime}
-      reservationEndTime={reservationEndTime}
-      setReservationEndTime={setReservationEndTime}
-      deletingAvailabilityId={null}
-      onReserve={onReserve}
-      onSelectAvailabilityForReservation={onSelectAvailabilityForReservation}
-      onCancelReservationTimeSelection={onCancelReservationTimeSelection}
-      onEditAvailability={() => undefined}
-      onDeleteAvailability={() => undefined}
-      formatDateTime={formatDateTime}
       formatDateTimeInput={formatDateTimeInput}
     />
   )

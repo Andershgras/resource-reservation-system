@@ -113,11 +113,6 @@ function App() {
   const [deletingAvailabilityRuleId, setDeletingAvailabilityRuleId] = useState<
     number | null
   >(null)
-  const [reservingAvailabilityId, setReservingAvailabilityId] = useState<
-    number | null
-  >(null)
-  const [selectedReservationAvailabilityId, setSelectedReservationAvailabilityId] =
-    useState<number | null>(null)
   const [reservationStartTime, setReservationStartTime] = useState('')
   const [reservationEndTime, setReservationEndTime] = useState('')
   const [reservationValidationMessage, setReservationValidationMessage] =
@@ -168,13 +163,13 @@ function App() {
     let isActive = true
 
     void loadResources(() => isActive)
-    void loadAvailabilities(() => isActive)
 
     if (currentUser.role === 'User') {
       void loadMyReservations(() => isActive)
     }
 
     if (currentUser.role === 'Admin') {
+      void loadAvailabilities(() => isActive)
       void loadAvailabilityRules(() => isActive)
       void loadAdminReservations(() => isActive)
     }
@@ -629,21 +624,10 @@ function App() {
     setResourceScheduleMessage('')
     setSelectedScheduleResourceId('')
     resetScheduleSlotSelection()
-    resetReservationTimeSelection()
     setReservations([])
     setMyReservationsMessage('')
     setAdminReservations([])
     setAdminReservationsMessage('')
-  }
-
-  function handleSelectAvailabilityForReservation(
-    availability: AvailabilityResponse,
-  ) {
-    setSelectedReservationAvailabilityId(availability.id)
-    setReservationStartTime(toDateTimeLocalValue(availability.startTime))
-    setReservationEndTime(toDateTimeLocalValue(availability.endTime))
-    setReservationMessage('')
-    setReservationValidationMessage('')
   }
 
   function handleSelectResourceForSchedule(resource: ResourceResponse) {
@@ -706,43 +690,6 @@ function App() {
     }
   }
 
-  async function handleCreateReservation(availability: AvailabilityResponse) {
-    setReservationMessage('')
-    setReservationValidationMessage('')
-
-    const validationMessage = validateReservationTimeSelection(
-      availability,
-      reservationStartTime,
-      reservationEndTime,
-    )
-
-    if (validationMessage) {
-      setReservationValidationMessage(validationMessage)
-      return
-    }
-
-    setReservingAvailabilityId(availability.id)
-
-    try {
-      await createReservation({
-        resourceId: availability.resourceId,
-        startTime: reservationStartTime,
-        endTime: reservationEndTime,
-      })
-      const loadedReservations = await getMyReservations()
-      const loadedAvailabilities = await getAvailabilities()
-
-      setReservations(loadedReservations)
-      setAvailabilities(loadedAvailabilities)
-      resetReservationTimeSelection()
-      setReservationMessage('Reservation created.')
-    } catch (error) {
-      setReservationMessage(getErrorMessage(error))
-    } finally {
-      setReservingAvailabilityId(null)
-    }
-  }
-
   async function cancelReservationAfterConfirmation(
     reservation: ReservationResponse,
   ) {
@@ -762,13 +709,6 @@ function App() {
     } finally {
       setCancellingReservationId(null)
     }
-  }
-
-  function resetReservationTimeSelection() {
-    setSelectedReservationAvailabilityId(null)
-    setReservationStartTime('')
-    setReservationEndTime('')
-    setReservationValidationMessage('')
   }
 
   function resetScheduleSlotSelection() {
@@ -960,9 +900,6 @@ function App() {
           resources={resources}
           resourceMessage={resourceMessage}
           isLoadingResources={isLoadingResources}
-          availabilities={availabilities}
-          availabilityMessage={availabilityMessage}
-          isLoadingAvailabilities={isLoadingAvailabilities}
           reservations={reservations}
           reservationMessage={reservationMessage}
           reservationValidationMessage={reservationValidationMessage}
@@ -978,14 +915,11 @@ function App() {
           reservingScheduleSlotKey={reservingScheduleSlotKey}
           myReservationsMessage={myReservationsMessage}
           isLoadingReservations={isLoadingReservations}
-          reservingAvailabilityId={reservingAvailabilityId}
-          selectedReservationAvailabilityId={selectedReservationAvailabilityId}
           reservationStartTime={reservationStartTime}
           setReservationStartTime={setReservationStartTime}
           reservationEndTime={reservationEndTime}
           setReservationEndTime={setReservationEndTime}
           cancellingReservationId={cancellingReservationId}
-          onReserve={(availability) => void handleCreateReservation(availability)}
           onSelectResourceForSchedule={handleSelectResourceForSchedule}
           onLoadResourceSchedule={() => void loadResourceSchedule()}
           onSelectScheduleSlot={handleSelectScheduleSlot}
@@ -993,10 +927,6 @@ function App() {
           onReserveScheduleSlot={(slot) =>
             void handleCreateReservationFromScheduleSlot(slot)
           }
-          onSelectAvailabilityForReservation={
-            handleSelectAvailabilityForReservation
-          }
-          onCancelReservationTimeSelection={resetReservationTimeSelection}
           onCancelReservation={handleCancelReservation}
           formatDateTime={formatDateTime}
           formatDateTimeInput={toDateTimeLocalValue}
@@ -1160,42 +1090,6 @@ function validateAvailabilityRuleForm(
 
   if (endTime <= startTime) {
     return 'End time must be after start time.'
-  }
-
-  return ''
-}
-
-function validateReservationTimeSelection(
-  availability: AvailabilityResponse,
-  startTime: string,
-  endTime: string,
-) {
-  if (!startTime) {
-    return 'Select a reservation start time.'
-  }
-
-  if (!endTime) {
-    return 'Select a reservation end time.'
-  }
-
-  const selectedStartTime = new Date(startTime).getTime()
-  const selectedEndTime = new Date(endTime).getTime()
-  const availabilityStartTime = new Date(availability.startTime).getTime()
-  const availabilityEndTime = new Date(availability.endTime).getTime()
-
-  if (Number.isNaN(selectedStartTime) || Number.isNaN(selectedEndTime)) {
-    return 'Select valid reservation start and end times.'
-  }
-
-  if (selectedEndTime <= selectedStartTime) {
-    return 'Reservation end time must be after start time.'
-  }
-
-  if (
-    selectedStartTime < availabilityStartTime ||
-    selectedEndTime > availabilityEndTime
-  ) {
-    return 'Reservation time must stay inside the selected availability window.'
   }
 
   return ''

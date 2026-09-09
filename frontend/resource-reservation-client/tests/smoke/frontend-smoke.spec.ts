@@ -149,6 +149,7 @@ test('main frontend reservation flow', async ({ page }) => {
   await scheduleSection.getByLabel('To').fill('2030-01-15')
   await bookingSection.getByRole('button', { name: 'View availability' }).click()
   await expect(scheduleSection.getByText('Smoke Test Room Updated')).toBeVisible()
+  await expect(scheduleSection.getByLabel('Bookable schedule')).toBeVisible()
   await expect(scheduleSection.getByRole('button', { name: 'Choose time' })).toBeVisible()
 
   await scheduleSection.getByRole('button', { name: 'Choose time' }).click()
@@ -203,7 +204,10 @@ test('main frontend reservation flow', async ({ page }) => {
 })
 
 test('overlap error is shown when an active reservation already exists', async ({ page }) => {
-  await mockApi(page, { seedOverlapReservation: true })
+  await mockApi(page, {
+    seedOverlapReservation: true,
+    showReservedSlotAsBookable: true,
+  })
   await page.addInitScript(() => localStorage.clear())
   page.on('dialog', (dialog) => dialog.accept())
 
@@ -212,9 +216,13 @@ test('overlap error is shown when an active reservation already exists', async (
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
 
-  await selectRoleTab(page, 'Availability')
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Choose time' }).click()
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
+  const bookingSection = sectionByHeading(page, 'Book a resource')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await scheduleSection.getByLabel('From').fill('2030-01-15')
+  await scheduleSection.getByLabel('To').fill('2030-01-15')
+  await bookingSection.getByRole('button', { name: 'View availability' }).click()
+  await scheduleSection.getByRole('button', { name: 'Choose time' }).click()
+  await scheduleSection.getByRole('button', { name: 'Reserve' }).click()
   await expect(
     page.getByText('Error: Resource is already reserved in this time period.'),
   ).toBeVisible()
@@ -238,7 +246,10 @@ async function login(page: Page, email: string, password: string) {
 
 async function mockApi(
   page: Page,
-  options: { seedOverlapReservation?: boolean } = {},
+  options: {
+    seedOverlapReservation?: boolean
+    showReservedSlotAsBookable?: boolean
+  } = {},
 ) {
   let nextResourceId = options.seedOverlapReservation ? 2 : 1
   let nextAvailabilityId = options.seedOverlapReservation ? 2 : 1
@@ -338,6 +349,7 @@ async function mockApi(
           availabilities,
           availabilityRules,
           reservations,
+          options.showReservedSlotAsBookable ?? false,
         ),
       })
       return
@@ -583,6 +595,7 @@ function buildResourceSchedule(
   availabilities: AvailabilityResponse[],
   availabilityRules: AvailabilityRuleResponse[],
   reservations: ReservationResponse[],
+  showReservedSlotAsBookable: boolean,
 ): ResourceScheduleResponse {
   const resource = resources.find((item) => item.id === resourceId)
   const availabilitySlots = availabilities
@@ -619,14 +632,16 @@ function buildResourceSchedule(
     resourceName: resource?.name ?? '',
     fromDate,
     toDate,
-    bookableSlots: [...availabilitySlots, ...ruleSlots].filter(
-      (slot) =>
-        !reservedSlots.some(
-          (reservedSlot) =>
-            slot.startTime < reservedSlot.endTime &&
-            slot.endTime > reservedSlot.startTime,
+    bookableSlots: showReservedSlotAsBookable
+      ? [...availabilitySlots, ...ruleSlots]
+      : [...availabilitySlots, ...ruleSlots].filter(
+          (slot) =>
+            !reservedSlots.some(
+              (reservedSlot) =>
+                slot.startTime < reservedSlot.endTime &&
+                slot.endTime > reservedSlot.startTime,
+            ),
         ),
-    ),
     reservedSlots,
   }
 }
