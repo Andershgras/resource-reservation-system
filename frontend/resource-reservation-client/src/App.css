@@ -369,6 +369,26 @@ select:focus-visible {
   min-height: 42px;
 }
 
+.schedule-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted-bg);
+}
+
+.schedule-controls button {
+  min-height: 42px;
+}
+
+.selected-resource-heading {
+  display: grid;
+  gap: 4px;
+}
+
 .reservation-time-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -499,6 +519,7 @@ select:focus-visible {
   .home-header,
   .resource-list li,
   .reservation-filters,
+  .schedule-controls,
   .reservation-time-form {
     grid-template-columns: 1fr;
   }

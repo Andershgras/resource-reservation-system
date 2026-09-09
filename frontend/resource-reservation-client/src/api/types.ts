@@ -43,6 +43,26 @@ export interface UpdateResourceRequest extends CreateResourceRequest {
   isActive: boolean
 }
 
+export interface BookableSlotResponse {
+  startTime: string
+  endTime: string
+}
+
+export interface ReservedSlotResponse {
+  reservationId: number
+  startTime: string
+  endTime: string
+}
+
+export interface ResourceScheduleResponse {
+  resourceId: number
+  resourceName: string
+  fromDate: string
+  toDate: string
+  bookableSlots: BookableSlotResponse[]
+  reservedSlots: ReservedSlotResponse[]
+}
+
 export interface AvailabilityResponse {
   id: number
   resourceId: number

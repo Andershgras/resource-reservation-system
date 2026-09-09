@@ -16,6 +16,7 @@ import { ApiError } from './api/client'
 import {
   createResource,
   deleteResource,
+  getResourceSchedule,
   getResources,
   updateResource,
 } from './api/resourcesApi'
@@ -28,7 +29,9 @@ import {
 import type {
   AvailabilityResponse,
   AvailabilityRuleResponse,
+  BookableSlotResponse,
   ReservationResponse,
+  ResourceScheduleResponse,
   ResourceResponse,
   UserResponse,
 } from './api/types'
@@ -120,6 +123,25 @@ function App() {
   const [reservationValidationMessage, setReservationValidationMessage] =
     useState('')
   const [reservationMessage, setReservationMessage] = useState('')
+  const [selectedScheduleResourceId, setSelectedScheduleResourceId] =
+    useState('')
+  const [scheduleFromDate, setScheduleFromDate] = useState(() =>
+    toDateInputValue(new Date()),
+  )
+  const [scheduleToDate, setScheduleToDate] = useState(() =>
+    toDateInputValue(addDays(new Date(), 6)),
+  )
+  const [resourceSchedule, setResourceSchedule] =
+    useState<ResourceScheduleResponse | null>(null)
+  const [resourceScheduleMessage, setResourceScheduleMessage] = useState('')
+  const [isLoadingResourceSchedule, setIsLoadingResourceSchedule] =
+    useState(false)
+  const [selectedScheduleSlotKey, setSelectedScheduleSlotKey] = useState<
+    string | null
+  >(null)
+  const [reservingScheduleSlotKey, setReservingScheduleSlotKey] = useState<
+    string | null
+  >(null)
   const [reservations, setReservations] = useState<ReservationResponse[]>([])
   const [myReservationsMessage, setMyReservationsMessage] = useState('')
   const [isLoadingReservations, setIsLoadingReservations] = useState(false)
@@ -264,6 +286,48 @@ function App() {
       if (shouldUpdate()) {
         setIsLoadingAdminReservations(false)
       }
+    }
+  }
+
+  async function loadResourceSchedule(
+    resourceId = selectedScheduleResourceId,
+    fromDate = scheduleFromDate,
+    toDate = scheduleToDate,
+  ) {
+    setResourceScheduleMessage('')
+    setReservationMessage('')
+    setReservationValidationMessage('')
+
+    if (!resourceId) {
+      setResourceScheduleMessage('Choose a resource before loading its schedule.')
+      return
+    }
+
+    if (!fromDate || !toDate) {
+      setResourceScheduleMessage('Select a from date and to date.')
+      return
+    }
+
+    if (toDate < fromDate) {
+      setResourceScheduleMessage('To date must be on or after from date.')
+      return
+    }
+
+    setIsLoadingResourceSchedule(true)
+
+    try {
+      const loadedSchedule = await getResourceSchedule(
+        Number(resourceId),
+        fromDate,
+        toDate,
+      )
+
+      setResourceSchedule(loadedSchedule)
+      resetScheduleSlotSelection()
+    } catch (error) {
+      setResourceScheduleMessage(getErrorMessage(error))
+    } finally {
+      setIsLoadingResourceSchedule(false)
     }
   }
 
@@ -561,6 +625,10 @@ function App() {
     setAvailabilityRules([])
     setAvailabilityRuleMessage('')
     setReservationMessage('')
+    setResourceSchedule(null)
+    setResourceScheduleMessage('')
+    setSelectedScheduleResourceId('')
+    resetScheduleSlotSelection()
     resetReservationTimeSelection()
     setReservations([])
     setMyReservationsMessage('')
@@ -576,6 +644,66 @@ function App() {
     setReservationEndTime(toDateTimeLocalValue(availability.endTime))
     setReservationMessage('')
     setReservationValidationMessage('')
+  }
+
+  function handleSelectResourceForSchedule(resource: ResourceResponse) {
+    setSelectedScheduleResourceId(resource.id.toString())
+    void loadResourceSchedule(resource.id.toString())
+  }
+
+  function handleSelectScheduleSlot(slot: BookableSlotResponse) {
+    setSelectedScheduleSlotKey(getSlotKey(slot))
+    setReservationStartTime(toDateTimeLocalValue(slot.startTime))
+    setReservationEndTime(toDateTimeLocalValue(slot.endTime))
+    setReservationMessage('')
+    setReservationValidationMessage('')
+  }
+
+  async function handleCreateReservationFromScheduleSlot(
+    slot: BookableSlotResponse,
+  ) {
+    setReservationMessage('')
+    setReservationValidationMessage('')
+
+    if (!resourceSchedule) {
+      setReservationValidationMessage('Choose a resource schedule first.')
+      return
+    }
+
+    const validationMessage = validateReservationSlotSelection(
+      slot,
+      reservationStartTime,
+      reservationEndTime,
+    )
+
+    if (validationMessage) {
+      setReservationValidationMessage(validationMessage)
+      return
+    }
+
+    const slotKey = getSlotKey(slot)
+    setReservingScheduleSlotKey(slotKey)
+
+    try {
+      await createReservation({
+        resourceId: resourceSchedule.resourceId,
+        startTime: reservationStartTime,
+        endTime: reservationEndTime,
+      })
+      const loadedReservations = await getMyReservations()
+
+      setReservations(loadedReservations)
+      await loadResourceSchedule(
+        resourceSchedule.resourceId.toString(),
+        scheduleFromDate,
+        scheduleToDate,
+      )
+      setReservationMessage('Reservation created.')
+    } catch (error) {
+      setReservationMessage(getErrorMessage(error))
+    } finally {
+      setReservingScheduleSlotKey(null)
+    }
   }
 
   async function handleCreateReservation(availability: AvailabilityResponse) {
@@ -638,6 +766,13 @@ function App() {
 
   function resetReservationTimeSelection() {
     setSelectedReservationAvailabilityId(null)
+    setReservationStartTime('')
+    setReservationEndTime('')
+    setReservationValidationMessage('')
+  }
+
+  function resetScheduleSlotSelection() {
+    setSelectedScheduleSlotKey(null)
     setReservationStartTime('')
     setReservationEndTime('')
     setReservationValidationMessage('')
@@ -831,6 +966,16 @@ function App() {
           reservations={reservations}
           reservationMessage={reservationMessage}
           reservationValidationMessage={reservationValidationMessage}
+          selectedScheduleResourceId={selectedScheduleResourceId}
+          scheduleFromDate={scheduleFromDate}
+          setScheduleFromDate={setScheduleFromDate}
+          scheduleToDate={scheduleToDate}
+          setScheduleToDate={setScheduleToDate}
+          resourceSchedule={resourceSchedule}
+          resourceScheduleMessage={resourceScheduleMessage}
+          isLoadingResourceSchedule={isLoadingResourceSchedule}
+          selectedScheduleSlotKey={selectedScheduleSlotKey}
+          reservingScheduleSlotKey={reservingScheduleSlotKey}
           myReservationsMessage={myReservationsMessage}
           isLoadingReservations={isLoadingReservations}
           reservingAvailabilityId={reservingAvailabilityId}
@@ -841,6 +986,13 @@ function App() {
           setReservationEndTime={setReservationEndTime}
           cancellingReservationId={cancellingReservationId}
           onReserve={(availability) => void handleCreateReservation(availability)}
+          onSelectResourceForSchedule={handleSelectResourceForSchedule}
+          onLoadResourceSchedule={() => void loadResourceSchedule()}
+          onSelectScheduleSlot={handleSelectScheduleSlot}
+          onCancelScheduleSlotSelection={resetScheduleSlotSelection}
+          onReserveScheduleSlot={(slot) =>
+            void handleCreateReservationFromScheduleSlot(slot)
+          }
           onSelectAvailabilityForReservation={
             handleSelectAvailabilityForReservation
           }
@@ -943,6 +1095,19 @@ function toDateTimeLocalValue(value: string) {
   return offsetDate.toISOString().slice(0, 16)
 }
 
+function toDateInputValue(value: Date) {
+  const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60000)
+
+  return offsetDate.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, days: number) {
+  const date = new Date(value)
+  date.setDate(date.getDate() + days)
+
+  return date
+}
+
 function toTimeInputValue(value: string) {
   return value.slice(0, 5)
 }
@@ -1034,6 +1199,43 @@ function validateReservationTimeSelection(
   }
 
   return ''
+}
+
+function validateReservationSlotSelection(
+  slot: BookableSlotResponse,
+  startTime: string,
+  endTime: string,
+) {
+  if (!startTime) {
+    return 'Select a reservation start time.'
+  }
+
+  if (!endTime) {
+    return 'Select a reservation end time.'
+  }
+
+  const selectedStartTime = new Date(startTime).getTime()
+  const selectedEndTime = new Date(endTime).getTime()
+  const slotStartTime = new Date(slot.startTime).getTime()
+  const slotEndTime = new Date(slot.endTime).getTime()
+
+  if (Number.isNaN(selectedStartTime) || Number.isNaN(selectedEndTime)) {
+    return 'Select valid reservation start and end times.'
+  }
+
+  if (selectedEndTime <= selectedStartTime) {
+    return 'Reservation end time must be after start time.'
+  }
+
+  if (selectedStartTime < slotStartTime || selectedEndTime > slotEndTime) {
+    return 'Reservation time must stay inside the selected bookable time.'
+  }
+
+  return ''
+}
+
+function getSlotKey(slot: BookableSlotResponse) {
+  return `${slot.startTime}-${slot.endTime}`
 }
 
 export default App

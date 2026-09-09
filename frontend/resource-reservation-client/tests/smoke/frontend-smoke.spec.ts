@@ -36,6 +36,26 @@ interface AvailabilityRuleResponse {
   endTime: string
 }
 
+interface BookableSlotResponse {
+  startTime: string
+  endTime: string
+}
+
+interface ReservedSlotResponse {
+  reservationId: number
+  startTime: string
+  endTime: string
+}
+
+interface ResourceScheduleResponse {
+  resourceId: number
+  resourceName: string
+  fromDate: string
+  toDate: string
+  bookableSlots: BookableSlotResponse[]
+  reservedSlots: ReservedSlotResponse[]
+}
+
 interface ReservationResponse {
   id: number
   resourceId: number
@@ -121,13 +141,18 @@ test('main frontend reservation flow', async ({ page }) => {
 
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
-  await expect(sectionByHeading(page, 'Resources').getByText('Smoke Test Room Updated')).toBeVisible()
+  const bookingSection = sectionByHeading(page, 'Book a resource')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await expect(bookingSection.getByText('Smoke Test Room Updated')).toBeVisible()
 
-  await selectRoleTab(page, 'Availability')
-  await expect(sectionByHeading(page, 'Availability').getByText('Smoke Test Room Updated')).toBeVisible()
+  await scheduleSection.getByLabel('From').fill('2030-01-15')
+  await scheduleSection.getByLabel('To').fill('2030-01-15')
+  await bookingSection.getByRole('button', { name: 'View availability' }).click()
+  await expect(scheduleSection.getByText('Smoke Test Room Updated')).toBeVisible()
+  await expect(scheduleSection.getByRole('button', { name: 'Choose time' })).toBeVisible()
 
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Choose time' }).click()
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
+  await scheduleSection.getByRole('button', { name: 'Choose time' }).click()
+  await scheduleSection.getByRole('button', { name: 'Reserve' }).click()
   await expect(page.getByText('Reservation created.')).toBeVisible()
 
   await selectRoleTab(page, 'My reservations')
@@ -137,9 +162,10 @@ test('main frontend reservation flow', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
-  await selectRoleTab(page, 'Availability')
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Choose time' }).click()
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
+  await selectRoleTab(page, 'Book resource')
+  await sectionByHeading(page, 'Resource schedule').getByRole('button', { name: 'Update schedule' }).click()
+  await sectionByHeading(page, 'Resource schedule').getByRole('button', { name: 'Choose time' }).click()
+  await sectionByHeading(page, 'Resource schedule').getByRole('button', { name: 'Reserve' }).click()
   await expect(page.getByText('Reservation created.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
@@ -293,6 +319,27 @@ async function mockApi(
 
     if (request.method() === 'GET' && path === '/resources') {
       await route.fulfill({ status: 200, json: resources })
+      return
+    }
+
+    const resourceScheduleMatch = path.match(/^\/resources\/(\d+)\/schedule$/)
+    if (resourceScheduleMatch && request.method() === 'GET') {
+      const resourceId = Number(resourceScheduleMatch[1])
+      const fromDate = url.searchParams.get('from') ?? ''
+      const toDate = url.searchParams.get('to') ?? ''
+
+      await route.fulfill({
+        status: 200,
+        json: buildResourceSchedule(
+          resourceId,
+          fromDate,
+          toDate,
+          resources,
+          availabilities,
+          availabilityRules,
+          reservations,
+        ),
+      })
       return
     }
 
@@ -527,3 +574,89 @@ const dayNames = [
   'Friday',
   'Saturday',
 ]
+
+function buildResourceSchedule(
+  resourceId: number,
+  fromDate: string,
+  toDate: string,
+  resources: ResourceResponse[],
+  availabilities: AvailabilityResponse[],
+  availabilityRules: AvailabilityRuleResponse[],
+  reservations: ReservationResponse[],
+): ResourceScheduleResponse {
+  const resource = resources.find((item) => item.id === resourceId)
+  const availabilitySlots = availabilities
+    .filter((availability) =>
+      availability.resourceId === resourceId &&
+      availability.startTime.slice(0, 10) >= fromDate &&
+      availability.startTime.slice(0, 10) <= toDate,
+    )
+    .map((availability) => ({
+      startTime: availability.startTime,
+      endTime: availability.endTime,
+    }))
+  const ruleSlots = buildRuleSlots(
+    resourceId,
+    fromDate,
+    toDate,
+    availabilityRules,
+  )
+  const reservedSlots = reservations
+    .filter((reservation) =>
+      reservation.resourceId === resourceId &&
+      reservation.status === 'Active' &&
+      reservation.startTime.slice(0, 10) >= fromDate &&
+      reservation.startTime.slice(0, 10) <= toDate,
+    )
+    .map((reservation) => ({
+      reservationId: reservation.id,
+      startTime: reservation.startTime,
+      endTime: reservation.endTime,
+    }))
+
+  return {
+    resourceId,
+    resourceName: resource?.name ?? '',
+    fromDate,
+    toDate,
+    bookableSlots: [...availabilitySlots, ...ruleSlots].filter(
+      (slot) =>
+        !reservedSlots.some(
+          (reservedSlot) =>
+            slot.startTime < reservedSlot.endTime &&
+            slot.endTime > reservedSlot.startTime,
+        ),
+    ),
+    reservedSlots,
+  }
+}
+
+function buildRuleSlots(
+  resourceId: number,
+  fromDate: string,
+  toDate: string,
+  availabilityRules: AvailabilityRuleResponse[],
+) {
+  const slots: BookableSlotResponse[] = []
+  const from = new Date(`${fromDate}T00:00:00`)
+  const to = new Date(`${toDate}T00:00:00`)
+
+  for (const date = new Date(from); date <= to; date.setDate(date.getDate() + 1)) {
+    const dateValue = toDateValue(date)
+
+    for (const rule of availabilityRules.filter(
+      (item) => item.resourceId === resourceId && item.dayOfWeek === date.getDay(),
+    )) {
+      slots.push({
+        startTime: `${dateValue}T${rule.startTime}:00`,
+        endTime: `${dateValue}T${rule.endTime}:00`,
+      })
+    }
+  }
+
+  return slots
+}
+
+function toDateValue(value: Date) {
+  return value.toISOString().slice(0, 10)
+}

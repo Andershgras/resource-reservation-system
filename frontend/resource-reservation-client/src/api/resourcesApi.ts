@@ -1,12 +1,21 @@
 import { apiRequest } from './client'
 import type {
   CreateResourceRequest,
+  ResourceScheduleResponse,
   ResourceResponse,
   UpdateResourceRequest,
 } from './types'
 
 export function getResources() {
   return apiRequest<ResourceResponse[]>('/resources')
+}
+
+export function getResourceSchedule(id: number, from: string, to: string) {
+  const query = new URLSearchParams({ from, to })
+
+  return apiRequest<ResourceScheduleResponse>(
+    `/resources/${id}/schedule?${query.toString()}`,
+  )
 }
 
 export function createResource(request: CreateResourceRequest) {

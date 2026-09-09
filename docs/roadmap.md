@@ -170,6 +170,22 @@ Acceptance criteria:
 - `npm run build` passes
 - `npm run test:smoke` passes
 
+### Create Resource-First Booking Flow
+
+As a user, I want to choose a resource before selecting a reservation time, so that booking follows the real-world flow of finding a resource and then picking an available time.
+
+Acceptance criteria:
+
+- User navigation starts with a resource booking screen
+- Users can choose an active resource and date range
+- The frontend loads generated bookable slots for the selected resource
+- Users can select a time inside a bookable slot
+- Creating a reservation refreshes the user's reservations and resource schedule
+- Existing reservation validation and overlap errors are still shown clearly
+- `npm run lint` passes
+- `npm run build` passes
+- `npm run test:smoke` passes
+
 ## Later Ideas
 
 These ideas should wait until the MVP is stable and well documented:
@@ -179,7 +195,6 @@ These ideas should wait until the MVP is stable and well documented:
 - Admin view by resource
 - User reservation editing
 - Availability exceptions
-- Resource-first booking flow
 - Calendar availability view
 - Email notifications
 - Calendar export
@@ -191,7 +206,7 @@ These ideas should wait until the MVP is stable and well documented:
 The next recommended work is:
 
 ```text
-Create Resource-First Booking Flow
+Polish Calendar Availability View
 ```
 
-Reason: admins can now maintain weekly schedules, so users should book by choosing a resource first and then selecting from generated availability.
+Reason: users can now book from a selected resource schedule, so the next improvement is making that schedule easier to scan with a calendar-style layout and removing the old raw availability booking path.
