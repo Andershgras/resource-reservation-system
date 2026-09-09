@@ -26,6 +26,36 @@ interface AvailabilityResponse {
   endTime: string
 }
 
+interface AvailabilityRuleResponse {
+  id: number
+  resourceId: number
+  resourceName: string
+  dayOfWeek: number
+  dayName: string
+  startTime: string
+  endTime: string
+}
+
+interface BookableSlotResponse {
+  startTime: string
+  endTime: string
+}
+
+interface ReservedSlotResponse {
+  reservationId: number
+  startTime: string
+  endTime: string
+}
+
+interface ResourceScheduleResponse {
+  resourceId: number
+  resourceName: string
+  fromDate: string
+  toDate: string
+  bookableSlots: BookableSlotResponse[]
+  reservedSlots: ReservedSlotResponse[]
+}
+
 interface ReservationResponse {
   id: number
   resourceId: number
@@ -63,6 +93,27 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(page.getByText('Resource updated.')).toBeVisible()
   await expect(resourcesSection.getByText('Smoke Test Room Updated')).toBeVisible()
 
+  await selectRoleTab(page, 'Weekly schedule')
+  const weeklyScheduleForm = sectionByHeading(page, 'Create weekly schedule')
+  await weeklyScheduleForm.getByLabel('Resource').selectOption({ label: 'Smoke Test Room Updated' })
+  await weeklyScheduleForm.getByLabel('Weekday').selectOption({ label: 'Monday' })
+  await weeklyScheduleForm.getByLabel('Start time').fill('08:00')
+  await weeklyScheduleForm.getByLabel('End time').fill('16:00')
+  await weeklyScheduleForm.getByRole('button', { name: 'Create weekly schedule' }).click()
+  await expect(page.getByText('Weekly schedule created.')).toBeVisible()
+
+  const weeklyScheduleSection = sectionByHeading(page, 'Weekly schedule')
+  await expect(weeklyScheduleSection.getByText('Smoke Test Room Updated')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('Monday')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('08:00 - 16:00')).toBeVisible()
+
+  await weeklyScheduleSection.getByRole('button', { name: 'Edit' }).click()
+  const editWeeklyScheduleForm = sectionByHeading(page, 'Edit weekly schedule')
+  await editWeeklyScheduleForm.getByLabel('End time').fill('17:00')
+  await editWeeklyScheduleForm.getByRole('button', { name: 'Save weekly schedule' }).click()
+  await expect(page.getByText('Weekly schedule updated.')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('08:00 - 17:00')).toBeVisible()
+
   await selectRoleTab(page, 'Availability')
   const availabilityForm = sectionByHeading(page, 'Create availability')
   await availabilityForm.getByLabel('Resource').selectOption({ label: 'Smoke Test Room Updated' })
@@ -90,13 +141,19 @@ test('main frontend reservation flow', async ({ page }) => {
 
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
-  await expect(sectionByHeading(page, 'Resources').getByText('Smoke Test Room Updated')).toBeVisible()
+  const bookingSection = sectionByHeading(page, 'Book a resource')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await expect(bookingSection.getByText('Smoke Test Room Updated')).toBeVisible()
 
-  await selectRoleTab(page, 'Availability')
-  await expect(sectionByHeading(page, 'Availability').getByText('Smoke Test Room Updated')).toBeVisible()
+  await scheduleSection.getByLabel('From').fill('2030-01-15')
+  await scheduleSection.getByLabel('To').fill('2030-01-15')
+  await bookingSection.getByRole('button', { name: 'View availability' }).click()
+  await expect(scheduleSection.getByText('Smoke Test Room Updated')).toBeVisible()
+  await expect(scheduleSection.getByLabel('Bookable schedule')).toBeVisible()
+  await expect(scheduleSection.getByRole('button', { name: 'Choose time' })).toBeVisible()
 
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Choose time' }).click()
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
+  await scheduleSection.getByRole('button', { name: 'Choose time' }).click()
+  await scheduleSection.getByRole('button', { name: 'Reserve' }).click()
   await expect(page.getByText('Reservation created.')).toBeVisible()
 
   await selectRoleTab(page, 'My reservations')
@@ -106,9 +163,10 @@ test('main frontend reservation flow', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
-  await selectRoleTab(page, 'Availability')
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Choose time' }).click()
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
+  await selectRoleTab(page, 'Book resource')
+  await sectionByHeading(page, 'Resource schedule').getByRole('button', { name: 'Update schedule' }).click()
+  await sectionByHeading(page, 'Resource schedule').getByRole('button', { name: 'Choose time' }).click()
+  await sectionByHeading(page, 'Resource schedule').getByRole('button', { name: 'Reserve' }).click()
   await expect(page.getByText('Reservation created.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
@@ -132,6 +190,12 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(page.getByText('Availability deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Availability').getByText('No availability found.')).toBeVisible()
 
+  await selectRoleTab(page, 'Weekly schedule')
+  await sectionByHeading(page, 'Weekly schedule').getByRole('button', { name: 'Delete' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete weekly schedule' }).click()
+  await expect(page.getByText('Weekly schedule deleted.')).toBeVisible()
+  await expect(sectionByHeading(page, 'Weekly schedule').getByText('No weekly schedule found.')).toBeVisible()
+
   await selectRoleTab(page, 'Resources')
   await sectionByHeading(page, 'Resources').getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Delete resource' }).click()
@@ -140,7 +204,10 @@ test('main frontend reservation flow', async ({ page }) => {
 })
 
 test('overlap error is shown when an active reservation already exists', async ({ page }) => {
-  await mockApi(page, { seedOverlapReservation: true })
+  await mockApi(page, {
+    seedOverlapReservation: true,
+    showReservedSlotAsBookable: true,
+  })
   await page.addInitScript(() => localStorage.clear())
   page.on('dialog', (dialog) => dialog.accept())
 
@@ -149,9 +216,13 @@ test('overlap error is shown when an active reservation already exists', async (
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
 
-  await selectRoleTab(page, 'Availability')
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Choose time' }).click()
-  await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Reserve' }).click()
+  const bookingSection = sectionByHeading(page, 'Book a resource')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await scheduleSection.getByLabel('From').fill('2030-01-15')
+  await scheduleSection.getByLabel('To').fill('2030-01-15')
+  await bookingSection.getByRole('button', { name: 'View availability' }).click()
+  await scheduleSection.getByRole('button', { name: 'Choose time' }).click()
+  await scheduleSection.getByRole('button', { name: 'Reserve' }).click()
   await expect(
     page.getByText('Error: Resource is already reserved in this time period.'),
   ).toBeVisible()
@@ -175,10 +246,14 @@ async function login(page: Page, email: string, password: string) {
 
 async function mockApi(
   page: Page,
-  options: { seedOverlapReservation?: boolean } = {},
+  options: {
+    seedOverlapReservation?: boolean
+    showReservedSlotAsBookable?: boolean
+  } = {},
 ) {
   let nextResourceId = options.seedOverlapReservation ? 2 : 1
   let nextAvailabilityId = options.seedOverlapReservation ? 2 : 1
+  let nextAvailabilityRuleId = 1
   let nextReservationId = options.seedOverlapReservation ? 2 : 1
 
   const adminUser: UserResponse = {
@@ -217,6 +292,7 @@ async function mockApi(
         },
       ]
     : []
+  let availabilityRules: AvailabilityRuleResponse[] = []
   let reservations: ReservationResponse[] = options.seedOverlapReservation
     ? [
         {
@@ -257,6 +333,28 @@ async function mockApi(
       return
     }
 
+    const resourceScheduleMatch = path.match(/^\/resources\/(\d+)\/schedule$/)
+    if (resourceScheduleMatch && request.method() === 'GET') {
+      const resourceId = Number(resourceScheduleMatch[1])
+      const fromDate = url.searchParams.get('from') ?? ''
+      const toDate = url.searchParams.get('to') ?? ''
+
+      await route.fulfill({
+        status: 200,
+        json: buildResourceSchedule(
+          resourceId,
+          fromDate,
+          toDate,
+          resources,
+          availabilities,
+          availabilityRules,
+          reservations,
+          options.showReservedSlotAsBookable ?? false,
+        ),
+      })
+      return
+    }
+
     if (request.method() === 'POST' && path === '/resources') {
       const body = await request.postDataJSON() as Omit<ResourceResponse, 'id' | 'isActive'>
       const resource: ResourceResponse = {
@@ -280,7 +378,7 @@ async function mockApi(
       resources = resources.map((resource) =>
         resource.id === resourceId ? { ...resource, ...body, id: resourceId } : resource,
       )
-      refreshResourceNames(resources, availabilities, reservations)
+      refreshResourceNames(resources, availabilities, availabilityRules, reservations)
       await route.fulfill({ status: 204 })
       return
     }
@@ -337,6 +435,59 @@ async function mockApi(
     if (availabilityMatch && request.method() === 'DELETE') {
       const availabilityId = Number(availabilityMatch[1])
       availabilities = availabilities.filter((availability) => availability.id !== availabilityId)
+      await route.fulfill({ status: 204 })
+      return
+    }
+
+    if (request.method() === 'GET' && path === '/availabilityrules') {
+      await route.fulfill({ status: 200, json: availabilityRules })
+      return
+    }
+
+    if (request.method() === 'POST' && path === '/availabilityrules') {
+      const body = await request.postDataJSON() as Omit<AvailabilityRuleResponse, 'id' | 'resourceName' | 'dayName'>
+      const resource = resources.find((item) => item.id === body.resourceId)
+      const availabilityRule: AvailabilityRuleResponse = {
+        id: nextAvailabilityRuleId,
+        resourceId: body.resourceId,
+        resourceName: resource?.name ?? '',
+        dayOfWeek: body.dayOfWeek,
+        dayName: dayNames[body.dayOfWeek],
+        startTime: body.startTime,
+        endTime: body.endTime,
+      }
+
+      nextAvailabilityRuleId += 1
+      availabilityRules = [...availabilityRules, availabilityRule]
+      await route.fulfill({ status: 200, json: availabilityRule })
+      return
+    }
+
+    const availabilityRuleMatch = path.match(/^\/availabilityrules\/(\d+)$/)
+    if (availabilityRuleMatch && request.method() === 'PUT') {
+      const availabilityRuleId = Number(availabilityRuleMatch[1])
+      const body = await request.postDataJSON() as Omit<AvailabilityRuleResponse, 'id' | 'resourceName' | 'dayName'>
+      const resource = resources.find((item) => item.id === body.resourceId)
+      availabilityRules = availabilityRules.map((rule) =>
+        rule.id === availabilityRuleId
+          ? {
+              ...rule,
+              resourceId: body.resourceId,
+              resourceName: resource?.name ?? '',
+              dayOfWeek: body.dayOfWeek,
+              dayName: dayNames[body.dayOfWeek],
+              startTime: body.startTime,
+              endTime: body.endTime,
+            }
+          : rule,
+      )
+      await route.fulfill({ status: 204 })
+      return
+    }
+
+    if (availabilityRuleMatch && request.method() === 'DELETE') {
+      const availabilityRuleId = Number(availabilityRuleMatch[1])
+      availabilityRules = availabilityRules.filter((rule) => rule.id !== availabilityRuleId)
       await route.fulfill({ status: 204 })
       return
     }
@@ -407,6 +558,7 @@ async function mockApi(
 function refreshResourceNames(
   resources: ResourceResponse[],
   availabilities: AvailabilityResponse[],
+  availabilityRules: AvailabilityRuleResponse[],
   reservations: ReservationResponse[],
 ) {
   for (const availability of availabilities) {
@@ -414,8 +566,112 @@ function refreshResourceNames(
     availability.resourceName = resource?.name ?? availability.resourceName
   }
 
+  for (const rule of availabilityRules) {
+    const resource = resources.find((item) => item.id === rule.resourceId)
+    rule.resourceName = resource?.name ?? rule.resourceName
+  }
+
   for (const reservation of reservations) {
     const resource = resources.find((item) => item.id === reservation.resourceId)
     reservation.resourceName = resource?.name ?? reservation.resourceName
   }
+}
+
+const dayNames = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+]
+
+function buildResourceSchedule(
+  resourceId: number,
+  fromDate: string,
+  toDate: string,
+  resources: ResourceResponse[],
+  availabilities: AvailabilityResponse[],
+  availabilityRules: AvailabilityRuleResponse[],
+  reservations: ReservationResponse[],
+  showReservedSlotAsBookable: boolean,
+): ResourceScheduleResponse {
+  const resource = resources.find((item) => item.id === resourceId)
+  const availabilitySlots = availabilities
+    .filter((availability) =>
+      availability.resourceId === resourceId &&
+      availability.startTime.slice(0, 10) >= fromDate &&
+      availability.startTime.slice(0, 10) <= toDate,
+    )
+    .map((availability) => ({
+      startTime: availability.startTime,
+      endTime: availability.endTime,
+    }))
+  const ruleSlots = buildRuleSlots(
+    resourceId,
+    fromDate,
+    toDate,
+    availabilityRules,
+  )
+  const reservedSlots = reservations
+    .filter((reservation) =>
+      reservation.resourceId === resourceId &&
+      reservation.status === 'Active' &&
+      reservation.startTime.slice(0, 10) >= fromDate &&
+      reservation.startTime.slice(0, 10) <= toDate,
+    )
+    .map((reservation) => ({
+      reservationId: reservation.id,
+      startTime: reservation.startTime,
+      endTime: reservation.endTime,
+    }))
+
+  return {
+    resourceId,
+    resourceName: resource?.name ?? '',
+    fromDate,
+    toDate,
+    bookableSlots: showReservedSlotAsBookable
+      ? [...availabilitySlots, ...ruleSlots]
+      : [...availabilitySlots, ...ruleSlots].filter(
+          (slot) =>
+            !reservedSlots.some(
+              (reservedSlot) =>
+                slot.startTime < reservedSlot.endTime &&
+                slot.endTime > reservedSlot.startTime,
+            ),
+        ),
+    reservedSlots,
+  }
+}
+
+function buildRuleSlots(
+  resourceId: number,
+  fromDate: string,
+  toDate: string,
+  availabilityRules: AvailabilityRuleResponse[],
+) {
+  const slots: BookableSlotResponse[] = []
+  const from = new Date(`${fromDate}T00:00:00`)
+  const to = new Date(`${toDate}T00:00:00`)
+
+  for (const date = new Date(from); date <= to; date.setDate(date.getDate() + 1)) {
+    const dateValue = toDateValue(date)
+
+    for (const rule of availabilityRules.filter(
+      (item) => item.resourceId === resourceId && item.dayOfWeek === date.getDay(),
+    )) {
+      slots.push({
+        startTime: `${dateValue}T${rule.startTime}:00`,
+        endTime: `${dateValue}T${rule.endTime}:00`,
+      })
+    }
+  }
+
+  return slots
+}
+
+function toDateValue(value: Date) {
+  return value.toISOString().slice(0, 10)
 }

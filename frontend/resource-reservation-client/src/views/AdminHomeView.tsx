@@ -1,5 +1,6 @@
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import type {
+  AvailabilityRuleResponse,
   AvailabilityResponse,
   ReservationResponse,
   ReservationStatus,
@@ -7,6 +8,8 @@ import type {
   UserResponse,
 } from '../api/types'
 import { AvailabilityFormSection } from '../components/AvailabilityFormSection'
+import { AvailabilityRuleFormSection } from '../components/AvailabilityRuleFormSection'
+import { AvailabilityRulesSection } from '../components/AvailabilityRulesSection'
 import { AvailabilitySection } from '../components/AvailabilitySection'
 import { HomeHeader } from '../components/HomeHeader'
 import { ReservationsSection } from '../components/ReservationsSection'
@@ -14,11 +17,12 @@ import { ResourceFormSection } from '../components/ResourceFormSection'
 import { ResourcesSection } from '../components/ResourcesSection'
 import { RoleTabs } from '../components/RoleTabs'
 
-type AdminScreen = 'resources' | 'availability' | 'reservations'
+type AdminScreen = 'resources' | 'availability' | 'weekly-schedule' | 'reservations'
 
 const adminTabs: { id: AdminScreen; label: string }[] = [
   { id: 'resources', label: 'Resources' },
   { id: 'availability', label: 'Availability' },
+  { id: 'weekly-schedule', label: 'Weekly schedule' },
   { id: 'reservations', label: 'Reservations' },
 ]
 
@@ -60,6 +64,25 @@ interface AdminHomeViewProps {
   onEditAvailability: (availability: AvailabilityResponse) => void
   onDeleteAvailability: (availability: AvailabilityResponse) => void
   onCancelAvailabilityEdit: () => void
+  availabilityRules: AvailabilityRuleResponse[]
+  availabilityRuleMessage: string
+  isLoadingAvailabilityRules: boolean
+  availabilityRuleResourceId: string
+  setAvailabilityRuleResourceId: Dispatch<SetStateAction<string>>
+  availabilityRuleDayOfWeek: string
+  setAvailabilityRuleDayOfWeek: Dispatch<SetStateAction<string>>
+  availabilityRuleStartTime: string
+  setAvailabilityRuleStartTime: Dispatch<SetStateAction<string>>
+  availabilityRuleEndTime: string
+  setAvailabilityRuleEndTime: Dispatch<SetStateAction<string>>
+  availabilityRuleValidationMessage: string
+  editingAvailabilityRuleId: number | null
+  isSavingAvailabilityRule: boolean
+  deletingAvailabilityRuleId: number | null
+  onSaveAvailabilityRule: (event: FormEvent<HTMLFormElement>) => void
+  onEditAvailabilityRule: (rule: AvailabilityRuleResponse) => void
+  onDeleteAvailabilityRule: (rule: AvailabilityRuleResponse) => void
+  onCancelAvailabilityRuleEdit: () => void
   adminReservations: ReservationResponse[]
   adminReservationsMessage: string
   isLoadingAdminReservations: boolean
@@ -106,6 +129,25 @@ export function AdminHomeView({
   onEditAvailability,
   onDeleteAvailability,
   onCancelAvailabilityEdit,
+  availabilityRules,
+  availabilityRuleMessage,
+  isLoadingAvailabilityRules,
+  availabilityRuleResourceId,
+  setAvailabilityRuleResourceId,
+  availabilityRuleDayOfWeek,
+  setAvailabilityRuleDayOfWeek,
+  availabilityRuleStartTime,
+  setAvailabilityRuleStartTime,
+  availabilityRuleEndTime,
+  setAvailabilityRuleEndTime,
+  availabilityRuleValidationMessage,
+  editingAvailabilityRuleId,
+  isSavingAvailabilityRule,
+  deletingAvailabilityRuleId,
+  onSaveAvailabilityRule,
+  onEditAvailabilityRule,
+  onDeleteAvailabilityRule,
+  onCancelAvailabilityRuleEdit,
   adminReservations,
   adminReservationsMessage,
   isLoadingAdminReservations,
@@ -156,6 +198,25 @@ export function AdminHomeView({
       }),
     [availabilities],
   )
+  const sortedAvailabilityRules = useMemo(
+    () =>
+      [...availabilityRules].sort((firstRule, secondRule) => {
+        const resourceComparison = firstRule.resourceName.localeCompare(
+          secondRule.resourceName,
+        )
+
+        if (resourceComparison !== 0) {
+          return resourceComparison
+        }
+
+        if (firstRule.dayOfWeek !== secondRule.dayOfWeek) {
+          return firstRule.dayOfWeek - secondRule.dayOfWeek
+        }
+
+        return firstRule.startTime.localeCompare(secondRule.startTime)
+      }),
+    [availabilityRules],
+  )
 
   return (
     <main className="app-shell">
@@ -177,6 +238,10 @@ export function AdminHomeView({
             <div>
               <span>{availabilities.length}</span>
               <p>Availability windows</p>
+            </div>
+            <div>
+              <span>{availabilityRules.length}</span>
+              <p>Weekly rules</p>
             </div>
             <div>
               <span>{activeReservationCount}</span>
@@ -235,6 +300,31 @@ export function AdminHomeView({
             onDeleteAvailability={onDeleteAvailability}
             onCancelAvailabilityEdit={onCancelAvailabilityEdit}
             formatDateTime={formatDateTime}
+          />
+        )}
+
+        {activeScreen === 'weekly-schedule' && (
+          <AdminWeeklyScheduleScreen
+            resources={resources}
+            availabilityRules={sortedAvailabilityRules}
+            availabilityRuleMessage={availabilityRuleMessage}
+            isLoadingAvailabilityRules={isLoadingAvailabilityRules}
+            availabilityRuleResourceId={availabilityRuleResourceId}
+            setAvailabilityRuleResourceId={setAvailabilityRuleResourceId}
+            availabilityRuleDayOfWeek={availabilityRuleDayOfWeek}
+            setAvailabilityRuleDayOfWeek={setAvailabilityRuleDayOfWeek}
+            availabilityRuleStartTime={availabilityRuleStartTime}
+            setAvailabilityRuleStartTime={setAvailabilityRuleStartTime}
+            availabilityRuleEndTime={availabilityRuleEndTime}
+            setAvailabilityRuleEndTime={setAvailabilityRuleEndTime}
+            availabilityRuleValidationMessage={availabilityRuleValidationMessage}
+            editingAvailabilityRuleId={editingAvailabilityRuleId}
+            isSavingAvailabilityRule={isSavingAvailabilityRule}
+            deletingAvailabilityRuleId={deletingAvailabilityRuleId}
+            onSaveAvailabilityRule={onSaveAvailabilityRule}
+            onEditAvailabilityRule={onEditAvailabilityRule}
+            onDeleteAvailabilityRule={onDeleteAvailabilityRule}
+            onCancelAvailabilityRuleEdit={onCancelAvailabilityRuleEdit}
           />
         )}
 
@@ -406,6 +496,82 @@ function AdminAvailabilityScreen({
         onEditAvailability={onEditAvailability}
         onDeleteAvailability={onDeleteAvailability}
         formatDateTime={formatDateTime}
+      />
+    </>
+  )
+}
+
+interface AdminWeeklyScheduleScreenProps {
+  resources: ResourceResponse[]
+  availabilityRules: AvailabilityRuleResponse[]
+  availabilityRuleMessage: string
+  isLoadingAvailabilityRules: boolean
+  availabilityRuleResourceId: string
+  setAvailabilityRuleResourceId: Dispatch<SetStateAction<string>>
+  availabilityRuleDayOfWeek: string
+  setAvailabilityRuleDayOfWeek: Dispatch<SetStateAction<string>>
+  availabilityRuleStartTime: string
+  setAvailabilityRuleStartTime: Dispatch<SetStateAction<string>>
+  availabilityRuleEndTime: string
+  setAvailabilityRuleEndTime: Dispatch<SetStateAction<string>>
+  availabilityRuleValidationMessage: string
+  editingAvailabilityRuleId: number | null
+  isSavingAvailabilityRule: boolean
+  deletingAvailabilityRuleId: number | null
+  onSaveAvailabilityRule: (event: FormEvent<HTMLFormElement>) => void
+  onEditAvailabilityRule: (rule: AvailabilityRuleResponse) => void
+  onDeleteAvailabilityRule: (rule: AvailabilityRuleResponse) => void
+  onCancelAvailabilityRuleEdit: () => void
+}
+
+function AdminWeeklyScheduleScreen({
+  resources,
+  availabilityRules,
+  availabilityRuleMessage,
+  isLoadingAvailabilityRules,
+  availabilityRuleResourceId,
+  setAvailabilityRuleResourceId,
+  availabilityRuleDayOfWeek,
+  setAvailabilityRuleDayOfWeek,
+  availabilityRuleStartTime,
+  setAvailabilityRuleStartTime,
+  availabilityRuleEndTime,
+  setAvailabilityRuleEndTime,
+  availabilityRuleValidationMessage,
+  editingAvailabilityRuleId,
+  isSavingAvailabilityRule,
+  deletingAvailabilityRuleId,
+  onSaveAvailabilityRule,
+  onEditAvailabilityRule,
+  onDeleteAvailabilityRule,
+  onCancelAvailabilityRuleEdit,
+}: AdminWeeklyScheduleScreenProps) {
+  return (
+    <>
+      <AvailabilityRuleFormSection
+        editingAvailabilityRuleId={editingAvailabilityRuleId}
+        resources={resources}
+        availabilityRuleResourceId={availabilityRuleResourceId}
+        setAvailabilityRuleResourceId={setAvailabilityRuleResourceId}
+        availabilityRuleDayOfWeek={availabilityRuleDayOfWeek}
+        setAvailabilityRuleDayOfWeek={setAvailabilityRuleDayOfWeek}
+        availabilityRuleStartTime={availabilityRuleStartTime}
+        setAvailabilityRuleStartTime={setAvailabilityRuleStartTime}
+        availabilityRuleEndTime={availabilityRuleEndTime}
+        setAvailabilityRuleEndTime={setAvailabilityRuleEndTime}
+        validationMessage={availabilityRuleValidationMessage}
+        isSavingAvailabilityRule={isSavingAvailabilityRule}
+        onSubmit={onSaveAvailabilityRule}
+        onCancelEdit={onCancelAvailabilityRuleEdit}
+      />
+
+      <AvailabilityRulesSection
+        availabilityRules={availabilityRules}
+        isLoadingAvailabilityRules={isLoadingAvailabilityRules}
+        availabilityRuleMessage={availabilityRuleMessage}
+        deletingAvailabilityRuleId={deletingAvailabilityRuleId}
+        onEditAvailabilityRule={onEditAvailabilityRule}
+        onDeleteAvailabilityRule={onDeleteAvailabilityRule}
       />
     </>
   )

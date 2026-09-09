@@ -43,6 +43,26 @@ export interface UpdateResourceRequest extends CreateResourceRequest {
   isActive: boolean
 }
 
+export interface BookableSlotResponse {
+  startTime: string
+  endTime: string
+}
+
+export interface ReservedSlotResponse {
+  reservationId: number
+  startTime: string
+  endTime: string
+}
+
+export interface ResourceScheduleResponse {
+  resourceId: number
+  resourceName: string
+  fromDate: string
+  toDate: string
+  bookableSlots: BookableSlotResponse[]
+  reservedSlots: ReservedSlotResponse[]
+}
+
 export interface AvailabilityResponse {
   id: number
   resourceId: number
@@ -58,6 +78,25 @@ export interface CreateAvailabilityRequest {
 }
 
 export type UpdateAvailabilityRequest = CreateAvailabilityRequest
+
+export interface AvailabilityRuleResponse {
+  id: number
+  resourceId: number
+  resourceName: string
+  dayOfWeek: number
+  dayName: string
+  startTime: string
+  endTime: string
+}
+
+export interface CreateAvailabilityRuleRequest {
+  resourceId: number
+  dayOfWeek: number
+  startTime: string
+  endTime: string
+}
+
+export type UpdateAvailabilityRuleRequest = CreateAvailabilityRuleRequest
 
 export interface ReservationResponse {
   id: number

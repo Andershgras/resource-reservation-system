@@ -5,11 +5,18 @@ import {
   getAvailabilities,
   updateAvailability,
 } from './api/availabilitiesApi'
+import {
+  createAvailabilityRule,
+  deleteAvailabilityRule,
+  getAvailabilityRules,
+  updateAvailabilityRule,
+} from './api/availabilityRulesApi'
 import { login, register } from './api/authApi'
 import { ApiError } from './api/client'
 import {
   createResource,
   deleteResource,
+  getResourceSchedule,
   getResources,
   updateResource,
 } from './api/resourcesApi'
@@ -21,7 +28,10 @@ import {
 } from './api/reservationsApi'
 import type {
   AvailabilityResponse,
+  AvailabilityRuleResponse,
+  BookableSlotResponse,
   ReservationResponse,
+  ResourceScheduleResponse,
   ResourceResponse,
   UserResponse,
 } from './api/types'
@@ -82,16 +92,51 @@ function App() {
   const [deletingAvailabilityId, setDeletingAvailabilityId] = useState<
     number | null
   >(null)
-  const [reservingAvailabilityId, setReservingAvailabilityId] = useState<
+  const [availabilityRules, setAvailabilityRules] = useState<
+    AvailabilityRuleResponse[]
+  >([])
+  const [availabilityRuleMessage, setAvailabilityRuleMessage] = useState('')
+  const [isLoadingAvailabilityRules, setIsLoadingAvailabilityRules] =
+    useState(false)
+  const [availabilityRuleResourceId, setAvailabilityRuleResourceId] =
+    useState('')
+  const [availabilityRuleDayOfWeek, setAvailabilityRuleDayOfWeek] = useState('')
+  const [availabilityRuleStartTime, setAvailabilityRuleStartTime] = useState('')
+  const [availabilityRuleEndTime, setAvailabilityRuleEndTime] = useState('')
+  const [availabilityRuleValidationMessage, setAvailabilityRuleValidationMessage] =
+    useState('')
+  const [editingAvailabilityRuleId, setEditingAvailabilityRuleId] = useState<
     number | null
   >(null)
-  const [selectedReservationAvailabilityId, setSelectedReservationAvailabilityId] =
-    useState<number | null>(null)
+  const [isSavingAvailabilityRule, setIsSavingAvailabilityRule] =
+    useState(false)
+  const [deletingAvailabilityRuleId, setDeletingAvailabilityRuleId] = useState<
+    number | null
+  >(null)
   const [reservationStartTime, setReservationStartTime] = useState('')
   const [reservationEndTime, setReservationEndTime] = useState('')
   const [reservationValidationMessage, setReservationValidationMessage] =
     useState('')
   const [reservationMessage, setReservationMessage] = useState('')
+  const [selectedScheduleResourceId, setSelectedScheduleResourceId] =
+    useState('')
+  const [scheduleFromDate, setScheduleFromDate] = useState(() =>
+    toDateInputValue(new Date()),
+  )
+  const [scheduleToDate, setScheduleToDate] = useState(() =>
+    toDateInputValue(addDays(new Date(), 6)),
+  )
+  const [resourceSchedule, setResourceSchedule] =
+    useState<ResourceScheduleResponse | null>(null)
+  const [resourceScheduleMessage, setResourceScheduleMessage] = useState('')
+  const [isLoadingResourceSchedule, setIsLoadingResourceSchedule] =
+    useState(false)
+  const [selectedScheduleSlotKey, setSelectedScheduleSlotKey] = useState<
+    string | null
+  >(null)
+  const [reservingScheduleSlotKey, setReservingScheduleSlotKey] = useState<
+    string | null
+  >(null)
   const [reservations, setReservations] = useState<ReservationResponse[]>([])
   const [myReservationsMessage, setMyReservationsMessage] = useState('')
   const [isLoadingReservations, setIsLoadingReservations] = useState(false)
@@ -118,13 +163,14 @@ function App() {
     let isActive = true
 
     void loadResources(() => isActive)
-    void loadAvailabilities(() => isActive)
 
     if (currentUser.role === 'User') {
       void loadMyReservations(() => isActive)
     }
 
     if (currentUser.role === 'Admin') {
+      void loadAvailabilities(() => isActive)
+      void loadAvailabilityRules(() => isActive)
       void loadAdminReservations(() => isActive)
     }
 
@@ -175,6 +221,27 @@ function App() {
     }
   }
 
+  async function loadAvailabilityRules(shouldUpdate = () => true) {
+    setIsLoadingAvailabilityRules(true)
+    setAvailabilityRuleMessage('')
+
+    try {
+      const loadedAvailabilityRules = await getAvailabilityRules()
+
+      if (shouldUpdate()) {
+        setAvailabilityRules(loadedAvailabilityRules)
+      }
+    } catch (error) {
+      if (shouldUpdate()) {
+        setAvailabilityRuleMessage(getErrorMessage(error))
+      }
+    } finally {
+      if (shouldUpdate()) {
+        setIsLoadingAvailabilityRules(false)
+      }
+    }
+  }
+
   async function loadMyReservations(shouldUpdate = () => true) {
     setIsLoadingReservations(true)
     setMyReservationsMessage('')
@@ -217,6 +284,48 @@ function App() {
     }
   }
 
+  async function loadResourceSchedule(
+    resourceId = selectedScheduleResourceId,
+    fromDate = scheduleFromDate,
+    toDate = scheduleToDate,
+  ) {
+    setResourceScheduleMessage('')
+    setReservationMessage('')
+    setReservationValidationMessage('')
+
+    if (!resourceId) {
+      setResourceScheduleMessage('Choose a resource before loading its schedule.')
+      return
+    }
+
+    if (!fromDate || !toDate) {
+      setResourceScheduleMessage('Select a from date and to date.')
+      return
+    }
+
+    if (toDate < fromDate) {
+      setResourceScheduleMessage('To date must be on or after from date.')
+      return
+    }
+
+    setIsLoadingResourceSchedule(true)
+
+    try {
+      const loadedSchedule = await getResourceSchedule(
+        Number(resourceId),
+        fromDate,
+        toDate,
+      )
+
+      setResourceSchedule(loadedSchedule)
+      resetScheduleSlotSelection()
+    } catch (error) {
+      setResourceScheduleMessage(getErrorMessage(error))
+    } finally {
+      setIsLoadingResourceSchedule(false)
+    }
+  }
+
   async function handleSaveResource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setResourceMessage('')
@@ -241,6 +350,11 @@ function App() {
       const loadedResources = await getResources()
 
       setResources(loadedResources)
+
+      if (currentUser?.role === 'Admin') {
+        setAvailabilityRules(await getAvailabilityRules())
+      }
+
       resetResourceForm()
       setResourceMessage(editingResourceId ? 'Resource updated.' : 'Resource created.')
     } catch (error) {
@@ -314,6 +428,10 @@ function App() {
 
       setResources(loadedResources)
 
+      if (currentUser?.role === 'Admin') {
+        setAvailabilityRules(await getAvailabilityRules())
+      }
+
       if (editingResourceId === resource.id) {
         resetResourceForm()
       }
@@ -323,6 +441,55 @@ function App() {
       setResourceMessage(getErrorMessage(error))
     } finally {
       setDeletingResourceId(null)
+    }
+  }
+
+  async function handleSaveAvailabilityRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAvailabilityRuleMessage('')
+    setAvailabilityRuleValidationMessage('')
+
+    const validationMessage = validateAvailabilityRuleForm(
+      availabilityRuleResourceId,
+      availabilityRuleDayOfWeek,
+      availabilityRuleStartTime,
+      availabilityRuleEndTime,
+    )
+
+    if (validationMessage) {
+      setAvailabilityRuleValidationMessage(validationMessage)
+      return
+    }
+
+    setIsSavingAvailabilityRule(true)
+
+    try {
+      const request = {
+        resourceId: Number(availabilityRuleResourceId),
+        dayOfWeek: Number(availabilityRuleDayOfWeek),
+        startTime: availabilityRuleStartTime,
+        endTime: availabilityRuleEndTime,
+      }
+
+      if (editingAvailabilityRuleId) {
+        await updateAvailabilityRule(editingAvailabilityRuleId, request)
+      } else {
+        await createAvailabilityRule(request)
+      }
+
+      const loadedAvailabilityRules = await getAvailabilityRules()
+
+      setAvailabilityRules(loadedAvailabilityRules)
+      resetAvailabilityRuleForm()
+      setAvailabilityRuleMessage(
+        editingAvailabilityRuleId
+          ? 'Weekly schedule updated.'
+          : 'Weekly schedule created.',
+      )
+    } catch (error) {
+      setAvailabilityRuleMessage(getErrorMessage(error))
+    } finally {
+      setIsSavingAvailabilityRule(false)
     }
   }
 
@@ -393,35 +560,102 @@ function App() {
     setAvailabilityValidationMessage('')
   }
 
+  function handleEditAvailabilityRule(rule: AvailabilityRuleResponse) {
+    setEditingAvailabilityRuleId(rule.id)
+    setAvailabilityRuleResourceId(rule.resourceId.toString())
+    setAvailabilityRuleDayOfWeek(rule.dayOfWeek.toString())
+    setAvailabilityRuleStartTime(toTimeInputValue(rule.startTime))
+    setAvailabilityRuleEndTime(toTimeInputValue(rule.endTime))
+    setAvailabilityRuleMessage('')
+    setAvailabilityRuleValidationMessage('')
+  }
+
+  async function deleteAvailabilityRuleAfterConfirmation(
+    rule: AvailabilityRuleResponse,
+  ) {
+    setAvailabilityRuleMessage('')
+    setDeletingAvailabilityRuleId(rule.id)
+
+    try {
+      await deleteAvailabilityRule(rule.id)
+      const loadedAvailabilityRules = await getAvailabilityRules()
+
+      setAvailabilityRules(loadedAvailabilityRules)
+
+      if (editingAvailabilityRuleId === rule.id) {
+        resetAvailabilityRuleForm()
+      }
+
+      setAvailabilityRuleMessage('Weekly schedule deleted.')
+    } catch (error) {
+      setAvailabilityRuleMessage(getErrorMessage(error))
+    } finally {
+      setDeletingAvailabilityRuleId(null)
+    }
+  }
+
+  function handleDeleteAvailabilityRule(rule: AvailabilityRuleResponse) {
+    setConfirmationRequest({
+      title: 'Delete weekly schedule',
+      message: `Delete ${rule.dayName} schedule for "${rule.resourceName}"?`,
+      confirmLabel: 'Delete weekly schedule',
+      onConfirm: () => deleteAvailabilityRuleAfterConfirmation(rule),
+    })
+  }
+
+  function resetAvailabilityRuleForm() {
+    setEditingAvailabilityRuleId(null)
+    setAvailabilityRuleResourceId('')
+    setAvailabilityRuleDayOfWeek('')
+    setAvailabilityRuleStartTime('')
+    setAvailabilityRuleEndTime('')
+    setAvailabilityRuleValidationMessage('')
+  }
+
   function resetLoadedData() {
     setResources([])
     setResourceMessage('')
     setAvailabilities([])
     setAvailabilityMessage('')
+    setAvailabilityRules([])
+    setAvailabilityRuleMessage('')
     setReservationMessage('')
-    resetReservationTimeSelection()
+    setResourceSchedule(null)
+    setResourceScheduleMessage('')
+    setSelectedScheduleResourceId('')
+    resetScheduleSlotSelection()
     setReservations([])
     setMyReservationsMessage('')
     setAdminReservations([])
     setAdminReservationsMessage('')
   }
 
-  function handleSelectAvailabilityForReservation(
-    availability: AvailabilityResponse,
-  ) {
-    setSelectedReservationAvailabilityId(availability.id)
-    setReservationStartTime(toDateTimeLocalValue(availability.startTime))
-    setReservationEndTime(toDateTimeLocalValue(availability.endTime))
+  function handleSelectResourceForSchedule(resource: ResourceResponse) {
+    setSelectedScheduleResourceId(resource.id.toString())
+    void loadResourceSchedule(resource.id.toString())
+  }
+
+  function handleSelectScheduleSlot(slot: BookableSlotResponse) {
+    setSelectedScheduleSlotKey(getSlotKey(slot))
+    setReservationStartTime(toDateTimeLocalValue(slot.startTime))
+    setReservationEndTime(toDateTimeLocalValue(slot.endTime))
     setReservationMessage('')
     setReservationValidationMessage('')
   }
 
-  async function handleCreateReservation(availability: AvailabilityResponse) {
+  async function handleCreateReservationFromScheduleSlot(
+    slot: BookableSlotResponse,
+  ) {
     setReservationMessage('')
     setReservationValidationMessage('')
 
-    const validationMessage = validateReservationTimeSelection(
-      availability,
+    if (!resourceSchedule) {
+      setReservationValidationMessage('Choose a resource schedule first.')
+      return
+    }
+
+    const validationMessage = validateReservationSlotSelection(
+      slot,
       reservationStartTime,
       reservationEndTime,
     )
@@ -431,25 +665,28 @@ function App() {
       return
     }
 
-    setReservingAvailabilityId(availability.id)
+    const slotKey = getSlotKey(slot)
+    setReservingScheduleSlotKey(slotKey)
 
     try {
       await createReservation({
-        resourceId: availability.resourceId,
+        resourceId: resourceSchedule.resourceId,
         startTime: reservationStartTime,
         endTime: reservationEndTime,
       })
       const loadedReservations = await getMyReservations()
-      const loadedAvailabilities = await getAvailabilities()
 
       setReservations(loadedReservations)
-      setAvailabilities(loadedAvailabilities)
-      resetReservationTimeSelection()
+      await loadResourceSchedule(
+        resourceSchedule.resourceId.toString(),
+        scheduleFromDate,
+        scheduleToDate,
+      )
       setReservationMessage('Reservation created.')
     } catch (error) {
       setReservationMessage(getErrorMessage(error))
     } finally {
-      setReservingAvailabilityId(null)
+      setReservingScheduleSlotKey(null)
     }
   }
 
@@ -474,8 +711,8 @@ function App() {
     }
   }
 
-  function resetReservationTimeSelection() {
-    setSelectedReservationAvailabilityId(null)
+  function resetScheduleSlotSelection() {
+    setSelectedScheduleSlotKey(null)
     setReservationStartTime('')
     setReservationEndTime('')
     setReservationValidationMessage('')
@@ -617,6 +854,27 @@ function App() {
             onEditAvailability={handleEditAvailability}
             onDeleteAvailability={handleDeleteAvailability}
             onCancelAvailabilityEdit={resetAvailabilityForm}
+            availabilityRules={availabilityRules}
+            availabilityRuleMessage={availabilityRuleMessage}
+            isLoadingAvailabilityRules={isLoadingAvailabilityRules}
+            availabilityRuleResourceId={availabilityRuleResourceId}
+            setAvailabilityRuleResourceId={setAvailabilityRuleResourceId}
+            availabilityRuleDayOfWeek={availabilityRuleDayOfWeek}
+            setAvailabilityRuleDayOfWeek={setAvailabilityRuleDayOfWeek}
+            availabilityRuleStartTime={availabilityRuleStartTime}
+            setAvailabilityRuleStartTime={setAvailabilityRuleStartTime}
+            availabilityRuleEndTime={availabilityRuleEndTime}
+            setAvailabilityRuleEndTime={setAvailabilityRuleEndTime}
+            availabilityRuleValidationMessage={
+              availabilityRuleValidationMessage
+            }
+            editingAvailabilityRuleId={editingAvailabilityRuleId}
+            isSavingAvailabilityRule={isSavingAvailabilityRule}
+            deletingAvailabilityRuleId={deletingAvailabilityRuleId}
+            onSaveAvailabilityRule={handleSaveAvailabilityRule}
+            onEditAvailabilityRule={handleEditAvailabilityRule}
+            onDeleteAvailabilityRule={handleDeleteAvailabilityRule}
+            onCancelAvailabilityRuleEdit={resetAvailabilityRuleForm}
             adminReservations={adminReservations}
             adminReservationsMessage={adminReservationsMessage}
             isLoadingAdminReservations={isLoadingAdminReservations}
@@ -642,26 +900,33 @@ function App() {
           resources={resources}
           resourceMessage={resourceMessage}
           isLoadingResources={isLoadingResources}
-          availabilities={availabilities}
-          availabilityMessage={availabilityMessage}
-          isLoadingAvailabilities={isLoadingAvailabilities}
           reservations={reservations}
           reservationMessage={reservationMessage}
           reservationValidationMessage={reservationValidationMessage}
+          selectedScheduleResourceId={selectedScheduleResourceId}
+          scheduleFromDate={scheduleFromDate}
+          setScheduleFromDate={setScheduleFromDate}
+          scheduleToDate={scheduleToDate}
+          setScheduleToDate={setScheduleToDate}
+          resourceSchedule={resourceSchedule}
+          resourceScheduleMessage={resourceScheduleMessage}
+          isLoadingResourceSchedule={isLoadingResourceSchedule}
+          selectedScheduleSlotKey={selectedScheduleSlotKey}
+          reservingScheduleSlotKey={reservingScheduleSlotKey}
           myReservationsMessage={myReservationsMessage}
           isLoadingReservations={isLoadingReservations}
-          reservingAvailabilityId={reservingAvailabilityId}
-          selectedReservationAvailabilityId={selectedReservationAvailabilityId}
           reservationStartTime={reservationStartTime}
           setReservationStartTime={setReservationStartTime}
           reservationEndTime={reservationEndTime}
           setReservationEndTime={setReservationEndTime}
           cancellingReservationId={cancellingReservationId}
-          onReserve={(availability) => void handleCreateReservation(availability)}
-          onSelectAvailabilityForReservation={
-            handleSelectAvailabilityForReservation
+          onSelectResourceForSchedule={handleSelectResourceForSchedule}
+          onLoadResourceSchedule={() => void loadResourceSchedule()}
+          onSelectScheduleSlot={handleSelectScheduleSlot}
+          onCancelScheduleSlotSelection={resetScheduleSlotSelection}
+          onReserveScheduleSlot={(slot) =>
+            void handleCreateReservationFromScheduleSlot(slot)
           }
-          onCancelReservationTimeSelection={resetReservationTimeSelection}
           onCancelReservation={handleCancelReservation}
           formatDateTime={formatDateTime}
           formatDateTimeInput={toDateTimeLocalValue}
@@ -760,6 +1025,23 @@ function toDateTimeLocalValue(value: string) {
   return offsetDate.toISOString().slice(0, 16)
 }
 
+function toDateInputValue(value: Date) {
+  const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60000)
+
+  return offsetDate.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, days: number) {
+  const date = new Date(value)
+  date.setDate(date.getDate() + days)
+
+  return date
+}
+
+function toTimeInputValue(value: string) {
+  return value.slice(0, 5)
+}
+
 function validateAvailabilityForm(
   resourceId: string,
   startTime: string,
@@ -784,8 +1066,37 @@ function validateAvailabilityForm(
   return ''
 }
 
-function validateReservationTimeSelection(
-  availability: AvailabilityResponse,
+function validateAvailabilityRuleForm(
+  resourceId: string,
+  dayOfWeek: string,
+  startTime: string,
+  endTime: string,
+) {
+  if (!resourceId) {
+    return 'Select a resource before saving a weekly schedule.'
+  }
+
+  if (!dayOfWeek) {
+    return 'Select a weekday before saving a weekly schedule.'
+  }
+
+  if (!startTime) {
+    return 'Enter a start time before saving a weekly schedule.'
+  }
+
+  if (!endTime) {
+    return 'Enter an end time before saving a weekly schedule.'
+  }
+
+  if (endTime <= startTime) {
+    return 'End time must be after start time.'
+  }
+
+  return ''
+}
+
+function validateReservationSlotSelection(
+  slot: BookableSlotResponse,
   startTime: string,
   endTime: string,
 ) {
@@ -799,8 +1110,8 @@ function validateReservationTimeSelection(
 
   const selectedStartTime = new Date(startTime).getTime()
   const selectedEndTime = new Date(endTime).getTime()
-  const availabilityStartTime = new Date(availability.startTime).getTime()
-  const availabilityEndTime = new Date(availability.endTime).getTime()
+  const slotStartTime = new Date(slot.startTime).getTime()
+  const slotEndTime = new Date(slot.endTime).getTime()
 
   if (Number.isNaN(selectedStartTime) || Number.isNaN(selectedEndTime)) {
     return 'Select valid reservation start and end times.'
@@ -810,14 +1121,15 @@ function validateReservationTimeSelection(
     return 'Reservation end time must be after start time.'
   }
 
-  if (
-    selectedStartTime < availabilityStartTime ||
-    selectedEndTime > availabilityEndTime
-  ) {
-    return 'Reservation time must stay inside the selected availability window.'
+  if (selectedStartTime < slotStartTime || selectedEndTime > slotEndTime) {
+    return 'Reservation time must stay inside the selected bookable time.'
   }
 
   return ''
+}
+
+function getSlotKey(slot: BookableSlotResponse) {
+  return `${slot.startTime}-${slot.endTime}`
 }
 
 export default App

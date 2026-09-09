@@ -105,6 +105,167 @@ public class ResourcesControllerTests
         Assert.NotNull(savedReservation);
     }
 
+    [Fact]
+    public async Task GetResourceSchedule_WhenResourceDoesNotExist_ReturnsNotFound()
+    {
+        await using var context = CreateContext();
+        var controller = new ResourcesController(context);
+
+        var result = await controller.GetResourceSchedule(
+            999,
+            new DateOnly(2030, 1, 16),
+            new DateOnly(2030, 1, 16));
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        AssertApiError(notFound, "Resource not found.");
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenDateRangeIsInvalid_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = new ResourcesController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 17),
+            new DateOnly(2030, 1, 16));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(badRequest, "To date must be on or after from date.");
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenRuleHasActiveReservation_ReturnsRemainingBookableSlots()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            ReservationStatuses.Active,
+            new DateTime(2030, 1, 16, 10, 0, 0),
+            new DateTime(2030, 1, 16, 11, 0, 0));
+        var controller = new ResourcesController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 16),
+            new DateOnly(2030, 1, 16));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
+
+        Assert.Equal(resource.Id, response.ResourceId);
+        Assert.Equal("Meeting Room", response.ResourceName);
+        Assert.Collection(
+            response.BookableSlots,
+            first =>
+            {
+                Assert.Equal(new DateTime(2030, 1, 16, 8, 0, 0), first.StartTime);
+                Assert.Equal(new DateTime(2030, 1, 16, 10, 0, 0), first.EndTime);
+            },
+            second =>
+            {
+                Assert.Equal(new DateTime(2030, 1, 16, 11, 0, 0), second.StartTime);
+                Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), second.EndTime);
+            });
+        var reservedSlot = Assert.Single(response.ReservedSlots);
+        Assert.Equal(reservation.Id, reservedSlot.ReservationId);
+        Assert.Equal(new DateTime(2030, 1, 16, 10, 0, 0), reservedSlot.StartTime);
+        Assert.Equal(new DateTime(2030, 1, 16, 11, 0, 0), reservedSlot.EndTime);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenCancelledReservationOverlaps_ReturnsFullRuleSlot()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        await SeedReservationAsync(
+            context,
+            resource.Id,
+            ReservationStatuses.Cancelled,
+            new DateTime(2030, 1, 16, 10, 0, 0),
+            new DateTime(2030, 1, 16, 11, 0, 0));
+        var controller = new ResourcesController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 16),
+            new DateOnly(2030, 1, 16));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
+        var bookableSlot = Assert.Single(response.BookableSlots);
+
+        Assert.Equal(new DateTime(2030, 1, 16, 8, 0, 0), bookableSlot.StartTime);
+        Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), bookableSlot.EndTime);
+        Assert.Empty(response.ReservedSlots);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenOneOffAvailabilityExists_ReturnsBookableSlot()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityAsync(
+            context,
+            resource.Id,
+            new DateTime(2030, 1, 17, 14, 0, 0),
+            new DateTime(2030, 1, 17, 15, 0, 0));
+        var controller = new ResourcesController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 17),
+            new DateOnly(2030, 1, 17));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
+        var bookableSlot = Assert.Single(response.BookableSlots);
+
+        Assert.Equal(new DateTime(2030, 1, 17, 14, 0, 0), bookableSlot.StartTime);
+        Assert.Equal(new DateTime(2030, 1, 17, 15, 0, 0), bookableSlot.EndTime);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenNoRuleMatchesDate_ReturnsNoBookableSlots()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var controller = new ResourcesController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 17),
+            new DateOnly(2030, 1, 17));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
+
+        Assert.Empty(response.BookableSlots);
+        Assert.Empty(response.ReservedSlots);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -130,17 +291,60 @@ public class ResourcesControllerTests
         return resource;
     }
 
+    private static async Task<AvailabilityRule> SeedAvailabilityRuleAsync(
+        AppDbContext context,
+        int resourceId,
+        DayOfWeek dayOfWeek,
+        TimeOnly startTime,
+        TimeOnly endTime)
+    {
+        var rule = new AvailabilityRule
+        {
+            ResourceId = resourceId,
+            DayOfWeek = dayOfWeek,
+            StartTime = startTime,
+            EndTime = endTime
+        };
+
+        context.AvailabilityRules.Add(rule);
+        await context.SaveChangesAsync();
+
+        return rule;
+    }
+
+    private static async Task<Availability> SeedAvailabilityAsync(
+        AppDbContext context,
+        int resourceId,
+        DateTime startTime,
+        DateTime endTime)
+    {
+        var availability = new Availability
+        {
+            ResourceId = resourceId,
+            StartTime = startTime,
+            EndTime = endTime
+        };
+
+        context.Availabilities.Add(availability);
+        await context.SaveChangesAsync();
+
+        return availability;
+    }
+
     private static async Task<Reservation> SeedReservationAsync(
         AppDbContext context,
         int resourceId,
-        string status = ReservationStatuses.Active)
+        string status = ReservationStatuses.Active,
+        DateTime? startTime = null,
+        DateTime? endTime = null)
     {
+        var reservationStartTime = startTime ?? DateTime.UtcNow.AddDays(-2);
         var reservation = new Reservation
         {
             ResourceId = resourceId,
             UserId = 1,
-            StartTime = DateTime.UtcNow.AddDays(-2),
-            EndTime = DateTime.UtcNow.AddDays(-2).AddHours(1),
+            StartTime = reservationStartTime,
+            EndTime = endTime ?? reservationStartTime.AddHours(1),
             Status = status
         };
 
