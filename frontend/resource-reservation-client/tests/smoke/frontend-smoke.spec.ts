@@ -370,6 +370,180 @@ test('the session ends when the token lifetime runs out', async ({ page }) => {
   await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
 })
 
+test('each admin screen has its own address that survives a reload', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+
+  await page.goto('/')
+  await expect(page).toHaveURL('/admin/resources')
+
+  await selectRoleTab(page, 'Weekly schedule')
+  await expect(page).toHaveURL('/admin/weekly-schedule')
+  await expect(sectionByHeading(page, 'Create weekly schedule')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Weekly schedule' })).toHaveAttribute('aria-current', 'page')
+
+  await page.reload()
+
+  await expect(sectionByHeading(page, 'Create weekly schedule')).toBeVisible()
+})
+
+test('the back button returns to the previous screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/resources')
+
+  await selectRoleTab(page, 'Reservations')
+  await selectRoleTab(page, 'Availability')
+  await page.goBack()
+
+  await expect(page).toHaveURL('/admin/reservations')
+  await expect(sectionByHeading(page, 'Reservations')).toBeVisible()
+})
+
+test('a user can open my reservations directly', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/my-reservations')
+
+  await expect(sectionByHeading(page, 'My reservations')).toBeVisible()
+})
+
+test('an address outside the workspace opens its first screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/admin/reservations')
+
+  await expect(page).toHaveURL('/book')
+  await expect(sectionByHeading(page, 'Book a resource')).toBeVisible()
+})
+
+test('logging in returns to the page that was asked for', async ({ page }) => {
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/admin/reservations')
+  await expect(page).toHaveURL('/login?returnTo=%2Fadmin%2Freservations')
+  await login(page, 'admin@example.com', 'Admin1234')
+
+  await expect(page).toHaveURL('/admin/reservations')
+  await expect(sectionByHeading(page, 'Reservations')).toBeVisible()
+})
+
+test('after a session expires, logging in again returns to the same screen', async ({ page }) => {
+  await page.clock.install()
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await login(page, 'admin@example.com', 'Admin1234')
+  await selectRoleTab(page, 'Weekly schedule')
+
+  await page.clock.fastForward('02:01:00')
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+  await login(page, 'admin@example.com', 'Admin1234')
+
+  await expect(page).toHaveURL('/admin/weekly-schedule')
+})
+
+test('logging out returns to the login screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/reservations')
+
+  await page.getByRole('button', { name: 'Logout' }).click()
+
+  await expect(page).toHaveURL('/login')
+  await expect(page.getByText('You have been logged out.')).toBeVisible()
+})
+
+test('admin reservation filters are kept in the address', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/reservations')
+
+  const reservations = sectionByHeading(page, 'Reservations')
+  await expect(reservations.getByRole('listitem')).toHaveCount(1)
+  await reservations.getByLabel('Status').selectOption('Cancelled')
+  await expect(page).toHaveURL('/admin/reservations?status=Cancelled')
+  await page.reload()
+
+  await expect(reservations.getByLabel('Status')).toHaveValue('Cancelled')
+  await expect(reservations.getByText('No reservations match the selected filters.')).toBeVisible()
+})
+
+test('a booking link opens the same schedule', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/book?resource=1&from=2030-01-15&to=2030-01-15')
+
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await expect(scheduleSection.getByLabel('From')).toHaveValue('2030-01-15')
+  await expect(scheduleSection.getByLabel('To')).toHaveValue('2030-01-15')
+  // The only window that day is fully booked.
+  await expect(scheduleSection.getByText('No bookable times found.')).toBeVisible()
+})
+
+test('an invalid booking link falls back to the defaults', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/book?resource=999&from=2030-02-30&to=nonsense')
+
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await expect(scheduleSection.getByText('Choose a resource to see bookable times.')).toBeVisible()
+  await expect(scheduleSection.getByLabel('From')).not.toHaveValue('2030-02-30')
+  await expect(sectionByHeading(page, 'Book a resource').getByText('Reserved Test Room')).toBeVisible()
+})
+
+test('the back button returns to the previous booking selection', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/book?resource=1&from=2030-01-15&to=2030-01-15')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await expect(scheduleSection.getByText('No bookable times found.')).toBeVisible()
+
+  await scheduleSection.getByLabel('To').fill('2030-01-17')
+  await scheduleSection.getByRole('button', { name: 'Update schedule' }).click()
+  await expect(page).toHaveURL('/book?resource=1&from=2030-01-15&to=2030-01-17')
+  await page.goBack()
+
+  await expect(page).toHaveURL('/book?resource=1&from=2030-01-15&to=2030-01-15')
+  await expect(scheduleSection.getByLabel('To')).toHaveValue('2030-01-15')
+})
+
+// Audit L2: the schedule kept showing a cancelled reservation as reserved until
+// it was reloaded by hand.
+test('cancelling a reservation frees its time in the booking schedule', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/book?resource=1&from=2030-01-15&to=2030-01-15')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  await expect(scheduleSection.getByText('No bookable times found.')).toBeVisible()
+
+  await selectRoleTab(page, 'My reservations')
+  await sectionByHeading(page, 'My reservations').getByRole('button', { name: 'Cancel' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await expect(page.getByText('Reservation cancelled.')).toBeVisible()
+  await selectRoleTab(page, 'Book resource')
+
+  // The tab remembers the selection, and the schedule has already reloaded.
+  await expect(page).toHaveURL('/book?resource=1&from=2030-01-15&to=2030-01-15')
+  await expect(scheduleSection.getByRole('button', { name: 'Choose time' })).toBeVisible()
+  await expect(scheduleSection.getByLabel('Reserved times')).toHaveCount(0)
+})
+
+test('an unknown address shows a not-found page', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/no-such-page')
+
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
+  await page.getByRole('link', { name: 'Go to the start page' }).click()
+  await expect(page).toHaveURL('/login')
+})
+
 const sessionExpiredMessage = 'Your session has expired. Please log in again.'
 
 // Mirrors the API's login response. Tokens last two hours.
@@ -386,21 +560,18 @@ function authResponse(token: string, user: UserResponse) {
 
 // Stores a session as an earlier visit would have. A null expiry mimics a
 // session saved before expiry times were stored.
-async function storeSession(page: Page, expiresAt: number | null) {
-  await page.addInitScript((storedExpiresAt) => {
+async function storeSession(page: Page, expiresAt: number | null, role: UserRole = 'User') {
+  await page.addInitScript(({ storedExpiresAt, storedRole }) => {
     localStorage.clear()
-    localStorage.setItem('resource-reservation-auth-token', 'user-token')
-    localStorage.setItem('resource-reservation-auth-user', JSON.stringify({
-      id: 2,
-      name: 'Smoke Test User',
-      email: 'smoke.user@example.com',
-      role: 'User',
-    }))
+    localStorage.setItem('resource-reservation-auth-token', `${storedRole.toLowerCase()}-token`)
+    localStorage.setItem('resource-reservation-auth-user', JSON.stringify(storedRole === 'Admin'
+      ? { id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' }
+      : { id: 2, name: 'Smoke Test User', email: 'smoke.user@example.com', role: 'User' }))
 
     if (storedExpiresAt !== null) {
       localStorage.setItem('resource-reservation-auth-expires-at', String(storedExpiresAt))
     }
-  }, expiresAt)
+  }, { storedExpiresAt: expiresAt, storedRole: role })
 }
 
 // Mirrors the API's RFC 9457 problem details responses.
@@ -431,7 +602,9 @@ function sectionByHeading(page: Page, heading: string) {
 }
 
 async function selectRoleTab(page: Page, tabName: string) {
-  await page.getByRole('button', { name: tabName, exact: true }).click()
+  await page.getByRole('navigation', { name: 'Section navigation' })
+    .getByRole('link', { name: tabName, exact: true })
+    .click()
 }
 
 async function login(page: Page, email: string, password: string) {
@@ -444,6 +617,8 @@ async function mockApi(
   page: Page,
   options: {
     seedOverlapReservation?: boolean
+    // The seeded reservation belongs to the smoke test user instead of someone else.
+    seededReservationIsOwn?: boolean
     showReservedSlotAsBookable?: boolean
   } = {},
 ) {
@@ -495,7 +670,7 @@ async function mockApi(
           id: 1,
           resourceId: 1,
           resourceName: 'Reserved Test Room',
-          userId: 99,
+          userId: options.seededReservationIsOwn ? 2 : 99,
           startTime: '2030-01-15T09:00:00',
           endTime: '2030-01-15T11:00:00',
           status: 'Active',

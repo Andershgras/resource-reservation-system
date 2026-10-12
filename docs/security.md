@@ -74,6 +74,17 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 - **Production:** secrets are supplied through the hosting platform ([configuration](configuration.md#secrets)).
 - **Never run production in the `Development` environment.**
 
+## Dependency advisories
+
+`npm audit` in `frontend/resource-reservation-client` reports the advisories below, as of 13 October 2026. Both packages are build and test tooling only. `npm ls --omit=dev` shows neither in the production dependency tree, and neither is in the built app that browsers download.
+
+| Package | Advisories | Pulled in by | Exploit conditions | Fix |
+|---|---|---|---|---|
+| `brace-expansion` 5.0.9 | [GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7) (high): deeply nested braces exhaust the stack. [GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p) (high): recursion in `parseCommaParts` exhausts the stack. [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr) (medium): quadratic time on `{a},b}`-shaped input. | ESLint, through `minimatch` | An attacker must control a glob pattern that is expanded. Here, the only patterns are file globs in `eslint.config.js` and on the ESLint command line, which are written by developers and reviewed in pull requests. The worst outcome is a crashed or hanging lint run, a denial of service against a developer machine or CI job. | 5.0.12, released 14 September 2026 |
+| `source-map-js` 1.2.1 | [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) (high): an indexed source map with a huge section offset blocks the event loop. | PostCSS (inside Vite), `css-tree` (inside jsdom), and `magicast` (inside the coverage tool) | An attacker must get a crafted indexed source map processed during a build or test run, for example through a compromised dependency that ships one. The project's own CSS has no source maps. The worst outcome is a hanging build or test run. | 1.2.2, released 30 September 2026 |
+
+**Recommended fix:** in a separate pull request from 14 October 2026, when 1.2.2 is two weeks old, run `npm audit fix --package-lock-only`. This changes only the two lockfile entries above, because the parent packages already allow the patched versions, and leaves `package.json` unchanged. CI then confirms lint, unit tests, build and smoke tests still pass.
+
 ## Known limitations
 
 | Limitation | Effect | Plan |

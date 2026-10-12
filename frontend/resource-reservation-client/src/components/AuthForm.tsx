@@ -4,7 +4,7 @@ export type AuthMode = 'login' | 'register'
 
 interface AuthFormProps {
   authMode: AuthMode
-  setAuthMode: Dispatch<SetStateAction<AuthMode>>
+  onModeChange: (mode: AuthMode) => void
   name: string
   setName: Dispatch<SetStateAction<string>>
   email: string
@@ -18,7 +18,7 @@ interface AuthFormProps {
 
 export function AuthForm({
   authMode,
-  setAuthMode,
+  onModeChange,
   name,
   setName,
   email,
@@ -59,14 +59,14 @@ export function AuthForm({
           <button
             type="button"
             className={authMode === 'login' ? 'active' : ''}
-            onClick={() => setAuthMode('login')}
+            onClick={() => onModeChange('login')}
           >
             Login
           </button>
           <button
             type="button"
             className={authMode === 'register' ? 'active' : ''}
-            onClick={() => setAuthMode('register')}
+            onClick={() => onModeChange('register')}
           >
             Register
           </button>

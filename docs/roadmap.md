@@ -198,8 +198,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 |---|---|---|
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
-| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done, awaiting review |
-| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
+| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
+| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done, awaiting review |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
@@ -272,6 +272,53 @@ Follow-ups for later milestones:
 - Account lockout per user (M6)
 - Re-hash passwords on login when the hasher reports `SuccessRehashNeeded`
 
+### M4: Frontend Architecture
+
+The frontend's behaviour stays the same, except where noted below.
+
+Agreed decisions:
+- Server data uses TanStack Query, with one set of hooks per feature. Saving something refreshes the lists it affects, and logout clears the cache.
+- Routing uses React Router 7 in declarative mode, with real URLs, browser history and protected routes. (React Router 8 needs Node 22.22 or later, so 7 is used.)
+- The booking screen keeps its resource and date range in the URL, such as `/book?resource=3&from=2030-01-14&to=2030-01-20`. Invalid parameters are ignored rather than breaking the page.
+- Audit L2 is fixed: cancelling a reservation refreshes the booking schedule, with a regression test.
+
+Planned changes, in order:
+
+- [x] Vitest and React Testing Library, with the pure helpers moved from `App.tsx` to `src/lib/` and unit tested
+- [x] React Router: each screen has its own URL
+- [x] `AuthProvider`: login and register routes, protected routes with `returnTo`, and the session-expiry redirect
+- [x] TanStack Query feature hooks, one feature at a time, with form state moved out of `App.tsx` (fixes L2)
+- [x] Confirmation dialog provider; `App.tsx` reduced to providers and routes
+- [x] Booking selection kept in the URL, with validated parameters
+- [x] Docs: ADR 0006, architecture, testing and README
+
+Changes in behaviour:
+- Fixed: cancelling a reservation now refreshes the booking schedule (L2).
+- New: each screen has an address, and the back button and reloads work. Admin reservation filters and the booking selection are kept in the address.
+- New: login returns to the page that was asked for.
+- New: unknown addresses show a not-found page.
+- Changed: a resource change refreshes every list that shows resource names, not only resources and weekly rules.
+- Changed: a half-filled form is lost when switching tabs, because each screen is its own route. Filters and the booking selection are kept.
+
+Follow-ups noticed during M4:
+- `npm audit` reports advisories in `brace-expansion` (through ESLint) and `source-map-js` (through Vite, jsdom and the coverage tool). Both packages are build tooling only, and both were already on `main` before M4. A separate lockfile-only fix is recommended from 14 October 2026. See [security](security.md#dependency-advisories) for the advisories, exploit conditions and fix.
+- Unsaved form drafts are lost when switching screens. This is tracked for M5, below.
+- The development machine runs Node 22.19. React Router 8 and jsdom 30 need Node 22.22 or later, and upgrading Node would allow both.
+
+### M5: UI/UX Modernisation
+
+Not started. Follow-ups carried over from earlier milestones:
+
+- **Unsaved form drafts (from M4).** Since M4, each screen is its own route, so a half-filled form is lost when the user switches tabs. Address this in the UI, not with shared global state. For example:
+  - warn before leaving a form with unsaved changes
+  - make create and edit forms smaller steps, such as an edit dialog on the list screen, so less is typed before saving
+
+  Keep drafts local to their page. Filters and the booking selection already survive in the address.
+- Friendly validation messages on the request DTOs (from M2).
+- Show user names, not IDs, to admins (audit L1).
+- Show fully booked days in the schedule (audit L3). A unit test pins the current behaviour, so the change is deliberate.
+- Remove the identical ternary branches in the booking section (audit L4).
+
 ### M7: Deployment
 
 Tracked so far:
@@ -279,6 +326,7 @@ Tracked so far:
 - [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie, or document why not ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
 - [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them
 - [ ] Run the migration bundle as a deployment step, and configure the reverse proxy as trusted
+- [ ] Serve `index.html` for unknown paths (SPA fallback), so frontend routes such as `/admin/reservations` work on refresh
 
 ## Later Ideas
 

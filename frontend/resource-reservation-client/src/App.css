@@ -166,15 +166,36 @@
 }
 
 .mode-switch button,
-.role-tabs button {
+.role-tabs a {
   min-height: 40px;
   border-color: transparent;
   background: transparent;
   color: var(--text);
 }
 
+/* The tabs are links, styled like the app's buttons. */
+.role-tabs a {
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 9px 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.role-tabs a:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.role-tabs a:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .mode-switch button.active,
-.role-tabs button.active {
+.role-tabs a.active {
   color: var(--text-h);
   background: var(--panel);
   box-shadow: var(--soft-shadow);

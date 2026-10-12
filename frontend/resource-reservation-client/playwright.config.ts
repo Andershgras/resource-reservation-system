@@ -3,10 +3,12 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/smoke',
   fullyParallel: true,
-  reporter: 'list',
+  // On CI, failures also appear as annotations on the pull request, and a
+  // trace of each failed test is kept for the uploaded artifact.
+  reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:5179',
-    trace: 'on-first-retry',
+    trace: process.env.CI ? 'retain-on-failure' : 'on-first-retry',
   },
   projects: [
     {

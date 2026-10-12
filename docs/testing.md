@@ -1,11 +1,12 @@
 # Testing
 
-The project has three automated test suites, and CI runs all of them on every push and pull request.
+The project has four automated test suites, and CI runs all of them on every push and pull request.
 
 | Suite | Location | What it checks | Needs |
 |---|---|---|---|
 | Backend unit tests | `backend/ResourceReservation.Api.Tests` | Business rules in the services, and the CRUD controllers | .NET SDK |
 | Backend integration tests | `backend/ResourceReservation.Api.IntegrationTests` | The whole API over HTTP against a real SQL Server | .NET SDK and Docker Desktop |
+| Frontend unit tests | `frontend/resource-reservation-client/src/**/*.test.ts(x)` | Helpers, session handling, the API client, query hooks, routing and pages | Node.js |
 | Frontend smoke tests | `frontend/resource-reservation-client/tests/smoke` | The main browser flows in Playwright, with the API mocked | Node.js |
 
 ## Running the tests
@@ -28,9 +29,12 @@ Frontend:
 ```bash
 cd frontend/resource-reservation-client
 npm run lint
+npm run test:unit
 npm run build
 npm run test:smoke
 ```
+
+`npm run test:unit:watch` reruns the unit tests on every change.
 
 ## Backend unit tests
 
@@ -85,6 +89,35 @@ INTEGRATION_TEST_CONNECTION_STRING="Server=(localdb)\MSSQLLocalDB;Database=Resou
 
 The tests delete all data in this database. To prevent accidents, the harness refuses any database whose name doesn't end in `_IntegrationTests`.
 
+## Frontend unit tests
+
+[Vitest](https://vitest.dev/) runs these in a simulated browser ([jsdom](https://github.com/jsdom/jsdom)), with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for components. They run in a few seconds and need no server.
+
+- **Time zone:** the tests run in `Europe/Copenhagen`, set in `vite.config.ts`, so date handling behaves the same locally and on CI runners that use UTC. The date tests include both summer-time switches.
+- **`src/lib/`:** date conversion, form validation, schedule grouping and error messages.
+- **`src/auth/authStorage.ts`:** session expiry, using fake timers. Covered cases:
+  - restoring a valid, expired or outdated session
+  - ending only the session whose token was rejected
+- **`src/api/client.ts`:** with `fetch` stubbed. Covered cases:
+  - headers and body
+  - problem-details messages
+  - a 401 ending the session only when a token was sent
+- **`AuthProvider`:** restoring a session, and clearing the query cache on login, logout and expiry.
+- **Query hooks** (`src/features/*/…Queries.test.tsx`): `renderHook` with a fresh query client from `src/test/queryWrapper.tsx`, and the API modules mocked with `vi.mock`. They check:
+  - what each hook loads
+  - that failed loads aren't retried
+  - which data each change refreshes, for example that cancelling a reservation reloads the booking schedule (audit L2)
+- **Routing** (`src/app/App.test.tsx`): the route table in a memory router, with the layouts stubbed. It checks:
+  - login redirects with `returnTo`, and ignoring `returnTo` values that leave the app
+  - role redirects
+  - logout
+  - the not-found page
+- **Pages:**
+  - the admin reservation filters in the address (`AdminReservationsPage.test.tsx`)
+  - parsing the booking address (`bookingSearch.test.ts`), including impossible dates and reversed ranges
+
+TanStack Query notifies components on the next tick after a change. A test that checks rendered data straight after a change should check the cache with `queryClient.getQueryData`, or wait with `waitFor`.
+
 ## Frontend smoke tests
 
 Playwright drives Chromium against the Vite dev server, with the API mocked using `page.route`. The mocks return the same RFC 9457 problem details as the real API. The tests cover:
@@ -95,6 +128,18 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - per-field validation errors
 - the rate limit message
 - session expiry: an expired or outdated stored session, a 401 during a session (without a loop), a failed login, and the token lifetime running out (using Playwright's clock)
+- routing:
+  - each screen's address surviving a reload
+  - the back button
+  - login returning to the page that was asked for, including after a session expires
+  - logout
+  - role redirects
+  - the not-found page
+- addresses that hold state:
+  - admin reservation filters
+  - booking links, including invalid ones and the back button
+  - tabs remembering their selection
+- cancelling a reservation freeing its time in the booking schedule (audit L2)
 
 Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.
 
