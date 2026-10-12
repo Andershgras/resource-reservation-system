@@ -413,6 +413,49 @@ public class ReservationsControllerTests
             "Resource is not available in this time period.");
     }
 
+    [Fact]
+    public async Task CreateReservation_WhenStartTimeIsInThePast_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var controller = CreateController(
+            context,
+            user.Id,
+            localNow: new DateTime(2030, 1, 15, 10, 0, 1));
+
+        var result = await controller.CreateReservation(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(badRequest, "Reservations must start in the future.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenStartTimeIsNow_CreatesReservation()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var controller = CreateController(
+            context,
+            user.Id,
+            localNow: new DateTime(2030, 1, 15, 10, 0, 0));
+
+        var result = await controller.CreateReservation(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        });
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
     private static async Task<Resource> SeedResourceAsync(AppDbContext context)
     {
         var resource = new Resource
@@ -456,7 +499,8 @@ public class ReservationsControllerTests
     private static ReservationsController CreateController(
         AppDbContext context,
         int? userId,
-        bool isAdmin = false)
+        bool isAdmin = false,
+        DateTime? localNow = null)
     {
         var claims = new List<Claim>();
         if (userId is not null)
@@ -473,7 +517,10 @@ public class ReservationsControllerTests
             claims,
             "TestAuth"));
 
-        return new ReservationsController(context, new AvailabilityService(context))
+        return new ReservationsController(
+            context,
+            new AvailabilityService(context),
+            TestSchedulingClock.Create(localNow))
         {
             ControllerContext = new ControllerContext
             {

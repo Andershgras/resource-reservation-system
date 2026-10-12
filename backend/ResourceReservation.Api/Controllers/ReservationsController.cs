@@ -16,11 +16,16 @@ public class ReservationsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
+    private readonly SchedulingClock _schedulingClock;
 
-    public ReservationsController(AppDbContext context, AvailabilityService availabilityService)
+    public ReservationsController(
+        AppDbContext context,
+        AvailabilityService availabilityService,
+        SchedulingClock schedulingClock)
     {
         _context = context;
         _availabilityService = availabilityService;
+        _schedulingClock = schedulingClock;
     }
 
     [HttpGet]
@@ -104,6 +109,11 @@ public class ReservationsController : ControllerBase
         if (createReservationDto.EndTime <= createReservationDto.StartTime)
         {
             return BadRequest(ApiError("EndTime must be after StartTime."));
+        }
+
+        if (createReservationDto.StartTime < _schedulingClock.GetLocalNow())
+        {
+            return BadRequest(ApiError("Reservations must start in the future."));
         }
 
         var isInsideAvailability = await _availabilityService.IsWithinAvailabilityAsync(

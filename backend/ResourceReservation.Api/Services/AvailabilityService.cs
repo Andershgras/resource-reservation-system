@@ -101,6 +101,18 @@ public class AvailabilityService
         return bookableSlots;
     }
 
+    public static List<TimeRange> RemoveTimeBefore(
+        IEnumerable<TimeRange> intervals,
+        DateTime cutoff)
+    {
+        return intervals
+            .Where(interval => interval.EndTime > cutoff)
+            .Select(interval => interval.StartTime < cutoff
+                ? interval with { StartTime = cutoff }
+                : interval)
+            .ToList();
+    }
+
     private static List<TimeRange> MergeIntervals(IEnumerable<TimeRange> intervals)
     {
         var sortedIntervals = intervals

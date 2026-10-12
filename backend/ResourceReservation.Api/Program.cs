@@ -58,6 +58,20 @@ builder.Services.AddCors(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddScoped<AvailabilityService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(serviceProvider =>
+{
+    var timeZoneId = builder.Configuration["Scheduling:TimeZoneId"];
+
+    if (string.IsNullOrWhiteSpace(timeZoneId))
+    {
+        throw new InvalidOperationException("Scheduling time zone is not configured.");
+    }
+
+    return new SchedulingClock(
+        serviceProvider.GetRequiredService<TimeProvider>(),
+        TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
+});
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey))

@@ -16,7 +16,7 @@ public class ResourcesControllerTests
     public async Task CreateResource_WhenNameIsMissing_ReturnsBadRequest(string name)
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.CreateResource(new CreateResourceDto
         {
@@ -31,7 +31,7 @@ public class ResourcesControllerTests
     public async Task CreateResource_WhenNameHasOuterWhitespace_TrimsNameBeforeSaving()
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.CreateResource(new CreateResourceDto
         {
@@ -54,7 +54,7 @@ public class ResourcesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -68,7 +68,7 @@ public class ResourcesControllerTests
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
         var reservation = await SeedReservationAsync(context, resource.Id);
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -89,7 +89,7 @@ public class ResourcesControllerTests
             context,
             resource.Id,
             ReservationStatuses.Cancelled);
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -110,7 +110,7 @@ public class ResourcesControllerTests
     public async Task GetResourceSchedule_WhenResourceDoesNotExist_ReturnsNotFound()
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             999,
@@ -126,7 +126,7 @@ public class ResourcesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -154,7 +154,7 @@ public class ResourcesControllerTests
             ReservationStatuses.Active,
             new DateTime(2030, 1, 16, 10, 0, 0),
             new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -201,7 +201,7 @@ public class ResourcesControllerTests
             ReservationStatuses.Cancelled,
             new DateTime(2030, 1, 16, 10, 0, 0),
             new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -227,7 +227,7 @@ public class ResourcesControllerTests
             resource.Id,
             new DateTime(2030, 1, 17, 14, 0, 0),
             new DateTime(2030, 1, 17, 15, 0, 0));
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -253,7 +253,7 @@ public class ResourcesControllerTests
             DayOfWeek.Wednesday,
             new TimeOnly(8, 0),
             new TimeOnly(16, 0));
-        var controller = new ResourcesController(context, new AvailabilityService(context));
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -265,6 +265,44 @@ public class ResourcesControllerTests
 
         Assert.Empty(response.BookableSlots);
         Assert.Empty(response.ReservedSlots);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenSlotsAreInThePast_ReturnsOnlyFutureTime()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var controller = CreateController(
+            context,
+            localNow: new DateTime(2030, 1, 16, 10, 37, 20));
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 15),
+            new DateOnly(2030, 1, 16));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
+        var bookableSlot = Assert.Single(response.BookableSlots);
+
+        Assert.Equal(new DateTime(2030, 1, 16, 10, 38, 0), bookableSlot.StartTime);
+        Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), bookableSlot.EndTime);
+    }
+
+    private static ResourcesController CreateController(
+        AppDbContext context,
+        DateTime? localNow = null)
+    {
+        return new ResourcesController(
+            context,
+            new AvailabilityService(context),
+            TestSchedulingClock.Create(localNow));
     }
 
     private static AppDbContext CreateContext()

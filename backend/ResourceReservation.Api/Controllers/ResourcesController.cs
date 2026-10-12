@@ -14,11 +14,16 @@ public class ResourcesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
+    private readonly SchedulingClock _schedulingClock;
 
-    public ResourcesController(AppDbContext context, AvailabilityService availabilityService)
+    public ResourcesController(
+        AppDbContext context,
+        AvailabilityService availabilityService,
+        SchedulingClock schedulingClock)
     {
         _context = context;
         _availabilityService = availabilityService;
+        _schedulingClock = schedulingClock;
     }
 
     [HttpGet]
@@ -77,9 +82,11 @@ public class ResourcesController : ControllerBase
             id,
             from.Value,
             to.Value);
-        var bookableSlots = AvailabilityService.SubtractReservedSlots(
-            availabilityIntervals,
-            reservedSlots.Select(slot => new TimeRange(slot.StartTime, slot.EndTime)));
+        var bookableSlots = AvailabilityService.RemoveTimeBefore(
+            AvailabilityService.SubtractReservedSlots(
+                availabilityIntervals,
+                reservedSlots.Select(slot => new TimeRange(slot.StartTime, slot.EndTime))),
+            GetNextWholeMinute(_schedulingClock.GetLocalNow()));
 
         return Ok(new ResourceScheduleResponseDto
         {
@@ -212,6 +219,19 @@ public class ResourcesController : ControllerBase
                 reservation.StartTime < rangeStart ? rangeStart : reservation.StartTime,
                 reservation.EndTime > rangeEnd ? rangeEnd : reservation.EndTime))
             .ToListAsync();
+    }
+
+    private static DateTime GetNextWholeMinute(DateTime value)
+    {
+        var wholeMinute = new DateTime(
+            value.Year,
+            value.Month,
+            value.Day,
+            value.Hour,
+            value.Minute,
+            0);
+
+        return wholeMinute == value ? wholeMinute : wholeMinute.AddMinutes(1);
     }
 
     private static string? NormalizeOptionalText(string? value)
