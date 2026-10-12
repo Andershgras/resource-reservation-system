@@ -301,8 +301,23 @@ Changes in behaviour:
 - Changed: a half-filled form is lost when switching tabs, because each screen is its own route. Filters and the booking selection are kept.
 
 Follow-ups noticed during M4:
-- `npm audit` reports two high-severity advisories in build tooling (`brace-expansion` through ESLint, `source-map-js` through Vite and jsdom). Both were already on `main` before M4, and neither affects the built app. Update them separately.
+- `npm audit` reports advisories in `brace-expansion` (through ESLint) and `source-map-js` (through Vite, jsdom and the coverage tool). Both packages are build tooling only, and both were already on `main` before M4. A separate lockfile-only fix is recommended from 14 October 2026. See [security](security.md#dependency-advisories) for the advisories, exploit conditions and fix.
+- Unsaved form drafts are lost when switching screens. This is tracked for M5, below.
 - The development machine runs Node 22.19. React Router 8 and jsdom 30 need Node 22.22 or later, and upgrading Node would allow both.
+
+### M5: UI/UX Modernisation
+
+Not started. Follow-ups carried over from earlier milestones:
+
+- **Unsaved form drafts (from M4).** Since M4, each screen is its own route, so a half-filled form is lost when the user switches tabs. Address this in the UI, not with shared global state. For example:
+  - warn before leaving a form with unsaved changes
+  - make create and edit forms smaller steps, such as an edit dialog on the list screen, so less is typed before saving
+
+  Keep drafts local to their page. Filters and the booking selection already survive in the address.
+- Friendly validation messages on the request DTOs (from M2).
+- Show user names, not IDs, to admins (audit L1).
+- Show fully booked days in the schedule (audit L3). A unit test pins the current behaviour, so the change is deliberate.
+- Remove the identical ternary branches in the booking section (audit L4).
 
 ### M7: Deployment
 
