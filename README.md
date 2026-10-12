@@ -101,6 +101,9 @@ The project intentionally stays generic. A resource can represent a meeting room
 - React
 - TypeScript
 - Vite
+- React Router (routes per screen, protected routes)
+- TanStack Query (server data and caching)
+- Vitest and React Testing Library unit tests
 - Playwright smoke tests
 - ESLint
 
@@ -129,17 +132,19 @@ backend/
 frontend/
   resource-reservation-client/
     src/
-      api/
-      auth/
-      components/
-      views/
+      api/         typed API calls and the shared client
+      app/         routes, layouts, route guards, query client
+      auth/        session storage, auth provider, login page
+      components/  shared sections, tabs, confirmation dialog
+      features/    one folder per feature: pages and query hooks
+      lib/         pure helpers and query keys
     tests/
       smoke/
 
 docs/
   adr/             architecture decision records
   audit/           project audits
-  architecture.md  layers, request flow and data model diagrams
+  architecture.md  layers, request flow, data model and frontend diagrams
   testing.md       test suites, how to run them, and coverage
   planning.md
   roadmap.md

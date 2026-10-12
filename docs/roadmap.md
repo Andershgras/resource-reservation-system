@@ -199,7 +199,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
-| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | In progress |
+| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done, awaiting review |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
@@ -290,7 +290,19 @@ Planned changes, in order:
 - [x] TanStack Query feature hooks, one feature at a time, with form state moved out of `App.tsx` (fixes L2)
 - [x] Confirmation dialog provider; `App.tsx` reduced to providers and routes
 - [x] Booking selection kept in the URL, with validated parameters
-- [ ] Docs: ADR 0006, architecture, testing and README
+- [x] Docs: ADR 0006, architecture, testing and README
+
+Changes in behaviour:
+- Fixed: cancelling a reservation now refreshes the booking schedule (L2).
+- New: each screen has an address, and the back button and reloads work. Admin reservation filters and the booking selection are kept in the address.
+- New: login returns to the page that was asked for.
+- New: unknown addresses show a not-found page.
+- Changed: a resource change refreshes every list that shows resource names, not only resources and weekly rules.
+- Changed: a half-filled form is lost when switching tabs, because each screen is its own route. Filters and the booking selection are kept.
+
+Follow-ups noticed during M4:
+- `npm audit` reports two high-severity advisories in build tooling (`brace-expansion` through ESLint, `source-map-js` through Vite and jsdom). Both were already on `main` before M4, and neither affects the built app. Update them separately.
+- The development machine runs Node 22.19. React Router 8 and jsdom 30 need Node 22.22 or later, and upgrading Node would allow both.
 
 ### M7: Deployment
 

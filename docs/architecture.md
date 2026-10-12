@@ -161,13 +161,49 @@ Middleware runs in this order for every request:
 
 ## Frontend
 
-The frontend is a Vite-built React and TypeScript app:
+The frontend is a Vite-built React and TypeScript app. Routing uses React Router, server data uses TanStack Query, and each feature owns its screens and state ([ADR 0006](adr/0006-frontend-routing-and-state.md)).
 
-- `src/api/` holds the typed API clients. `client.ts` adds the bearer token, turns problem details into readable messages, and ends the session when the API rejects the token.
-- `src/auth/authStorage.ts` stores the session and its expiry ([ADR 0004](adr/0004-token-storage-and-session-expiry.md)).
-- `src/views/` holds the admin and user screens.
-- `src/components/` holds the screen sections.
-- State currently lives in `App.tsx`. Splitting it into feature hooks, and adding routing, is planned for Milestone 4 ([roadmap](roadmap.md)).
+```mermaid
+flowchart TB
+    subgraph Providers["main.tsx"]
+        QC[QueryClientProvider]
+        BR[BrowserRouter]
+        AP["AuthProvider<br/>user, session expiry, clears the cache"]
+    end
+    App["app/App.tsx<br/>route table"]
+    Login["/login, /register<br/>RequireLoggedOut"]
+    Admin["AdminLayout<br/>RequireAuth Admin"]
+    User["UserLayout<br/>RequireAuth User"]
+    AdminPages["Resources, Availability,<br/>Weekly schedule, Reservations"]
+    UserPages["Booking, My reservations"]
+    Hooks["features/*/…Queries.ts<br/>TanStack Query hooks"]
+    Api["api/client.ts<br/>bearer token, problem details"]
+
+    QC --> BR --> AP --> App
+    App --> Login
+    App --> Admin --> AdminPages
+    App --> User --> UserPages
+    AdminPages --> Hooks
+    UserPages --> Hooks
+    Hooks --> Api
+```
+
+| Folder | Contents |
+|---|---|
+| `src/app/` | The route table, the two layouts, route guards, the not-found page and the query client defaults |
+| `src/auth/` | Session storage, `AuthProvider` and `useAuth`, and the login and registration page |
+| `src/features/` | One folder per feature: `resources`, `availability`, `weekly-schedule`, `reservations`, `booking`. Each has its page components and its query hooks. |
+| `src/components/` | Presentational sections shared by pages, the tabs, and `ConfirmProvider` |
+| `src/lib/` | Pure helpers: dates, validation, schedule grouping, errors, navigation, query keys |
+| `src/api/` | Typed API calls and the shared `client.ts` |
+
+How state is handled:
+
+- **Server data** is cached by query key. Each change invalidates the data it affects and resolves once the data on screen has reloaded. For example, cancelling a reservation refreshes the reservation lists and the booking schedules.
+- **Logging in or out**, or a session expiring, clears the cache.
+- **Filters and the booking selection** live in the address, such as `/book?resource=3&from=2030-01-14&to=2030-01-20`. A reload or a shared link shows the same view, and invalid values are ignored.
+- **Form drafts and messages** belong to the page that shows them.
+- **Redirects around login and logout** are made only by the route guards (`RequireAuth`, `RequireLoggedOut`), and `returnTo` must be a path inside the app.
 
 ## Decision records
 
@@ -176,3 +212,4 @@ The frontend is a Vite-built React and TypeScript app:
 - [ADR 0003: Problem details for errors and result types for expected failures](adr/0003-error-handling.md)
 - [ADR 0004: Keep the token in localStorage and handle session expiry in the frontend](adr/0004-token-storage-and-session-expiry.md)
 - [ADR 0005: Database migrations as a separate deployment step](adr/0005-migrations-in-deployment.md)
+- [ADR 0006: Frontend routing and server state](adr/0006-frontend-routing-and-state.md)
