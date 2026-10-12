@@ -198,8 +198,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 |---|---|---|
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
-| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done, awaiting review |
-| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
+| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
+| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | In progress |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
@@ -272,6 +272,26 @@ Follow-ups for later milestones:
 - Account lockout per user (M6)
 - Re-hash passwords on login when the hasher reports `SuccessRehashNeeded`
 
+### M4: Frontend Architecture
+
+The frontend's behaviour stays the same, except where noted below.
+
+Agreed decisions:
+- Server data uses TanStack Query, with one set of hooks per feature. Saving something refreshes the lists it affects, and logout clears the cache.
+- Routing uses React Router 7 in declarative mode, with real URLs, browser history and protected routes. (React Router 8 needs Node 22.22 or later, so 7 is used.)
+- The booking screen keeps its resource and date range in the URL, such as `/book?resource=3&from=2030-01-14&to=2030-01-20`. Invalid parameters are ignored rather than breaking the page.
+- Audit L2 is fixed: cancelling a reservation refreshes the booking schedule, with a regression test.
+
+Planned changes, in order:
+
+- [ ] Vitest and React Testing Library, with the pure helpers moved from `App.tsx` to `src/lib/` and unit tested
+- [ ] React Router: each screen has its own URL
+- [ ] `AuthProvider`: login and register routes, protected routes with `returnTo`, and the session-expiry redirect
+- [ ] TanStack Query feature hooks, one feature at a time, with form state moved out of `App.tsx` (fixes L2)
+- [ ] Confirmation dialog provider; `App.tsx` reduced to providers and routes
+- [ ] Booking selection kept in the URL, with validated parameters
+- [ ] Docs: ADR 0006, architecture, testing and README
+
 ### M7: Deployment
 
 Tracked so far:
@@ -279,6 +299,7 @@ Tracked so far:
 - [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie, or document why not ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
 - [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them
 - [ ] Run the migration bundle as a deployment step, and configure the reverse proxy as trusted
+- [ ] Serve `index.html` for unknown paths (SPA fallback), so frontend routes such as `/admin/reservations` work on refresh
 
 ## Later Ideas
 
