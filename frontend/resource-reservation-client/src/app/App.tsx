@@ -2,13 +2,15 @@ import { Navigate, Route, Routes } from 'react-router'
 import { AuthPage } from '../auth/AuthPage'
 import { ConfirmProvider } from '../components/ConfirmProvider'
 import { AdminAvailabilityPage } from '../features/availability/AdminAvailabilityPage'
+import { BookingPage } from '../features/booking/BookingPage'
 import { AdminReservationsPage } from '../features/reservations/AdminReservationsPage'
+import { MyReservationsPage } from '../features/reservations/MyReservationsPage'
 import { AdminResourcesPage } from '../features/resources/AdminResourcesPage'
 import { AdminWeeklySchedulePage } from '../features/weekly-schedule/AdminWeeklySchedulePage'
 import { AdminLayout } from './AdminLayout'
 import { NotFoundPage } from './NotFoundPage'
 import { HomeRedirect, RequireAuth, RequireLoggedOut } from './RequireAuth'
-import { Workspace } from './Workspace'
+import { UserLayout } from './UserLayout'
 
 // A layout route stays mounted while moving between its child screens.
 export function App() {
@@ -32,9 +34,9 @@ export function App() {
         <Route path="reservations" element={<AdminReservationsPage />} />
       </Route>
 
-      <Route element={<RequireAuth role="User"><ConfirmProvider><Workspace /></ConfirmProvider></RequireAuth>}>
-        <Route path="/book" />
-        <Route path="/my-reservations" />
+      <Route element={<RequireAuth role="User"><ConfirmProvider><UserLayout /></ConfirmProvider></RequireAuth>}>
+        <Route path="/book" element={<BookingPage />} />
+        <Route path="/my-reservations" element={<MyReservationsPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

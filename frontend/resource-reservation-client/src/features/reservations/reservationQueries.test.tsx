@@ -1,9 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as reservationsApi from '../../api/reservationsApi'
-import type { ReservationResponse } from '../../api/types'
+import * as resourcesApi from '../../api/resourcesApi'
+import type { ReservationResponse, ResourceScheduleResponse } from '../../api/types'
 import { queryKeys } from '../../lib/queryKeys'
 import { createQueryWrapper } from '../../test/queryWrapper'
+import { useResourceSchedule } from '../booking/bookingQueries'
 import {
   useAllReservations,
   useCancelReservation,
@@ -12,6 +14,7 @@ import {
 } from './reservationQueries'
 
 vi.mock('../../api/reservationsApi')
+vi.mock('../../api/resourcesApi')
 
 const reservation: ReservationResponse = {
   id: 7,
@@ -21,6 +24,17 @@ const reservation: ReservationResponse = {
   startTime: '2030-01-15T09:00:00',
   endTime: '2030-01-15T10:00:00',
   status: 'Active',
+}
+
+function schedule(reservedSlots: ResourceScheduleResponse['reservedSlots']): ResourceScheduleResponse {
+  return {
+    resourceId: 1,
+    resourceName: 'Room',
+    fromDate: '2030-01-15',
+    toDate: '2030-01-15',
+    bookableSlots: [],
+    reservedSlots,
+  }
 }
 
 beforeEach(() => {
@@ -53,6 +67,30 @@ describe('useCancelReservation', () => {
       queryKeys.reservations,
       queryKeys.schedules,
     ])
+  })
+})
+
+describe('useCancelReservation with a schedule on screen', () => {
+  // Audit L2: the schedule kept showing a cancelled reservation as reserved.
+  it('refreshes the booking schedule as well as the reservation lists', async () => {
+    vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(schedule([
+      { reservationId: 7, startTime: reservation.startTime, endTime: reservation.endTime },
+    ]))
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => ({
+      schedule: useResourceSchedule({ resourceId: 1, fromDate: '2030-01-15', toDate: '2030-01-15' }),
+      mine: useMyReservations(),
+      cancel: useCancelReservation(),
+    }), { wrapper })
+    await waitFor(() => expect(result.current.schedule.data?.reservedSlots).toHaveLength(1))
+    vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(schedule([]))
+    vi.mocked(reservationsApi.getMyReservations).mockResolvedValue([{ ...reservation, status: 'Cancelled' }])
+
+    await act(() => result.current.cancel.mutateAsync(7))
+
+    expect(reservationsApi.cancelReservation).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(result.current.schedule.data?.reservedSlots).toEqual([]))
+    await waitFor(() => expect(result.current.mine.data?.[0].status).toBe('Cancelled'))
   })
 })
 

@@ -287,9 +287,9 @@ Planned changes, in order:
 - [x] Vitest and React Testing Library, with the pure helpers moved from `App.tsx` to `src/lib/` and unit tested
 - [x] React Router: each screen has its own URL
 - [x] `AuthProvider`: login and register routes, protected routes with `returnTo`, and the session-expiry redirect
-- [ ] TanStack Query feature hooks, one feature at a time, with form state moved out of `App.tsx` (fixes L2)
-- [ ] Confirmation dialog provider; `App.tsx` reduced to providers and routes
-- [ ] Booking selection kept in the URL, with validated parameters
+- [x] TanStack Query feature hooks, one feature at a time, with form state moved out of `App.tsx` (fixes L2)
+- [x] Confirmation dialog provider; `App.tsx` reduced to providers and routes
+- [x] Booking selection kept in the URL, with validated parameters
 - [ ] Docs: ADR 0006, architecture, testing and README
 
 ### M7: Deployment

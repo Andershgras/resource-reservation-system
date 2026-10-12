@@ -2,6 +2,7 @@ import { Outlet } from 'react-router'
 import { useAuth, useCurrentUser } from '../auth/authContext'
 import { HomeHeader } from '../components/HomeHeader'
 import { NavTabs, type NavTab } from '../components/NavTabs'
+import { useTabSearches } from '../components/useTabSearches'
 import { useAvailabilities } from '../features/availability/availabilityQueries'
 import { useAllReservations } from '../features/reservations/reservationQueries'
 import { useResources } from '../features/resources/resourceQueries'
@@ -19,6 +20,7 @@ const adminTabs: NavTab[] = [
 export function AdminLayout() {
   const currentUser = useCurrentUser()
   const { logOut } = useAuth()
+  const searches = useTabSearches(adminTabs)
   const resources = useResources().data ?? []
   const availabilities = useAvailabilities().data ?? []
   const availabilityRules = useAvailabilityRules().data ?? []
@@ -60,7 +62,7 @@ export function AdminLayout() {
           </div>
         </section>
 
-        <NavTabs tabs={adminTabs} />
+        <NavTabs tabs={adminTabs} searches={searches} />
 
         <Outlet />
       </section>

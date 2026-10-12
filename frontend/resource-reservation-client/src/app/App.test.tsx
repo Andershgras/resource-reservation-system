@@ -8,8 +8,8 @@ import { AuthContext, type AuthContextValue, type SessionEnd } from '../auth/aut
 import { App } from './App'
 
 // The workspaces load data from the API, which these routing tests don't need.
-vi.mock('./Workspace', () => ({
-  Workspace: () => <p>Workspace</p>,
+vi.mock('./UserLayout', () => ({
+  UserLayout: () => <p>Workspace</p>,
 }))
 vi.mock('./AdminLayout', () => ({
   AdminLayout: () => <p>Workspace</p>,
