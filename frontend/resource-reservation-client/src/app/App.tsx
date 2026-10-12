@@ -1,12 +1,16 @@
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import { AuthPage } from '../auth/AuthPage'
 import { ConfirmProvider } from '../components/ConfirmProvider'
+import { AdminAvailabilityPage } from '../features/availability/AdminAvailabilityPage'
+import { AdminReservationsPage } from '../features/reservations/AdminReservationsPage'
+import { AdminResourcesPage } from '../features/resources/AdminResourcesPage'
+import { AdminWeeklySchedulePage } from '../features/weekly-schedule/AdminWeeklySchedulePage'
+import { AdminLayout } from './AdminLayout'
 import { NotFoundPage } from './NotFoundPage'
 import { HomeRedirect, RequireAuth, RequireLoggedOut } from './RequireAuth'
 import { Workspace } from './Workspace'
 
-// The screens under one layout route stay mounted while moving between them,
-// so their state survives switching tabs.
+// A layout route stays mounted while moving between its child screens.
 export function App() {
   return (
     <Routes>
@@ -17,12 +21,15 @@ export function App() {
         <Route path="/register" />
       </Route>
 
-      <Route element={<RequireAuth role="Admin"><ConfirmProvider><Workspace /></ConfirmProvider></RequireAuth>}>
-        <Route path="/admin" />
-        <Route path="/admin/resources" />
-        <Route path="/admin/availability" />
-        <Route path="/admin/weekly-schedule" />
-        <Route path="/admin/reservations" />
+      <Route
+        path="/admin"
+        element={<RequireAuth role="Admin"><ConfirmProvider><AdminLayout /></ConfirmProvider></RequireAuth>}
+      >
+        <Route index element={<Navigate to="/admin/resources" replace />} />
+        <Route path="resources" element={<AdminResourcesPage />} />
+        <Route path="availability" element={<AdminAvailabilityPage />} />
+        <Route path="weekly-schedule" element={<AdminWeeklySchedulePage />} />
+        <Route path="reservations" element={<AdminReservationsPage />} />
       </Route>
 
       <Route element={<RequireAuth role="User"><ConfirmProvider><Workspace /></ConfirmProvider></RequireAuth>}>

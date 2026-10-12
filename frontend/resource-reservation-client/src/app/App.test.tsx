@@ -7,9 +7,12 @@ import type { UserResponse } from '../api/types'
 import { AuthContext, type AuthContextValue, type SessionEnd } from '../auth/authContext'
 import { App } from './App'
 
-// The workspace loads data from the API, which these routing tests don't need.
+// The workspaces load data from the API, which these routing tests don't need.
 vi.mock('./Workspace', () => ({
   Workspace: () => <p>Workspace</p>,
+}))
+vi.mock('./AdminLayout', () => ({
+  AdminLayout: () => <p>Workspace</p>,
 }))
 
 const admin: UserResponse = { id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' }

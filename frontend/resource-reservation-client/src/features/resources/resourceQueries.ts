@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { createResource, deleteResource, getResources, updateResource } from '../../api/resourcesApi'
 import type { CreateResourceRequest, UpdateResourceRequest } from '../../api/types'
 import { queryKeys } from '../../lib/queryKeys'
+import { useInvalidateQueries } from '../../lib/useInvalidateQueries'
 
 export function useResources() {
   return useQuery({ queryKey: queryKeys.resources, queryFn: getResources })
@@ -12,18 +13,15 @@ export type SaveResourceInput =
   | { id: number; request: UpdateResourceRequest }
 
 // Resource names appear in every list, and deactivating a resource changes its
-// schedule, so a change refreshes everything that shows resources. The mutation
-// resolves once the refreshed data has loaded.
+// schedule, so a change refreshes everything that shows resources.
 function useInvalidateResourceData() {
-  const queryClient = useQueryClient()
-
-  return () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.resources }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.availabilities }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.availabilityRules }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.reservations }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.schedules }),
-  ])
+  return useInvalidateQueries(
+    queryKeys.resources,
+    queryKeys.availabilities,
+    queryKeys.availabilityRules,
+    queryKeys.reservations,
+    queryKeys.schedules,
+  )
 }
 
 export function useSaveResource() {

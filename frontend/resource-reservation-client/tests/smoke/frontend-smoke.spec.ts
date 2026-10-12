@@ -457,6 +457,21 @@ test('logging out returns to the login screen', async ({ page }) => {
   await expect(page.getByText('You have been logged out.')).toBeVisible()
 })
 
+test('admin reservation filters are kept in the address', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/reservations')
+
+  const reservations = sectionByHeading(page, 'Reservations')
+  await expect(reservations.getByRole('listitem')).toHaveCount(1)
+  await reservations.getByLabel('Status').selectOption('Cancelled')
+  await expect(page).toHaveURL('/admin/reservations?status=Cancelled')
+  await page.reload()
+
+  await expect(reservations.getByLabel('Status')).toHaveValue('Cancelled')
+  await expect(reservations.getByText('No reservations match the selected filters.')).toBeVisible()
+})
+
 test('an unknown address shows a not-found page', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
 
