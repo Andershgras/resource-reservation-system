@@ -23,8 +23,9 @@ public static class AuthRateLimiting
             {
                 var limits = authOptions.Value;
 
-                // A token bucket, because it reports the actual time until the next
-                // attempt is allowed. A fixed window always reports the whole window.
+                // The built-in limiters don't report the time left until the next
+                // permit. A token bucket's Retry-After is one refill interval (6 s by
+                // default), while a fixed window's is the whole window (60 s).
                 options.AddPolicy(PolicyName, context => RateLimitPartition.GetTokenBucketLimiter(
                     GetClientPartitionKey(context.Connection.RemoteIpAddress),
                     _ => new TokenBucketRateLimiterOptions

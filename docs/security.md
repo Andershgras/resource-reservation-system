@@ -34,7 +34,12 @@ The frontend keeps the token in `localStorage` ([ADR 0004](adr/0004-token-storag
 
 ## Brute-force protection
 
-- **Rate limit:** login and registration share a rate limit per client IP address. By default a client can make 10 attempts at once, then one more every 6 seconds. Further attempts get `429 Too Many Requests` with a `Retry-After` header giving the real wait.
+- **Rate limit:** login and registration share one rate limit per client IP address. It uses ASP.NET Core's token bucket limiter, which works like this with the default settings (behaviour measured against the running API):
+  - **Burst:** each client starts with a full bucket of 10 tokens. Each attempt, successful or not, uses one, so 10 attempts in a row are allowed.
+  - **Refill:** one token is added every 6 seconds (`WindowSeconds / PermitLimit`), up to 10. The limiter's internal timer adds them, so in practice a token arrives about every 6.1 seconds.
+  - **Rate:** the sustained rate is about 10 attempts per minute. Because the bucket starts full, up to about 20 are possible in the first minute: the burst of 10, plus about 10 refills.
+  - **When the bucket is empty:** the attempt gets `429 Too Many Requests` with `Retry-After: 6`. This is the refill interval, not the time left until the next token. ASP.NET Core's built-in limiters don't report the time remaining. So the next attempt may be allowed sooner than `Retry-After` says. Occasionally, because of the timer drift, it can come slightly later, and the client gets another 429.
+  - **Why not a fixed window:** its `Retry-After` would always be the whole 60-second window, which overstates the wait far more.
 - **Who counts as one client:**
   - Clients behind one shared address, such as an office network, share the limit.
   - IPv6 clients are counted per `/64` network, because one client usually controls a whole `/64`.

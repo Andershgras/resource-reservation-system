@@ -37,8 +37,8 @@ ReverseProxy__KnownProxies__0=10.0.0.5
 | `Jwt:Issuer` | Yes | None | |
 | `Jwt:Audience` | Yes | None | |
 | `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes. When it runs out, the user has to log in again. |
-| `RateLimiting:Auth:PermitLimit` | No | `10` | Login and registration attempts per client IP address, 1–10000 |
-| `RateLimiting:Auth:WindowSeconds` | No | `60` | 1–3600 seconds. A client can make `PermitLimit` attempts at once, then one more every `WindowSeconds / PermitLimit` seconds. |
+| `RateLimiting:Auth:PermitLimit` | No | `10` | 1–10000. The token bucket's size: how many login and registration attempts a client IP address can make in a row. |
+| `RateLimiting:Auth:WindowSeconds` | No | `60` | 1–3600 seconds. One token is added every `WindowSeconds / PermitLimit` seconds, which is also the `Retry-After` value. The sustained rate is `PermitLimit` attempts per `WindowSeconds`. See [security](security.md#brute-force-protection). |
 
 ### Scheduling
 

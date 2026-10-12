@@ -30,9 +30,8 @@ public class RateLimitingTests : ApiTestBase
             response,
             HttpStatusCode.TooManyRequests,
             AuthRateLimiting.RejectedMessage);
-        // One attempt is allowed again every 60 / 10 = 6 seconds.
-        var retryAfter = int.Parse(response.Headers.GetValues("Retry-After").Single());
-        Assert.InRange(retryAfter, 1, 6);
+        // Retry-After is the refill interval, 60 / 10 = 6 seconds, not the time left.
+        Assert.Equal("6", response.Headers.GetValues("Retry-After").Single());
     }
 
     [Fact]

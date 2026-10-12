@@ -239,7 +239,7 @@ Follow-ups noticed during M2, outside its scope:
 
 Agreed decisions:
 - The JWT stays in `localStorage` for now, with proper session-expiry handling. API security headers don't protect the frontend's JavaScript from XSS. **Before any public deployment (M7), review moving to httpOnly cookie authentication.**
-- Login and register allow 10 requests per minute per client IP by default. `Retry-After` gives the real time left in the window.
+- Login and register allow 10 requests per minute per client IP by default. `Retry-After` is based on the real retry time, as far as the rate limiter can report it.
 - Database migrations run as a separate deployment step from an EF migration bundle, never automatically when the API starts.
 - Registration should not reveal whether an email is already registered, but must not show a misleading success message either. If this can't be done cleanly without email verification, the limitation is documented and an interim approach is proposed before the API contract changes.
 - Forwarded headers are trusted only from explicitly configured proxies.
@@ -256,7 +256,10 @@ Planned changes, in order:
 - [x] Security and configuration documentation, plus [ADR 0004](adr/0004-token-storage-and-session-expiry.md)
 
 Implementation notes:
-- Rate limiting uses a token bucket rather than a fixed window, because only the token bucket reports the actual retry time. It allows 10 attempts at once, then one every 6 seconds.
+- Rate limiting uses ASP.NET Core's token bucket:
+  - Each client gets a burst of 10 attempts, then one more every 6 seconds, up to 10.
+  - The built-in limiters can't report the time left until the next attempt. The token bucket's `Retry-After` is the 6-second refill interval, which is much closer to the real wait than a fixed window's 60 seconds.
+  - Exact behaviour, as measured, is in [security](security.md#brute-force-protection).
 - The EF tools and migration bundle use a design-time `DbContext` factory, so they no longer start the API.
 
 - [x] Login timing: unknown emails also verify a password hash, so login no longer reveals existing accounts through a large timing difference. This narrows the gap but isn't constant-time ([security](security.md#login-timing)).

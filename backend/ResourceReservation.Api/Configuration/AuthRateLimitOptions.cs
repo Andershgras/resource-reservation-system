@@ -2,10 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ResourceReservation.Api.Configuration;
 
-// Limits login and registration attempts per client IP address.
-// A client can make PermitLimit attempts at once. After that, one more attempt
-// is allowed every WindowSeconds / PermitLimit seconds, so on average no more
-// than PermitLimit attempts are allowed per window.
+// Limits login and registration attempts per client IP address with a token
+// bucket. Each client starts with PermitLimit tokens and each attempt uses one.
+// One token is added every WindowSeconds / PermitLimit seconds, up to
+// PermitLimit, so the sustained rate is PermitLimit attempts per window.
 public class AuthRateLimitOptions
 {
     public const string SectionName = "RateLimiting:Auth";

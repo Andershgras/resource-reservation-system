@@ -174,7 +174,11 @@ POST /api/auth/login
 
 Login returns the token, `expiresAt` (UTC) and `expiresInSeconds`. Clients should time the session from `expiresInSeconds`, because their own clock may be wrong.
 
-Login and registration are rate limited per client IP address. By default a client can make 10 attempts at once, then one more every 6 seconds (10 per minute on average). Further attempts get a `429` with `Retry-After`.
+Login and registration share a rate limit per client IP address, using a token bucket:
+- A client starts with 10 attempts, then gets one more every 6 seconds, up to 10. That allows 10 attempts per minute sustained, with a burst of up to about 20 in the first minute.
+- Over the limit, the API returns `429` with `Retry-After: 6`, the refill interval. That isn't the time left, so the next attempt may be allowed sooner.
+
+See [security](docs/security.md#brute-force-protection).
 
 ### Health
 
@@ -251,7 +255,7 @@ Validation errors also include `errors`, keyed by field name. Unexpected server 
 | `403` | Authenticated, but not allowed |
 | `404` | Resource, availability or reservation not found |
 | `409` | The time overlaps an active reservation |
-| `429` | Too many login or registration attempts. Retry after the number of seconds in the `Retry-After` header. |
+| `429` | Too many login or registration attempts. `Retry-After` gives the refill interval in seconds. |
 | `503` | Another booking for the same resource is in progress. Retry after the number of seconds in the `Retry-After` header. |
 
 ## Local Setup
