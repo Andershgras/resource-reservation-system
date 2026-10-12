@@ -4,6 +4,7 @@ using ResourceReservation.Api.Controllers;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.Tests;
 
@@ -15,7 +16,7 @@ public class ResourcesControllerTests
     public async Task CreateResource_WhenNameIsMissing_ReturnsBadRequest(string name)
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.CreateResource(new CreateResourceDto
         {
@@ -30,7 +31,7 @@ public class ResourcesControllerTests
     public async Task CreateResource_WhenNameHasOuterWhitespace_TrimsNameBeforeSaving()
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.CreateResource(new CreateResourceDto
         {
@@ -53,7 +54,7 @@ public class ResourcesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -67,7 +68,7 @@ public class ResourcesControllerTests
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
         var reservation = await SeedReservationAsync(context, resource.Id);
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -88,7 +89,7 @@ public class ResourcesControllerTests
             context,
             resource.Id,
             ReservationStatuses.Cancelled);
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -109,7 +110,7 @@ public class ResourcesControllerTests
     public async Task GetResourceSchedule_WhenResourceDoesNotExist_ReturnsNotFound()
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.GetResourceSchedule(
             999,
@@ -125,7 +126,7 @@ public class ResourcesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -153,7 +154,7 @@ public class ResourcesControllerTests
             ReservationStatuses.Active,
             new DateTime(2030, 1, 16, 10, 0, 0),
             new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -200,7 +201,7 @@ public class ResourcesControllerTests
             ReservationStatuses.Cancelled,
             new DateTime(2030, 1, 16, 10, 0, 0),
             new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -226,7 +227,7 @@ public class ResourcesControllerTests
             resource.Id,
             new DateTime(2030, 1, 17, 14, 0, 0),
             new DateTime(2030, 1, 17, 15, 0, 0));
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -252,7 +253,7 @@ public class ResourcesControllerTests
             DayOfWeek.Wednesday,
             new TimeOnly(8, 0),
             new TimeOnly(16, 0));
-        var controller = new ResourcesController(context);
+        var controller = new ResourcesController(context, new AvailabilityService(context));
 
         var result = await controller.GetResourceSchedule(
             resource.Id,

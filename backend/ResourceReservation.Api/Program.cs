@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 
 const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
 
@@ -56,6 +57,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<AvailabilityService>();
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey))

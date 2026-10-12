@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 
@@ -14,10 +15,12 @@ namespace ResourceReservation.Api.Controllers;
 public class ReservationsController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly AvailabilityService _availabilityService;
 
-    public ReservationsController(AppDbContext context)
+    public ReservationsController(AppDbContext context, AvailabilityService availabilityService)
     {
         _context = context;
+        _availabilityService = availabilityService;
     }
 
     [HttpGet]
@@ -103,7 +106,7 @@ public class ReservationsController : ControllerBase
             return BadRequest(ApiError("EndTime must be after StartTime."));
         }
 
-        var isInsideAvailability = await IsInsideAvailability(
+        var isInsideAvailability = await _availabilityService.IsWithinAvailabilityAsync(
             createReservationDto.ResourceId,
             createReservationDto.StartTime,
             createReservationDto.EndTime);
@@ -211,38 +214,6 @@ public class ReservationsController : ControllerBase
         }
 
         return userId;
-    }
-
-    private async Task<bool> IsInsideAvailability(
-        int resourceId,
-        DateTime startTime,
-        DateTime endTime)
-    {
-        var isInsideAvailabilityWindow = await _context.Availabilities
-            .AnyAsync(availability =>
-                availability.ResourceId == resourceId &&
-                startTime >= availability.StartTime &&
-                endTime <= availability.EndTime);
-
-        if (isInsideAvailabilityWindow)
-        {
-            return true;
-        }
-
-        if (startTime.Date != endTime.Date)
-        {
-            return false;
-        }
-
-        var startClockTime = TimeOnly.FromDateTime(startTime);
-        var endClockTime = TimeOnly.FromDateTime(endTime);
-
-        return await _context.AvailabilityRules
-            .AnyAsync(rule =>
-                rule.ResourceId == resourceId &&
-                rule.DayOfWeek == startTime.DayOfWeek &&
-                startClockTime >= rule.StartTime &&
-                endClockTime <= rule.EndTime);
     }
 
     private static ReservationResponseDto ToReservationResponseDto(Reservation reservation)
