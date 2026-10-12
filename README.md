@@ -46,6 +46,8 @@ The project intentionally stays generic. A resource can represent a meeting room
 - User registration
 - User login
 - JWT-based authentication
+- Session expiry: the frontend returns to the login screen when the token expires or the API rejects it
+- Rate-limited login and registration
 - Role-based access for Admin and User behavior
 - Seeded development Admin account
 
@@ -169,6 +171,8 @@ The frontend provides role-based workflows. Admin users manage the booking setup
 POST /api/auth/register
 POST /api/auth/login
 ```
+
+Login returns the token, `expiresAt` (UTC) and `expiresInSeconds`. Clients should time the session from `expiresInSeconds`, because their own clock may be wrong.
 
 Login and registration are rate limited per client IP address. By default a client can make 10 attempts at once, then one more every 6 seconds (10 per minute on average). Further attempts get a `429` with `Retry-After`.
 

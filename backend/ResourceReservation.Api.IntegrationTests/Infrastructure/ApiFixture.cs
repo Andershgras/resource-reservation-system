@@ -142,6 +142,9 @@ public sealed class ApiFixture : IAsyncLifetime
 
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
+    public const string JwtKey = "integration-test-jwt-key-that-is-long-enough-for-hmac";
+    public const string JwtIssuerAndAudience = "ResourceReservation.IntegrationTests";
+
     private readonly string _connectionString;
     private readonly IReadOnlyDictionary<string, string> _settingOverrides;
 
@@ -158,9 +161,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // UseSetting is visible while Program.cs reads configuration before Build().
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
-        builder.UseSetting("Jwt:Key", "integration-test-jwt-key-that-is-long-enough-for-hmac");
-        builder.UseSetting("Jwt:Issuer", "ResourceReservation.IntegrationTests");
-        builder.UseSetting("Jwt:Audience", "ResourceReservation.IntegrationTests");
+        builder.UseSetting("Jwt:Key", JwtKey);
+        builder.UseSetting("Jwt:Issuer", JwtIssuerAndAudience);
+        builder.UseSetting("Jwt:Audience", JwtIssuerAndAudience);
         builder.UseSetting("Scheduling:TimeZoneId", "Europe/Copenhagen");
         // Tests log in many times from one address. RateLimitingTests set a real limit.
         builder.UseSetting("RateLimiting:Auth:PermitLimit", "10000");

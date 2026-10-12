@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
@@ -104,6 +105,8 @@ public class AuthServiceTests
         Assert.True(result.IsSuccess);
         var response = result.Value;
         Assert.False(string.IsNullOrWhiteSpace(response.Token));
+        Assert.Equal(Now.AddMinutes(30), response.ExpiresAt);
+        Assert.Equal(30 * 60, response.ExpiresInSeconds);
         Assert.Equal("test@example.com", response.User.Email);
         Assert.Equal("User", response.User.Role);
     }
@@ -147,16 +150,19 @@ public class AuthServiceTests
         Assert.Equal("User", savedUser.Role);
     }
 
+    private static readonly DateTimeOffset Now = new(2030, 1, 16, 9, 0, 0, TimeSpan.Zero);
+
     private static AuthService CreateService(AppDbContext context)
     {
         var jwtOptions = Options.Create(new JwtOptions
         {
             Key = "test-jwt-key-that-is-long-enough-for-hmac",
             Issuer = "ResourceReservation.Tests",
-            Audience = "ResourceReservation.Tests"
+            Audience = "ResourceReservation.Tests",
+            ExpiryMinutes = 30
         });
 
-        return new AuthService(context, new JwtTokenService(jwtOptions, TimeProvider.System));
+        return new AuthService(context, new JwtTokenService(jwtOptions, new FakeTimeProvider(Now)));
     }
 
     private static AppDbContext CreateContext()

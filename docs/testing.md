@@ -57,6 +57,13 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - 10 parallel identical bookings give one 201 and nine 409s. With the booking lock disabled, all ten succeed.
   - A held booking lock gives a 503 with `Retry-After`.
 - **Registration:** parallel registrations with the same email, and email normalization.
+- **Security configuration:**
+  - CORS for configured and unknown origins
+  - forwarded headers trusted only from configured proxies
+  - security headers and HSTS
+  - rate limiting per client IP, including shared and spoofed addresses
+  - health checks
+  - expired tokens and the login expiry fields
 - **Startup configuration:** each kind of invalid setting stops the app with a message naming the setting.
 - **Migrations:** they apply to an empty database and match the EF model.
 
@@ -86,6 +93,8 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - the user booking flow
 - the overlap error
 - per-field validation errors
+- the rate limit message
+- session expiry: an expired or outdated stored session, a 401 during a session (without a loop), a failed login, and the token lifetime running out (using Playwright's clock)
 
 Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.
 

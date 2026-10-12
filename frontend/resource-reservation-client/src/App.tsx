@@ -37,7 +37,10 @@ import type {
 } from './api/types'
 import {
   clearAuthSession,
-  getAuthUser,
+  expireAuthSessionIfDue,
+  getSessionExpiresAt,
+  onSessionExpired,
+  restoreAuthSession,
   saveAuthSession,
 } from './auth/authStorage'
 import type { AuthMode } from './components/AuthForm'
@@ -53,15 +56,21 @@ type ConfirmationRequest = {
   onConfirm: () => Promise<void>
 }
 
+const sessionExpiredMessage = 'Your session has expired. Please log in again.'
+const maxTimeoutMilliseconds = 2_147_483_647
+
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login')
-  const [currentUser, setCurrentUser] = useState<UserResponse | null>(() =>
-    getAuthUser(),
+  const [restoredSession] = useState(restoreAuthSession)
+  const [currentUser, setCurrentUser] = useState<UserResponse | null>(
+    restoredSession.user,
   )
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(
+    restoredSession.expired ? sessionExpiredMessage : '',
+  )
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [resources, setResources] = useState<ResourceResponse[]>([])
   const [resourceMessage, setResourceMessage] = useState('')
@@ -154,6 +163,38 @@ function App() {
   const [confirmationRequest, setConfirmationRequest] =
     useState<ConfirmationRequest | null>(null)
   const [isConfirmingAction, setIsConfirmingAction] = useState(false)
+
+  // Back to the login screen when the session ends: the API rejected the token,
+  // or its lifetime ran out. This only reacts to a session that actually ended,
+  // so the login screen never triggers it again.
+  useEffect(() => {
+    return onSessionExpired(() => {
+      setConfirmationRequest(null)
+      setCurrentUser(null)
+      setAuthMode('login')
+      setPassword('')
+      setMessage(sessionExpiredMessage)
+    })
+  }, [])
+
+  useEffect(() => {
+    const expiresAt = getSessionExpiresAt()
+
+    if (!currentUser || expiresAt === null) {
+      return
+    }
+
+    // setTimeout can't wait longer than about 24 days. If it fires early, the
+    // check finds the session still valid and does nothing.
+    const timeoutId = window.setTimeout(
+      expireAuthSessionIfDue,
+      Math.min(Math.max(expiresAt - Date.now(), 0), maxTimeoutMilliseconds),
+    )
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [currentUser])
 
   useEffect(() => {
     if (!currentUser) {
@@ -787,6 +828,9 @@ function App() {
       if (authMode === 'login') {
         const auth = await login({ email, password })
         saveAuthSession(auth)
+        // Clear anything left from an earlier session, such as an error from a
+        // request that failed when that session expired.
+        resetLoadedData()
         setCurrentUser(auth.user)
         setPassword('')
         setMessage('Login succeeded.')

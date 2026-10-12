@@ -1,4 +1,4 @@
-import { getAuthToken } from '../auth/authStorage'
+import { expireAuthSession, getAuthToken } from '../auth/authStorage'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5052/api'
 
@@ -45,6 +45,12 @@ export async function apiRequest<T>(
     headers: requestHeaders,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+
+  // A 401 for a request that sent a token means the session is no longer valid.
+  // Without a token, such as a failed login, it is an ordinary error.
+  if (response.status === 401 && token) {
+    expireAuthSession(token)
+  }
 
   if (!response.ok) {
     throw new ApiError(await readErrorMessage(response), response.status)

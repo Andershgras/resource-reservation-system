@@ -97,9 +97,13 @@ public class AuthService
             return ServiceError.Unauthorized(InvalidCredentialsMessage);
         }
 
+        var issuedToken = _jwtTokenService.CreateToken(user);
+
         return new AuthResponseDto
         {
-            Token = _jwtTokenService.CreateToken(user),
+            Token = issuedToken.Token,
+            ExpiresAt = issuedToken.ExpiresAt,
+            ExpiresInSeconds = issuedToken.ExpiresInSeconds,
             User = ToUserResponseDto(user)
         };
     }
