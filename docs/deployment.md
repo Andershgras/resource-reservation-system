@@ -47,6 +47,7 @@ Migrations are applied as a separate deployment step, never by the API at startu
 CI builds a self-contained Linux **migration bundle** on every push. It applies the bundle to an empty SQL Server to prove it works, and uploads it as the `efbundle-linux-x64` artifact. To run it:
 
 ```bash
+chmod +x efbundle   # GitHub artifacts don't keep the executable permission
 ./efbundle --connection "Server=...;Database=...;User Id=...;Password=..."
 ```
 
@@ -61,6 +62,7 @@ How the bundle behaves:
 
 ```bash
 dotnet tool restore
+dotnet restore backend/ResourceReservation.Api
 dotnet ef migrations bundle --project backend/ResourceReservation.Api --startup-project backend/ResourceReservation.Api --configuration Release --self-contained --target-runtime linux-x64 --output efbundle
 ```
 

@@ -78,6 +78,10 @@ jobs:
       - name: Restore .NET tools
         run: dotnet tool restore
 
+      # The bundle command builds the project but doesn't restore it.
+      - name: Restore API project
+        run: dotnet restore backend/ResourceReservation.Api
+
       - name: Build migration bundle
         run: >
           dotnet ef migrations bundle
