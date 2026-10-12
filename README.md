@@ -170,6 +170,8 @@ POST /api/auth/register
 POST /api/auth/login
 ```
 
+Login and registration are rate limited per client IP address. By default a client can make 10 attempts at once, then one more every 6 seconds (10 per minute on average). Further attempts get a `429` with `Retry-After`.
+
 ### Resources
 
 ```text
@@ -236,6 +238,7 @@ Validation errors also include `errors`, keyed by field name. Unexpected server 
 | `403` | Authenticated, but not allowed |
 | `404` | Resource, availability or reservation not found |
 | `409` | The time overlaps an active reservation |
+| `429` | Too many login or registration attempts. Retry after the number of seconds in the `Retry-After` header. |
 | `503` | Another booking for the same resource is in progress. Retry after the number of seconds in the `Retry-After` header. |
 
 ## Local Setup
@@ -357,6 +360,8 @@ The API checks its settings at startup and stops with a message naming any setti
 | `Cors:AllowedOrigins` | No | None | Browser origins allowed to call the API from another origin, such as `https://app.example.com`. Exact origins only, with no path or wildcard. Leave empty when the frontend is served from the same origin. Development also allows the Vite dev server on `localhost` ports 5173–5185. |
 | `ReverseProxy:KnownProxies` | No | None | IP addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, such as `10.0.0.5`. With no proxies configured, forwarded headers are ignored. |
 | `ReverseProxy:KnownNetworks` | No | None | The same as `KnownProxies`, as CIDR ranges such as `10.0.0.0/24` |
+| `RateLimiting:Auth:PermitLimit` | No | `10` | Login and registration attempts allowed per client IP per window, 1–10000 |
+| `RateLimiting:Auth:WindowSeconds` | No | `60` | The window, 1–3600 seconds. After the first `PermitLimit` attempts, one more is allowed every `WindowSeconds / PermitLimit` seconds. |
 | `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
 | `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
 | `SeedAdmin:Name` | No | `Admin` | |

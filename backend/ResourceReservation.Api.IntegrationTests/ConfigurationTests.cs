@@ -21,6 +21,8 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("Cors:AllowedOrigins:0", "https://*.example.test", "Cors:AllowedOrigins entry 'https://*.example.test' must be an origin")]
     [InlineData("ReverseProxy:KnownProxies:0", "proxy.example.test", "ReverseProxy:KnownProxies entry 'proxy.example.test' is not an IP address.")]
     [InlineData("ReverseProxy:KnownNetworks:0", "10.0.0.0", "ReverseProxy:KnownNetworks entry '10.0.0.0' is not a CIDR range")]
+    [InlineData("RateLimiting:Auth:PermitLimit", "0", "RateLimiting:Auth:PermitLimit must be between 1 and 10000.")]
+    [InlineData("RateLimiting:Auth:WindowSeconds", "0", "RateLimiting:Auth:WindowSeconds must be between 1 and 3600.")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
         string key,

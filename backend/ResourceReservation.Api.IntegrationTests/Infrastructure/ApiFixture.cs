@@ -162,6 +162,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Issuer", "ResourceReservation.IntegrationTests");
         builder.UseSetting("Jwt:Audience", "ResourceReservation.IntegrationTests");
         builder.UseSetting("Scheduling:TimeZoneId", "Europe/Copenhagen");
+        // Tests log in many times from one address. RateLimitingTests set a real limit.
+        builder.UseSetting("RateLimiting:Auth:PermitLimit", "10000");
 
         foreach (var (key, value) in _settingOverrides)
         {

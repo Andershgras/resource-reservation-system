@@ -72,6 +72,10 @@ builder.Services.AddOptions<ReverseProxyOptions>()
     .Bind(builder.Configuration.GetSection(ReverseProxyOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddOptions<AuthRateLimitOptions>()
+    .Bind(builder.Configuration.GetSection(AuthRateLimitOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
     .Bind(builder.Configuration.GetSection(SeedAdminOptions.SectionName))
     .ValidateDataAnnotations()
@@ -96,6 +100,8 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
             options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
         }
     });
+
+builder.Services.AddAuthRateLimiting();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(serviceProvider => new SchedulingClock(
@@ -225,6 +231,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors(frontendCorsPolicy);
+// After CORS, so the browser can read a 429 response.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

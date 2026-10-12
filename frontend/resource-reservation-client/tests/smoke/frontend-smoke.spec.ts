@@ -256,6 +256,25 @@ test('validation errors from the API are shown per field', async ({ page }) => {
   ).toBeVisible()
 })
 
+test('too many login attempts shows the rate limit message', async ({ page }) => {
+  await page.route('http://localhost:5052/api/auth/login', async (route) => {
+    const response = problemResponse(
+      429,
+      'Too Many Requests',
+      'Too many attempts. Please wait a moment and try again.',
+    )
+    await route.fulfill({ ...response, headers: { 'Retry-After': '6' } })
+  })
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/')
+  await login(page, 'someone@example.com', 'Password123')
+
+  await expect(
+    page.getByText('Error: Too many attempts. Please wait a moment and try again.'),
+  ).toBeVisible()
+})
+
 // Mirrors the API's RFC 9457 problem details responses.
 function problemResponse(
   status: number,

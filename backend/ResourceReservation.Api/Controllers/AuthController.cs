@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Services;
 
@@ -6,6 +8,7 @@ namespace ResourceReservation.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting(AuthRateLimiting.PolicyName)]
 public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
