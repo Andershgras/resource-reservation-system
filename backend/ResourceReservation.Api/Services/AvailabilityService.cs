@@ -1,15 +1,91 @@
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
+using ResourceReservation.Api.DTOs;
+using ResourceReservation.Api.Models;
 
 namespace ResourceReservation.Api.Services;
 
 public class AvailabilityService
 {
-    private readonly AppDbContext _context;
+    public const int MaxScheduleDays = 62;
 
-    public AvailabilityService(AppDbContext context)
+    private readonly AppDbContext _context;
+    private readonly SchedulingClock _schedulingClock;
+
+    public AvailabilityService(AppDbContext context, SchedulingClock schedulingClock)
     {
         _context = context;
+        _schedulingClock = schedulingClock;
+    }
+
+    // Bookable time for a resource: its merged availability minus active
+    // reservations, without time that has already passed.
+    public async Task<ServiceResult<ResourceScheduleResponseDto>> GetScheduleAsync(
+        int resourceId,
+        DateOnly? from,
+        DateOnly? to)
+    {
+        if (from is null || to is null)
+        {
+            return ServiceError.Validation("From and to dates are required.");
+        }
+
+        if (to < from)
+        {
+            return ServiceError.Validation("To date must be on or after from date.");
+        }
+
+        // The schedule endpoint is anonymous, so the amount of work per request is capped.
+        if (to.Value == DateOnly.MaxValue ||
+            to.Value.DayNumber - from.Value.DayNumber + 1 > MaxScheduleDays)
+        {
+            return ServiceError.Validation($"Date range cannot be longer than {MaxScheduleDays} days.");
+        }
+
+        var resource = await _context.Resources.FindAsync(resourceId);
+
+        if (resource is null)
+        {
+            return ServiceError.NotFound("Resource not found.");
+        }
+
+        if (!resource.IsActive)
+        {
+            return ServiceError.Validation("Resource is not active.");
+        }
+
+        var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue);
+        var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var reservedSlots = await GetReservedSlotsAsync(resourceId, rangeStart, rangeEnd);
+        var availabilityIntervals = await GetAvailabilityIntervalsAsync(resourceId, from.Value, to.Value);
+        var bookableSlots = RemoveTimeBefore(
+            SubtractReservedSlots(
+                availabilityIntervals,
+                reservedSlots.Select(slot => new TimeRange(slot.StartTime, slot.EndTime))),
+            GetNextWholeMinute(_schedulingClock.GetLocalNow()));
+
+        return new ResourceScheduleResponseDto
+        {
+            ResourceId = resource.Id,
+            ResourceName = resource.Name,
+            FromDate = from.Value,
+            ToDate = to.Value,
+            BookableSlots = bookableSlots
+                .Select(slot => new BookableSlotResponseDto
+                {
+                    StartTime = slot.StartTime,
+                    EndTime = slot.EndTime
+                })
+                .ToList(),
+            ReservedSlots = reservedSlots
+                .Select(slot => new ReservedSlotResponseDto
+                {
+                    ReservationId = slot.ReservationId,
+                    StartTime = slot.StartTime,
+                    EndTime = slot.EndTime
+                })
+                .ToList()
+        };
     }
 
     public async Task<List<TimeRange>> GetAvailabilityIntervalsAsync(
@@ -113,6 +189,39 @@ public class AvailabilityService
             .ToList();
     }
 
+    private Task<List<ReservedTimeRange>> GetReservedSlotsAsync(
+        int resourceId,
+        DateTime rangeStart,
+        DateTime rangeEnd)
+    {
+        return _context.Reservations
+            .Where(reservation =>
+                reservation.ResourceId == resourceId &&
+                reservation.Status == ReservationStatuses.Active &&
+                reservation.StartTime < rangeEnd &&
+                reservation.EndTime > rangeStart)
+            .OrderBy(reservation => reservation.StartTime)
+            .Select(reservation => new ReservedTimeRange(
+                reservation.Id,
+                reservation.StartTime < rangeStart ? rangeStart : reservation.StartTime,
+                reservation.EndTime > rangeEnd ? rangeEnd : reservation.EndTime))
+            .ToListAsync();
+    }
+
+    // Starts in-progress slots at a whole minute so time inputs get clean values.
+    private static DateTime GetNextWholeMinute(DateTime value)
+    {
+        var wholeMinute = new DateTime(
+            value.Year,
+            value.Month,
+            value.Day,
+            value.Hour,
+            value.Minute,
+            0);
+
+        return wholeMinute == value ? wholeMinute : wholeMinute.AddMinutes(1);
+    }
+
     private static List<TimeRange> MergeIntervals(IEnumerable<TimeRange> intervals)
     {
         var sortedIntervals = intervals
@@ -142,3 +251,5 @@ public class AvailabilityService
 }
 
 public sealed record TimeRange(DateTime StartTime, DateTime EndTime);
+
+internal sealed record ReservedTimeRange(int ReservationId, DateTime StartTime, DateTime EndTime);

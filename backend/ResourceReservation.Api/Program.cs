@@ -66,6 +66,9 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddScoped<AvailabilityService>();
+builder.Services.AddScoped<ReservationService>();
+builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddScoped<AuthService>();
 
 // Settings are validated when the app starts, so bad configuration never serves a request.
 builder.Services.AddOptions<JwtOptions>()

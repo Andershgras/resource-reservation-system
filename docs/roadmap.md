@@ -220,13 +220,13 @@ Agreed decisions:
 - Integration tests run against real SQL Server using Testcontainers. Locally this needs Docker Desktop; in CI, GitHub Actions provides Docker.
 - A booking-lock timeout returns `503 Service Unavailable` with a `Retry-After` header and a user-friendly message. `409 Conflict` remains reserved for genuine booking overlaps.
 
-Planned changes, in order:
+Planned changes, in order. The service layer was moved ahead of ProblemDetails so that the error format changes in one place:
 
 - [x] Integration test harness: `WebApplicationFactory` with Testcontainers SQL Server, plus baseline tests for authorization, validation, booking concurrency, the unique email, and migrations (M8 in the audit)
 - [x] Configuration validated at startup using the Options pattern (Jwt, Scheduling, SeedAdmin, connection string)
+- [x] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))
+- [x] A booking-lock timeout returns 503 with `Retry-After`. It previously surfaced as an unhandled 500.
 - [ ] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
-- [ ] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))
-- [ ] A booking-lock timeout returns 503 with `Retry-After`. Today it surfaces as an unhandled 500.
 - [ ] Code coverage reported in CI, plus `docs/testing.md`, `docs/architecture.md` and ADR 0003
 
 ## Later Ideas

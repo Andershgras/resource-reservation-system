@@ -1,9 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.IntegrationTests.Infrastructure;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.IntegrationTests;
 
@@ -78,4 +80,52 @@ public class ReservationTests : ApiTestBase
             reservation.ResourceId == resourceId &&
             reservation.Status == ReservationStatuses.Active));
     }
+
+    [Fact]
+    public async Task CreateReservation_WhenResourceLockIsHeld_ReturnsServiceUnavailableWithRetryAfter()
+    {
+        var adminClient = await CreateAdminClientAsync();
+        var resourceId = await CreateResourceWithWeeklyRuleAsync(
+            adminClient,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var userClient = await CreateUserClientAsync();
+        await using var shortTimeoutFactory = new ApiFactory(
+            Fixture.ConnectionString,
+            new Dictionary<string, string> { ["Scheduling:BookingLockTimeoutMilliseconds"] = "500" });
+        var client = shortTimeoutFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = userClient.DefaultRequestHeaders.Authorization;
+        var request = new CreateReservationDto
+        {
+            ResourceId = resourceId,
+            StartTime = BookingDay.AddHours(9),
+            EndTime = BookingDay.AddHours(10)
+        };
+
+        // Simulate a slow booking in progress by holding the resource's lock elsewhere.
+        await using var connection = new SqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync();
+        var transaction = connection.BeginTransaction();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText =
+                $"EXEC sp_getapplock @Resource = 'reservation:resource:{resourceId}', " +
+                "@LockMode = 'Exclusive', @LockOwner = 'Transaction';";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var busyResponse = await client.PostAsJsonAsync("/api/reservations", request);
+
+        transaction.Rollback();
+        var retryResponse = await client.PostAsJsonAsync("/api/reservations", request);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, busyResponse.StatusCode);
+        Assert.Equal(TimeSpan.FromSeconds(5), busyResponse.Headers.RetryAfter?.Delta);
+        var error = await busyResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.Equal(ReservationService.ResourceBusyMessage, error?.Message);
+        Assert.Equal(HttpStatusCode.Created, retryResponse.StatusCode);
+    }
+
+    private sealed record ErrorResponse(string? Message);
 }

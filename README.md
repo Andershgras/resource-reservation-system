@@ -222,6 +222,7 @@ Errors return a JSON body with a `message`. Validation errors also include an `e
 | `403` | Authenticated, but not allowed |
 | `404` | Resource, availability or reservation not found |
 | `409` | The time overlaps an active reservation |
+| `503` | Another booking for the same resource is in progress. Retry after the number of seconds in the `Retry-After` header. |
 
 ## Local Setup
 
@@ -336,6 +337,7 @@ The API checks its settings at startup and stops with a message naming any setti
 | `Jwt:Audience` | Yes | None | |
 | `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes |
 | `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
+| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](docs/adr/0002-reservation-concurrency.md)) |
 | `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
 | `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
 | `SeedAdmin:Name` | No | `Admin` | |

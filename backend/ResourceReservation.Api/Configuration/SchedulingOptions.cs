@@ -10,6 +10,10 @@ public class SchedulingOptions : IValidatableObject
     [Required(ErrorMessage = "Scheduling:TimeZoneId is required.")]
     public string TimeZoneId { get; set; } = string.Empty;
 
+    // How long a booking waits for another booking of the same resource to finish.
+    [Range(100, 60000, ErrorMessage = "Scheduling:BookingLockTimeoutMilliseconds must be between 100 and 60000.")]
+    public int BookingLockTimeoutMilliseconds { get; set; } = 10000;
+
     public TimeZoneInfo GetTimeZone()
     {
         return TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);

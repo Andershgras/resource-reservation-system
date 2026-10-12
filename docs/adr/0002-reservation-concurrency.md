@@ -17,11 +17,11 @@ A unique constraint can't prevent this, because the rule is "time ranges must no
 
 Use option 2.
 
-`ReservationsController.CreateReservation` does the following:
+`ReservationService.CreateAsync` (originally `ReservationsController.CreateReservation`) does the following:
 
 1. Validates the request without holding any lock.
 2. Opens a transaction.
-3. Takes the application lock for the resource, waiting up to 10 seconds.
+3. Takes the application lock for the resource, waiting up to `Scheduling:BookingLockTimeoutMilliseconds` (10 seconds by default).
 4. Runs the overlap check and inserts the reservation.
 5. Commits.
 
@@ -33,7 +33,11 @@ Overlaps now return **409 Conflict** instead of 400.
 
 - Bookings for the same resource run one at a time: the second request waits, sees the first booking, and gets a clean 409. Bookings for different resources don't block each other.
 - There's no reliance on deadlocks.
-- **Any new code that creates or moves reservations must take the same lock.** The lock lives in a single method (`BeginResourceBookingLockAsync`), which should move into the reservation service when the service layer is extracted (Milestone 2).
+- **Any new code that creates or moves reservations must take the same lock.** The lock lives in a single method, `ReservationService.AcquireResourceBookingLockAsync`.
 - This ties the project to SQL Server, which was already the only database it targets.
-- The EF InMemory provider used in unit tests has no transactions, so the lock is skipped when the database isn't relational. Concurrency is checked against real SQL Server instead. Manually, 10 parallel identical bookings against LocalDB gave one 201 and nine 409s. Automated coverage arrives with the integration tests planned for Milestone 2.
-- If the lock times out, the API returns a 500 until a global error handler is added (Milestone 2).
+- The EF InMemory provider used in unit tests has no transactions, so the lock is skipped when the database isn't relational. Concurrency is checked against real SQL Server by the integration tests: 10 parallel identical bookings give one 201 and nine 409s. With the lock disabled, all ten succeed.
+- If the lock can't be acquired in time, the API returns `503 Service Unavailable` with `Retry-After: 5` and a message asking the user to try again. The request didn't conflict with a booking; the system was just busy.
+
+## Updates
+
+- **Milestone 2:** the lock moved from the controller into `ReservationService`. It now reads `sp_getapplock`'s return code through an output parameter instead of raising a SQL error. A timeout (-1) or deadlock victim (-3) becomes a 503 with `Retry-After`, where it used to be an unhandled 500. Any other negative code throws. The timeout became configurable.
