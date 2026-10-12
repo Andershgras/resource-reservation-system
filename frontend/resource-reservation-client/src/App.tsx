@@ -12,7 +12,6 @@ import {
   updateAvailabilityRule,
 } from './api/availabilityRulesApi'
 import { login, register } from './api/authApi'
-import { ApiError } from './api/client'
 import {
   createResource,
   deleteResource,
@@ -44,6 +43,21 @@ import {
   saveAuthSession,
 } from './auth/authStorage'
 import type { AuthMode } from './components/AuthForm'
+import {
+  addDays,
+  formatDateTime,
+  toDateInputValue,
+  toDateTimeLocalValue,
+  toTimeOfDay,
+} from './lib/dates'
+import { getErrorMessage } from './lib/errors'
+import { getSlotKey } from './lib/schedule'
+import { emptyToNull } from './lib/text'
+import {
+  validateAvailabilityForm,
+  validateAvailabilityRuleForm,
+  validateReservationSlotSelection,
+} from './lib/validation'
 import { AdminHomeView } from './views/AdminHomeView'
 import { AuthView } from './views/AuthView'
 import { UserHomeView } from './views/UserHomeView'
@@ -605,8 +619,8 @@ function App() {
     setEditingAvailabilityRuleId(rule.id)
     setAvailabilityRuleResourceId(rule.resourceId.toString())
     setAvailabilityRuleDayOfWeek(rule.dayOfWeek.toString())
-    setAvailabilityRuleStartTime(toTimeInputValue(rule.startTime))
-    setAvailabilityRuleEndTime(toTimeInputValue(rule.endTime))
+    setAvailabilityRuleStartTime(toTimeOfDay(rule.startTime))
+    setAvailabilityRuleEndTime(toTimeOfDay(rule.endTime))
     setAvailabilityRuleMessage('')
     setAvailabilityRuleValidationMessage('')
   }
@@ -1040,140 +1054,6 @@ function ConfirmationDialog({
       </div>
     </div>
   )
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return `Error: ${error.message}`
-  }
-
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return 'Something went wrong.'
-}
-
-function emptyToNull(value: string) {
-  const trimmedValue = value.trim()
-  return trimmedValue.length === 0 ? null : trimmedValue
-}
-
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString()
-}
-
-function toDateTimeLocalValue(value: string) {
-  const date = new Date(value)
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-  return offsetDate.toISOString().slice(0, 16)
-}
-
-function toDateInputValue(value: Date) {
-  const offsetDate = new Date(value.getTime() - value.getTimezoneOffset() * 60000)
-
-  return offsetDate.toISOString().slice(0, 10)
-}
-
-function addDays(value: Date, days: number) {
-  const date = new Date(value)
-  date.setDate(date.getDate() + days)
-
-  return date
-}
-
-function toTimeInputValue(value: string) {
-  return value.slice(0, 5)
-}
-
-function validateAvailabilityForm(
-  resourceId: string,
-  startTime: string,
-  endTime: string,
-) {
-  if (!resourceId) {
-    return 'Select a resource before saving availability.'
-  }
-
-  if (!startTime) {
-    return 'Enter a start time before saving availability.'
-  }
-
-  if (!endTime) {
-    return 'Enter an end time before saving availability.'
-  }
-
-  if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
-    return 'End time must be after start time.'
-  }
-
-  return ''
-}
-
-function validateAvailabilityRuleForm(
-  resourceId: string,
-  dayOfWeek: string,
-  startTime: string,
-  endTime: string,
-) {
-  if (!resourceId) {
-    return 'Select a resource before saving a weekly schedule.'
-  }
-
-  if (!dayOfWeek) {
-    return 'Select a weekday before saving a weekly schedule.'
-  }
-
-  if (!startTime) {
-    return 'Enter a start time before saving a weekly schedule.'
-  }
-
-  if (!endTime) {
-    return 'Enter an end time before saving a weekly schedule.'
-  }
-
-  if (endTime <= startTime) {
-    return 'End time must be after start time.'
-  }
-
-  return ''
-}
-
-function validateReservationSlotSelection(
-  slot: BookableSlotResponse,
-  startTime: string,
-  endTime: string,
-) {
-  if (!startTime) {
-    return 'Select a reservation start time.'
-  }
-
-  if (!endTime) {
-    return 'Select a reservation end time.'
-  }
-
-  const selectedStartTime = new Date(startTime).getTime()
-  const selectedEndTime = new Date(endTime).getTime()
-  const slotStartTime = new Date(slot.startTime).getTime()
-  const slotEndTime = new Date(slot.endTime).getTime()
-
-  if (Number.isNaN(selectedStartTime) || Number.isNaN(selectedEndTime)) {
-    return 'Select valid reservation start and end times.'
-  }
-
-  if (selectedEndTime <= selectedStartTime) {
-    return 'Reservation end time must be after start time.'
-  }
-
-  if (selectedStartTime < slotStartTime || selectedEndTime > slotEndTime) {
-    return 'Reservation time must stay inside the selected bookable time.'
-  }
-
-  return ''
-}
-
-function getSlotKey(slot: BookableSlotResponse) {
-  return `${slot.startTime}-${slot.endTime}`
 }
 
 export default App

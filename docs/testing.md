@@ -1,11 +1,12 @@
 # Testing
 
-The project has three automated test suites, and CI runs all of them on every push and pull request.
+The project has four automated test suites, and CI runs all of them on every push and pull request.
 
 | Suite | Location | What it checks | Needs |
 |---|---|---|---|
 | Backend unit tests | `backend/ResourceReservation.Api.Tests` | Business rules in the services, and the CRUD controllers | .NET SDK |
 | Backend integration tests | `backend/ResourceReservation.Api.IntegrationTests` | The whole API over HTTP against a real SQL Server | .NET SDK and Docker Desktop |
+| Frontend unit tests | `frontend/resource-reservation-client/src/**/*.test.ts(x)` | Helpers, session storage, the API client, and (from Milestone 4) hooks and routing | Node.js |
 | Frontend smoke tests | `frontend/resource-reservation-client/tests/smoke` | The main browser flows in Playwright, with the API mocked | Node.js |
 
 ## Running the tests
@@ -28,9 +29,12 @@ Frontend:
 ```bash
 cd frontend/resource-reservation-client
 npm run lint
+npm run test:unit
 npm run build
 npm run test:smoke
 ```
+
+`npm run test:unit:watch` reruns the unit tests on every change.
 
 ## Backend unit tests
 
@@ -84,6 +88,20 @@ INTEGRATION_TEST_CONNECTION_STRING="Server=(localdb)\MSSQLLocalDB;Database=Resou
 ```
 
 The tests delete all data in this database. To prevent accidents, the harness refuses any database whose name doesn't end in `_IntegrationTests`.
+
+## Frontend unit tests
+
+[Vitest](https://vitest.dev/) runs these in a simulated browser ([jsdom](https://github.com/jsdom/jsdom)), with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for components. They run in a few seconds and need no server.
+
+- **Time zone:** the tests run in `Europe/Copenhagen`, set in `vite.config.ts`, so date handling behaves the same locally and on CI runners that use UTC. The date tests include both summer-time switches.
+- **`src/lib/`:** date conversion, form validation, schedule grouping and error messages.
+- **`src/auth/authStorage.ts`:** session expiry, using fake timers. Covered cases:
+  - restoring a valid, expired or outdated session
+  - ending only the session whose token was rejected
+- **`src/api/client.ts`:** with `fetch` stubbed. Covered cases:
+  - headers and body
+  - problem-details messages
+  - a 401 ending the session only when a token was sent
 
 ## Frontend smoke tests
 

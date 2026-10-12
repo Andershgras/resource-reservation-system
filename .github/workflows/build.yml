@@ -141,6 +141,10 @@ jobs:
         working-directory: frontend/resource-reservation-client
         run: npm run lint
 
+      - name: Run frontend unit tests
+        working-directory: frontend/resource-reservation-client
+        run: npm run test:unit
+
       - name: Build frontend
         working-directory: frontend/resource-reservation-client
         run: npm run build
