@@ -19,6 +19,8 @@ var builder = WebApplication.CreateBuilder(args);
 // errors (ValidationProblemDetails) and unhandled exceptions.
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
+// Generated links and Location headers use lowercase paths, such as /api/reservations/1.
+builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(frontendDevelopmentCorsPolicy, policy =>

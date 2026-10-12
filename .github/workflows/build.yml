@@ -39,7 +39,7 @@ jobs:
           -targetdir:TestResults/coverage/report
           -reporttypes:"MarkdownSummaryGithub;Html"
           -assemblyfilters:"+ResourceReservation.Api"
-          -classfilters:"-ResourceReservation.Api.Migrations.*;-Microsoft.AspNetCore.OpenApi.Generated*;-System.Runtime.CompilerServices*"
+          -classfilters:"-ResourceReservation.Api.Migrations.*"
 
       - name: Publish coverage summary
         run: cat TestResults/coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"

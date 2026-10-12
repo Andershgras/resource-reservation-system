@@ -197,12 +197,12 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | Milestone | Focus | Status |
 |---|---|---|
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
-| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done, awaiting review |
-| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Not started |
+| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
+| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | In progress |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
-| M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack) | Not started |
+| M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
 
 ### M1: Booking Correctness And Data Integrity
 
@@ -232,8 +232,28 @@ Planned changes, in order. The service layer was moved ahead of ProblemDetails s
 Follow-ups noticed during M2, outside its scope:
 
 - Validation messages for missing or malformed fields use DataAnnotations' default wording, such as "The field Password must be a string or array type with a minimum length of '8'." Add friendly `ErrorMessage` values to the request DTOs (M5, UI/UX).
-- `Location` headers and generated links use the controller's casing (`/api/Reservations/1`). Routes are case-insensitive, so nothing breaks, but `RouteOptions.LowercaseUrls` would make URLs consistent (M3).
-- The unused `Microsoft.AspNetCore.OpenApi` package (audit L12) still generates code. That code is excluded from coverage for now; remove the package (M3).
+- [x] `Location` headers and generated links use the controller's casing (`/api/Reservations/1`). Done in M3: URLs are now lowercase.
+- [x] The unused `Microsoft.AspNetCore.OpenApi` package (audit L12) generates code. Done in M3: the package is removed.
+
+### M3: Security And Production Configuration
+
+Agreed decisions:
+- The JWT stays in `localStorage` for now, with proper session-expiry handling. API security headers don't protect the frontend's JavaScript from XSS. **Before any public deployment (M7), review moving to httpOnly cookie authentication.**
+- Login and register allow 10 requests per minute per client IP by default. `Retry-After` gives the real time left in the window.
+- Database migrations run as a separate deployment step from an EF migration bundle, never automatically when the API starts.
+- Registration should not reveal whether an email is already registered, but must not show a misleading success message either. If this can't be done cleanly without email verification, the limitation is documented and an interim approach is proposed before the API contract changes.
+- Forwarded headers are trusted only from explicitly configured proxies.
+
+Planned changes, in order:
+
+- [x] Tidy-ups: remove the unused OpenApi package (L12), lowercase URLs, roadmap update
+- [ ] CORS origins from configuration, validated at startup
+- [ ] Forwarded headers from configured proxies, HSTS and security headers
+- [ ] Rate limiting on login and register, returning 429 with `Retry-After` (M4 in the audit)
+- [ ] Health check endpoints for liveness and readiness
+- [ ] Session expiry: the login response includes `expiresAt`, and the frontend logs out on expiry or 401 (M3 in the audit)
+- [ ] Migration bundle built in CI, and a deployment guide
+- [ ] Security, configuration and deployment documentation, plus ADRs
 
 ## Later Ideas
 

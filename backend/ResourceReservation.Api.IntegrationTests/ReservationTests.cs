@@ -70,7 +70,7 @@ public class ReservationTests : ApiTestBase
         var reservation = await createResponse.Content.ReadFromJsonAsync<ReservationResponseDto>();
         var reservationPath = $"/api/reservations/{reservation!.Id}";
 
-        Assert.Equal(reservationPath, createResponse.Headers.Location?.AbsolutePath, ignoreCase: true);
+        Assert.Equal(reservationPath, createResponse.Headers.Location?.AbsolutePath);
         Assert.Equal(HttpStatusCode.OK, (await ownerClient.GetAsync(reservationPath)).StatusCode);
         await ProblemAssert.IsProblemAsync(await otherClient.GetAsync(reservationPath), HttpStatusCode.Forbidden);
         await ProblemAssert.IsProblemAsync(

@@ -91,14 +91,14 @@ Because the API is mocked, these tests don't prove the frontend and backend work
 
 ## Code coverage
 
-CI collects coverage from both backend suites. It publishes a summary on the run page and uploads the HTML report as the `backend-coverage-report` artifact. EF migrations and generated code are excluded.
+CI collects coverage from both backend suites. It publishes a summary on the run page and uploads the HTML report as the `backend-coverage-report` artifact. EF migrations are excluded.
 
 To produce the same report locally:
 
 ```bash
 dotnet tool restore
 dotnet test ResourceReservationSystem.slnx --collect:"XPlat Code Coverage" --results-directory TestResults/coverage/raw
-dotnet reportgenerator -reports:"TestResults/coverage/raw/**/coverage.cobertura.xml" -targetdir:TestResults/coverage/report -reporttypes:Html -assemblyfilters:"+ResourceReservation.Api" -classfilters:"-ResourceReservation.Api.Migrations.*;-Microsoft.AspNetCore.OpenApi.Generated*;-System.Runtime.CompilerServices*"
+dotnet reportgenerator -reports:"TestResults/coverage/raw/**/coverage.cobertura.xml" -targetdir:TestResults/coverage/report -reporttypes:Html -assemblyfilters:"+ResourceReservation.Api" -classfilters:"-ResourceReservation.Api.Migrations.*"
 ```
 
 Then open `TestResults/coverage/report/index.html`. Git ignores `TestResults/`.
