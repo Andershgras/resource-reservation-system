@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
+using System.Net;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
@@ -66,10 +68,34 @@ builder.Services.AddOptions<FrontendCorsOptions>()
     .Bind(builder.Configuration.GetSection(FrontendCorsOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddOptions<ReverseProxyOptions>()
+    .Bind(builder.Configuration.GetSection(ReverseProxyOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
     .Bind(builder.Configuration.GetSection(SeedAdminOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+
+builder.Services.AddOptions<ForwardedHeadersOptions>()
+    .Configure<IOptions<ReverseProxyOptions>>((options, reverseProxy) =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+        // Only the configured proxies are trusted, not the framework's default of loopback.
+        options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear();
+
+        foreach (var proxy in reverseProxy.Value.KnownProxies)
+        {
+            options.KnownProxies.Add(IPAddress.Parse(proxy));
+        }
+
+        foreach (var network in reverseProxy.Value.KnownNetworks)
+        {
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+        }
+    });
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(serviceProvider => new SchedulingClock(
@@ -172,8 +198,23 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
+// Behind a reverse proxy, take the client IP and scheme from the proxy's forwarded
+// headers. The middleware trusts every proxy when its lists are empty, so it is
+// only added when proxies are configured.
+if (app.Services.GetRequiredService<IOptions<ReverseProxyOptions>>().Value.IsConfigured)
+{
+    app.UseForwardedHeaders();
+}
+
 // Logs unhandled exceptions and returns a 500 ProblemDetails without exception details.
 app.UseExceptionHandler();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+app.UseSecurityHeaders();
 
 if (app.Environment.IsDevelopment())
 {

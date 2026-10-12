@@ -28,5 +28,8 @@ public class ErrorHandlingTests : ApiTestBase
         Assert.Null(problem.Detail);
         Assert.DoesNotContain("Missing_IntegrationTests", body);
         Assert.DoesNotContain("SqlException", body);
+        // The exception handler clears the response, but the security headers are still sent.
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
     }
 }

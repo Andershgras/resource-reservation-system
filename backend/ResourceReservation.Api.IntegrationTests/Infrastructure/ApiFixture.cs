@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -165,6 +167,34 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         {
             builder.UseSetting(key, value);
         }
+
+        builder.ConfigureServices(services =>
+            services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>());
+    }
+}
+
+// The in-memory test server has no client IP address. A test sets one with the
+// X-Test-Remote-Ip header, as if the request came from that address.
+public sealed class TestRemoteIpStartupFilter : IStartupFilter
+{
+    public const string HeaderName = "X-Test-Remote-Ip";
+
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        return app =>
+        {
+            app.Use(async (context, nextMiddleware) =>
+            {
+                if (context.Request.Headers.Remove(HeaderName, out var remoteIp))
+                {
+                    context.Connection.RemoteIpAddress = IPAddress.Parse(remoteIp.ToString());
+                }
+
+                await nextMiddleware(context);
+            });
+
+            next(app);
+        };
     }
 }
 

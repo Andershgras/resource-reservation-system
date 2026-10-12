@@ -355,6 +355,8 @@ The API checks its settings at startup and stops with a message naming any setti
 | `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
 | `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](docs/adr/0002-reservation-concurrency.md)) |
 | `Cors:AllowedOrigins` | No | None | Browser origins allowed to call the API from another origin, such as `https://app.example.com`. Exact origins only, with no path or wildcard. Leave empty when the frontend is served from the same origin. Development also allows the Vite dev server on `localhost` ports 5173–5185. |
+| `ReverseProxy:KnownProxies` | No | None | IP addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, such as `10.0.0.5`. With no proxies configured, forwarded headers are ignored. |
+| `ReverseProxy:KnownNetworks` | No | None | The same as `KnownProxies`, as CIDR ranges such as `10.0.0.0/24` |
 | `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
 | `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
 | `SeedAdmin:Name` | No | `Admin` | |
@@ -374,6 +376,8 @@ For production-like hosting:
 - SQL Server is required, not just any EF Core provider: reservation locking uses `sp_getapplock`
 - Set `VITE_API_BASE_URL` to the deployed backend URL
 - If the frontend is on a different origin than the API, add it to `Cors:AllowedOrigins`
+- Behind a reverse proxy, list it in `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`, so the API sees the real client IP and scheme. Don't set `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, which trusts forwarded headers from anyone.
+- Outside Development, the API sends HSTS on HTTPS responses. Every API response also carries security headers and `Cache-Control: no-store`.
 - Build the frontend as static files with `npm run build`
 
 ## Roadmap
