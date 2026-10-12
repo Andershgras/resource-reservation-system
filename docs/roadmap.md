@@ -196,7 +196,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 
 | Milestone | Focus | Status |
 |---|---|---|
-| M1 | Booking correctness and data integrity | In progress |
+| M1 | Booking correctness and data integrity | Done, awaiting review |
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Not started |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Not started |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
@@ -211,7 +211,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 - [x] The schedule date range is limited (H4)
 - [x] Concurrent overlapping bookings are prevented, and conflicts return 409 (H1, L5)
 - [x] Schema hardening: unique email, column lengths, overlap index, restrictive deletes, existing data preserved (M2)
-- [ ] README, decision records and roadmap updated
+- [x] README, decision records and roadmap updated
 
 ## Later Ideas
 
