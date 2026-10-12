@@ -269,11 +269,12 @@ From the repository root:
 
 ```bash
 dotnet restore ResourceReservationSystem.slnx
+dotnet tool restore
 dotnet ef database update --project backend/ResourceReservation.Api --startup-project backend/ResourceReservation.Api
 dotnet run --project backend/ResourceReservation.Api/ResourceReservation.Api.csproj
 ```
 
-`dotnet ef database update` also applies new migrations to an existing database. Migrations are written to keep existing data.
+`dotnet ef database update` also applies new migrations to an existing database. Migrations are written to keep existing data. `dotnet tool restore` installs the pinned `dotnet-ef` version.
 
 Swagger is available in development at:
 
@@ -355,7 +356,13 @@ The Playwright smoke tests cover the main browser flow: Admin login, resource ma
 
 GitHub Actions runs on push and pull request.
 
-The workflow restores and tests the backend, installs frontend dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests. Pull requests fail if any check fails.
+The workflow runs three jobs:
+
+- **Backend:** restores and tests the backend, and reports coverage.
+- **Migration bundle:** builds the migration bundle, applies it to an empty SQL Server, and uploads it.
+- **Frontend:** installs dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests.
+
+Pull requests fail if any check fails.
 
 ## Configuration
 
@@ -383,20 +390,18 @@ The API checks its settings at startup and stops with a message naming any setti
 
 ## Deployment Notes
 
-This project is prepared as a portfolio application, not a live production deployment.
+This project is prepared as a portfolio application and isn't hosted yet. [docs/deployment.md](docs/deployment.md) describes what a deployment needs: HTTPS termination at a reverse proxy, the release order, migration bundles, and health checks.
 
 For production-like hosting:
 
-- Use a real SQL Server database instead of LocalDB
-- Configure `ConnectionStrings:DefaultConnection` through the hosting environment
-- Configure JWT settings and secrets outside source control
+- Use a real SQL Server database instead of LocalDB. SQL Server specifically is required, because reservation locking uses `sp_getapplock`.
+- Apply migrations with the migration bundle that CI builds (the `efbundle-linux-x64` artifact), before starting a new API version. The API never migrates the database itself.
+- Configure `ConnectionStrings:DefaultConnection` and the JWT settings through the hosting environment, with secrets outside source control
 - Set `Scheduling:TimeZoneId` if the resources are not in `Europe/Copenhagen`. Use an IANA time zone ID.
-- SQL Server is required, not just any EF Core provider: reservation locking uses `sp_getapplock`
-- Set `VITE_API_BASE_URL` to the deployed backend URL
 - If the frontend is on a different origin than the API, add it to `Cors:AllowedOrigins`
 - Behind a reverse proxy, list it in `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`, so the API sees the real client IP and scheme. Don't set `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, which trusts forwarded headers from anyone.
 - Outside Development, the API sends HSTS on HTTPS responses. Every API response also carries security headers and `Cache-Control: no-store`.
-- Build the frontend as static files with `npm run build`
+- Set `VITE_API_BASE_URL` to the deployed backend URL, and build the frontend as static files with `npm run build`
 
 ## Roadmap
 

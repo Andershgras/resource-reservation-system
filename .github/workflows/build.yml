@@ -50,6 +50,70 @@ jobs:
           name: backend-coverage-report
           path: TestResults/coverage/report
 
+  # Builds the database migration bundle that a deployment runs before starting
+  # a new API version, and proves it by applying it to an empty database.
+  # See docs/deployment.md.
+  migration-bundle:
+    name: Migration bundle
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: CiOnly-Passw0rd!
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      - name: Build migration bundle
+        run: >
+          dotnet ef migrations bundle
+          --project backend/ResourceReservation.Api
+          --startup-project backend/ResourceReservation.Api
+          --configuration Release
+          --self-contained
+          --target-runtime linux-x64
+          --output artifacts/efbundle
+
+      # SQL Server takes a few seconds to accept connections, so retry.
+      - name: Apply bundle to an empty database
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if ./artifacts/efbundle --connection "$CONNECTION_STRING"; then
+              exit 0
+            fi
+            echo "Attempt $attempt failed. Retrying in 10 seconds."
+            sleep 10
+          done
+          exit 1
+        env:
+          CONNECTION_STRING: Server=localhost,1433;Database=ResourceReservation_BundleCheck;User Id=sa;Password=CiOnly-Passw0rd!;TrustServerCertificate=True
+
+      - name: Apply bundle again (no changes expected)
+        run: ./artifacts/efbundle --connection "$CONNECTION_STRING"
+        env:
+          CONNECTION_STRING: Server=localhost,1433;Database=ResourceReservation_BundleCheck;User Id=sa;Password=CiOnly-Passw0rd!;TrustServerCertificate=True
+
+      - name: Upload migration bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: efbundle-linux-x64
+          path: artifacts/efbundle
+          retention-days: 14
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
