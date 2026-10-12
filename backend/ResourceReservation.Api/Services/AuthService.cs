@@ -1,4 +1,5 @@
 using System.Net.Mail;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
@@ -11,14 +12,22 @@ public class AuthService
 {
     private const string InvalidCredentialsMessage = "Invalid email or password.";
 
+    // A hash of a random password for each hasher, made by that hasher, so it has
+    // the same algorithm and work factor as real password hashes. Created once.
+    private static readonly ConditionalWeakTable<IPasswordHasher<User>, string> UnknownUserPasswordHashes = new();
+
     private readonly AppDbContext _context;
     private readonly JwtTokenService _jwtTokenService;
-    private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly IPasswordHasher<User> _passwordHasher;
 
-    public AuthService(AppDbContext context, JwtTokenService jwtTokenService)
+    public AuthService(
+        AppDbContext context,
+        JwtTokenService jwtTokenService,
+        IPasswordHasher<User> passwordHasher)
     {
         _context = context;
         _jwtTokenService = jwtTokenService;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<ServiceResult<UserResponseDto>> RegisterAsync(RegisterUserDto request)
@@ -84,6 +93,11 @@ public class AuthService
 
         if (user is null)
         {
+            // Verify the password anyway, so an unknown email takes about as long as
+            // a wrong password. Otherwise the response time reveals which emails
+            // have accounts.
+            VerifyAgainstUnknownUserHash(request.Password);
+
             return ServiceError.Unauthorized(InvalidCredentialsMessage);
         }
 
@@ -106,6 +120,16 @@ public class AuthService
             ExpiresInSeconds = issuedToken.ExpiresInSeconds,
             User = ToUserResponseDto(user)
         };
+    }
+
+    private void VerifyAgainstUnknownUserHash(string password)
+    {
+        var unknownUserHash = UnknownUserPasswordHashes.GetValue(
+            _passwordHasher,
+            hasher => hasher.HashPassword(new User(), Guid.NewGuid().ToString()));
+
+        // The result is ignored: no password can sign in as an unknown user.
+        _passwordHasher.VerifyHashedPassword(new User(), unknownUserHash, password);
     }
 
     private Task<bool> EmailExistsAsync(string normalizedEmail)

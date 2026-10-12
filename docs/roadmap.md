@@ -259,13 +259,15 @@ Implementation notes:
 - Rate limiting uses a token bucket rather than a fixed window, because only the token bucket reports the actual retry time. It allows 10 attempts at once, then one every 6 seconds.
 - The EF tools and migration bundle use a design-time `DbContext` factory, so they no longer start the API.
 
-Registration still reveals whether an email is already registered. A generic response isn't possible without email verification, so the limitation is documented in [security](security.md#account-enumeration) and the API contract is unchanged.
+- [x] Login timing: unknown emails also verify a password hash, so login no longer reveals existing accounts through a large timing difference. This narrows the gap but isn't constant-time ([security](security.md#login-timing)).
 
-Follow-ups noticed during M3, awaiting a decision:
+Registration still reveals whether an email is already registered. A generic response isn't possible without email verification, so the registration response stays as it is until M6 (approved). See [security](security.md#account-enumeration).
 
-- Login timing reveals existing accounts: about 90 ms for an existing email against about 5 ms for an unknown one. Hash a dummy password for unknown emails so both take the same time. No API change.
-- Email verification, which would allow a generic registration response (M6).
-- Account lockout per user (M6).
+Follow-ups for later milestones:
+
+- Email verification, which allows a generic registration response (M6)
+- Account lockout per user (M6)
+- Re-hash passwords on login when the hasher reports `SuccessRehashNeeded`
 
 ### M7: Deployment
 

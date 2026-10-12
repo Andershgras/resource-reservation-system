@@ -7,7 +7,7 @@ This page describes how the application protects accounts and data, and lists th
 - **Passwords** are hashed with ASP.NET Core Identity's `PasswordHasher`: PBKDF2 with HMAC-SHA512, a random salt and many iterations. Passwords must be at least 8 characters.
 - **Login** returns a JWT signed with HMAC-SHA256 using `Jwt:Key`. The API checks the signature, issuer, audience and lifetime of every token. ASP.NET Core allows five minutes of clock skew.
 - **Tokens last** `Jwt:ExpiryMinutes`, 120 by default. The login response includes `expiresAt` and `expiresInSeconds`.
-- **Wrong email and wrong password** give the same message: "Invalid email or password."
+- **Wrong email and wrong password** give the same message: "Invalid email or password." Both also verify a password hash, so they take about the same time ([login timing](#login-timing)).
 - **Registration** always creates a `User`. The client can't choose a role. The first Admin comes from the `SeedAdmin` settings.
 
 ## Authorization
@@ -74,7 +74,7 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 | Limitation | Effect | Plan |
 |---|---|---|
 | **Registration reveals existing accounts.** Registering an existing email returns "Email is already registered." | Anyone can check whether an email has an account, at the rate limit's pace | See [account enumeration](#account-enumeration) below |
-| **Login timing reveals existing accounts.** For an unknown email, login returns before hashing the password. | A wrong password takes about 90 ms for an existing account and about 5 ms for an unknown one (measured locally), so timing reveals which emails exist | Proposed follow-up: hash a dummy password when the email is unknown, so both cases take the same time. No API change. |
+| **Login timing is reduced, not constant** | Small timing differences remain, such as the database lookup | See [login timing](#login-timing) below |
 | No account lockout | An attacker using many IP addresses isn't slowed down per account | Milestone 6, with user management. Lockout also lets attackers lock out real users, so it needs care. |
 | No server-side logout or token revocation | A stolen token works until it expires | Short token lifetime for now. Revisit with the cookie review in Milestone 7. |
 | Token in `localStorage` | Readable by any script that runs on the frontend's origin | Cookie review before public deployment (Milestone 7) |
@@ -91,7 +91,26 @@ A registration response that doesn't reveal whether an email already exists isn'
 
 The clean solution is email verification. Registration would always answer "Check your inbox to continue", and the email would either confirm the new account or tell the existing owner that someone tried to register. That needs an email service, planned for Milestone 6.
 
-**Interim approach:**
-- Keep the current registration response, so the API contract doesn't change.
-- Rely on the rate limit to slow enumeration to about 10 attempts per minute per IP address.
-- Fix the login timing difference, so that login, the endpoint attackers use most, reveals nothing.
+**Interim approach (approved):**
+- Keep the current registration response until email verification arrives in Milestone 6, so the API contract doesn't change.
+- Rely on the rate limit to slow enumeration.
+- Reduce the login timing difference ([login timing](#login-timing)).
+
+### Login timing
+
+**The problem.** Password hashing is deliberately slow. Before the fix, login only hashed when the email existed, and returned straight away for an unknown email. Measured locally, a wrong password took about 90 ms for an existing account and about 5 ms for an unknown email, so response times revealed which emails have accounts.
+
+**The mitigation.** For an unknown email, login now verifies the submitted password against a hash of a random password. The result is ignored, and the response is the same generic "Invalid email or password." The hash:
+
+- comes from the same `IPasswordHasher<User>` as real passwords, with the same algorithm, format and iteration count;
+- is created once per hasher and reused, so each unknown-email login costs one verification, just like a real login.
+
+Unit tests check that existing and unknown emails each verify a password exactly once, and that the hash used for unknown emails has the same format, PRF, iteration count and salt size as real hashes. After the fix, the same local measurement gave about 55 ms against about 52 ms.
+
+**Limitations.** This narrows the gap, but **login is not constant-time**. No artificial delay is added, and some differences remain:
+
+- The database lookup and the rest of the request can take different amounts of time. Network and server load add noise that is much larger than these differences, but repeated measurements could still pick them up.
+- If the iteration count is ever raised, hashes made before the change verify faster than new ones. Login treats `SuccessRehashNeeded` as success but doesn't re-hash yet, so those accounts stay faster until their hash is replaced.
+- The first unknown-email login after the API starts also creates the reusable hash, so it takes about twice as long. This happens once per process.
+- An email that isn't a valid address is rejected before any lookup. That only reveals the address's format, not whether an account exists.
+- Registration still reveals existing emails directly ([account enumeration](#account-enumeration)), so this fix protects login, not the system as a whole.

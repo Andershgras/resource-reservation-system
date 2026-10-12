@@ -56,6 +56,7 @@ builder.Services.AddScoped<AvailabilityService>();
 builder.Services.AddScoped<ReservationService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // Settings are validated when the app starts, so bad configuration never serves a request.
 builder.Services.AddOptions<JwtOptions>()
