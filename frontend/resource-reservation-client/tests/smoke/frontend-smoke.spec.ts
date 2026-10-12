@@ -256,6 +256,153 @@ test('validation errors from the API are shown per field', async ({ page }) => {
   ).toBeVisible()
 })
 
+test('too many login attempts shows the rate limit message', async ({ page }) => {
+  await page.route('http://localhost:5052/api/auth/login', async (route) => {
+    const response = problemResponse(
+      429,
+      'Too Many Requests',
+      'Too many attempts. Please wait a moment and try again.',
+    )
+    await route.fulfill({ ...response, headers: { 'Retry-After': '6' } })
+  })
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/')
+  await login(page, 'someone@example.com', 'Password123')
+
+  await expect(
+    page.getByText('Error: Too many attempts. Please wait a moment and try again.'),
+  ).toBeVisible()
+})
+
+test('an expired stored session opens the login screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() - 60_000)
+
+  await page.goto('/')
+
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+})
+
+test('a stored session from before expiry times were saved opens the login screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, null)
+
+  await page.goto('/')
+
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+})
+
+test('a valid stored session is restored', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/')
+
+  await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
+})
+
+test('a 401 during a session returns to the login screen once', async ({ page }) => {
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await login(page, 'admin@example.com', 'Admin1234')
+  await expect(page.getByRole('heading', { name: 'Booking operations' })).toBeVisible()
+
+  // The server no longer accepts the token, for example after a key rotation.
+  await page.route('http://localhost:5052/api/resources', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+
+    await route.fulfill(problemResponse(401, 'Unauthorized', 'Authentication is required.'))
+  })
+  const apiRequests: string[] = []
+  page.on('request', (request) => {
+    if (request.url().startsWith('http://localhost:5052/api/')) {
+      apiRequests.push(request.url())
+    }
+  })
+  const resourceForm = sectionByHeading(page, 'Create resource')
+  await resourceForm.getByLabel('Name').fill('Expired Session Room')
+  await resourceForm.getByRole('button', { name: 'Create resource' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('resource-reservation-auth-token'))).toBeNull()
+
+  // No loop: the login screen makes no further API calls.
+  const requestsAtLogout = apiRequests.length
+  await page.waitForTimeout(500)
+  expect(apiRequests).toHaveLength(requestsAtLogout)
+})
+
+test('a failed login is not treated as an expired session', async ({ page }) => {
+  await page.route('http://localhost:5052/api/auth/login', async (route) => {
+    await route.fulfill(problemResponse(401, 'Unauthorized', 'Invalid email or password.'))
+  })
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/')
+  await login(page, 'someone@example.com', 'WrongPassword1')
+
+  await expect(page.getByText('Error: Invalid email or password.')).toBeVisible()
+  await expect(page.getByText(sessionExpiredMessage)).toHaveCount(0)
+})
+
+test('the session ends when the token lifetime runs out', async ({ page }) => {
+  await page.clock.install()
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await login(page, 'smoke.user@example.com', 'Password123')
+  await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
+
+  // The mocked tokens last two hours.
+  await page.clock.fastForward('01:59:00')
+  await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
+  await page.clock.fastForward('00:02:00')
+
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+})
+
+const sessionExpiredMessage = 'Your session has expired. Please log in again.'
+
+// Mirrors the API's login response. Tokens last two hours.
+function authResponse(token: string, user: UserResponse) {
+  const expiresInSeconds = 2 * 60 * 60
+
+  return {
+    token,
+    expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+    expiresInSeconds,
+    user,
+  }
+}
+
+// Stores a session as an earlier visit would have. A null expiry mimics a
+// session saved before expiry times were stored.
+async function storeSession(page: Page, expiresAt: number | null) {
+  await page.addInitScript((storedExpiresAt) => {
+    localStorage.clear()
+    localStorage.setItem('resource-reservation-auth-token', 'user-token')
+    localStorage.setItem('resource-reservation-auth-user', JSON.stringify({
+      id: 2,
+      name: 'Smoke Test User',
+      email: 'smoke.user@example.com',
+      role: 'User',
+    }))
+
+    if (storedExpiresAt !== null) {
+      localStorage.setItem('resource-reservation-auth-expires-at', String(storedExpiresAt))
+    }
+  }, expiresAt)
+}
+
 // Mirrors the API's RFC 9457 problem details responses.
 function problemResponse(
   status: number,
@@ -367,7 +514,7 @@ async function mockApi(
 
       await route.fulfill({
         status: 200,
-        json: { token: `${currentUser.role.toLowerCase()}-token`, user: currentUser },
+        json: authResponse(`${currentUser.role.toLowerCase()}-token`, currentUser),
       })
       return
     }

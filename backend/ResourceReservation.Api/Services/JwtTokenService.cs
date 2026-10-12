@@ -8,6 +8,9 @@ using ResourceReservation.Api.Models;
 
 namespace ResourceReservation.Api.Services;
 
+// A signed token and when it stops being accepted.
+public record IssuedToken(string Token, DateTimeOffset ExpiresAt, int ExpiresInSeconds);
+
 public class JwtTokenService
 {
     private readonly JwtOptions _jwtOptions;
@@ -19,7 +22,7 @@ public class JwtTokenService
         _timeProvider = timeProvider;
     }
 
-    public string CreateToken(User user)
+    public IssuedToken CreateToken(User user)
     {
         var claims = new List<Claim>
         {
@@ -29,6 +32,7 @@ public class JwtTokenService
             new(ClaimTypes.Role, user.Role)
         };
 
+        var expiresAt = _timeProvider.GetUtcNow().AddMinutes(_jwtOptions.ExpiryMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -36,9 +40,12 @@ public class JwtTokenService
             issuer: _jwtOptions.Issuer,
             audience: _jwtOptions.Audience,
             claims: claims,
-            expires: _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(_jwtOptions.ExpiryMinutes),
+            expires: expiresAt.UtcDateTime,
             signingCredentials: credentials);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return new IssuedToken(
+            new JwtSecurityTokenHandler().WriteToken(token),
+            expiresAt,
+            _jwtOptions.ExpiryMinutes * 60);
     }
 }

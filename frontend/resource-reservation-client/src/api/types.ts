@@ -11,6 +11,10 @@ export interface UserResponse {
 
 export interface AuthResponse {
   token: string
+  // When the token stops being accepted, as an ISO 8601 UTC time.
+  expiresAt: string
+  // The token lifetime, counted from when the response was sent.
+  expiresInSeconds: number
   user: UserResponse
 }
 

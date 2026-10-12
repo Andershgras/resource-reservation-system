@@ -139,14 +139,32 @@ All times are wall-clock times in the configured scheduling time zone, `Europe/C
 | Authentication | JWT bearer tokens signed with HMAC-SHA256. They last `Jwt:ExpiryMinutes` (120 by default). |
 | Authorization | `[Authorize]` and `[Authorize(Roles = "Admin")]` on controllers. Services check ownership. |
 | Errors | RFC 9457 problem details for every error, with `traceId` |
-| Configuration | Typed options validated at startup. See the configuration table in the README. |
+| Configuration | Typed options validated at startup. See [configuration](configuration.md). |
+| Security | Rate-limited login and registration, CORS, trusted proxies, security headers and HSTS. See [security](security.md). |
+| Health | `/health/live` and `/health/ready` for the hosting platform. See [deployment](deployment.md#health-checks). |
 | Time | `SchedulingClock` gives "now" in the scheduling time zone, through an injectable `TimeProvider` |
+
+## Request pipeline
+
+Middleware runs in this order for every request:
+
+1. **Forwarded headers:** only when trusted proxies are configured. They set the real client IP address and scheme.
+2. **Exception handler:** turns unhandled exceptions into a 500 problem response.
+3. **HSTS:** outside Development only.
+4. **Security headers:** added when the response starts, so they're present on every response.
+5. **Swagger:** Development only.
+6. **HTTPS redirection**
+7. **CORS**
+8. **Rate limiter:** after CORS, so the browser can read a 429. It only applies to the auth endpoints.
+9. **Authentication and authorization**
+10. **Endpoints:** the controllers and health checks.
 
 ## Frontend
 
 The frontend is a Vite-built React and TypeScript app:
 
-- `src/api/` holds the typed API clients. `client.ts` adds the bearer token and turns problem details into readable messages.
+- `src/api/` holds the typed API clients. `client.ts` adds the bearer token, turns problem details into readable messages, and ends the session when the API rejects the token.
+- `src/auth/authStorage.ts` stores the session and its expiry ([ADR 0004](adr/0004-token-storage-and-session-expiry.md)).
 - `src/views/` holds the admin and user screens.
 - `src/components/` holds the screen sections.
 - State currently lives in `App.tsx`. Splitting it into feature hooks, and adding routing, is planned for Milestone 4 ([roadmap](roadmap.md)).
@@ -156,3 +174,5 @@ The frontend is a Vite-built React and TypeScript app:
 - [ADR 0001: Store times as wall-clock time in one configured time zone](adr/0001-time-zone-convention.md)
 - [ADR 0002: Serialize bookings per resource with a SQL Server application lock](adr/0002-reservation-concurrency.md)
 - [ADR 0003: Problem details for errors and result types for expected failures](adr/0003-error-handling.md)
+- [ADR 0004: Keep the token in localStorage and handle session expiry in the frontend](adr/0004-token-storage-and-session-expiry.md)
+- [ADR 0005: Database migrations as a separate deployment step](adr/0005-migrations-in-deployment.md)

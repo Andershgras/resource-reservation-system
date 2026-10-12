@@ -46,6 +46,8 @@ The project intentionally stays generic. A resource can represent a meeting room
 - User registration
 - User login
 - JWT-based authentication
+- Session expiry: the frontend returns to the login screen when the token expires or the API rejects it
+- Rate-limited login and registration
 - Role-based access for Admin and User behavior
 - Seeded development Admin account
 
@@ -170,6 +172,23 @@ POST /api/auth/register
 POST /api/auth/login
 ```
 
+Login returns the token, `expiresAt` (UTC) and `expiresInSeconds`. Clients should time the session from `expiresInSeconds`, because their own clock may be wrong.
+
+Login and registration share a rate limit per client IP address, using a token bucket:
+- A client starts with 10 attempts, then gets one more every 6 seconds, up to 10. That allows 10 attempts per minute sustained, with a burst of up to about 20 in the first minute.
+- Over the limit, the API returns `429` with `Retry-After: 6`, the refill interval. That isn't the time left, so the next attempt may be allowed sooner.
+
+See [security](docs/security.md#brute-force-protection).
+
+### Health
+
+```text
+GET /health/live    The process is running. Checks nothing else.
+GET /health/ready   The API can reach its database. Returns 503 if not.
+```
+
+Both are anonymous and return only `Healthy` or `Unhealthy`.
+
 ### Resources
 
 ```text
@@ -236,6 +255,7 @@ Validation errors also include `errors`, keyed by field name. Unexpected server 
 | `403` | Authenticated, but not allowed |
 | `404` | Resource, availability or reservation not found |
 | `409` | The time overlaps an active reservation |
+| `429` | Too many login or registration attempts. `Retry-After` gives the refill interval in seconds. |
 | `503` | Another booking for the same resource is in progress. Retry after the number of seconds in the `Retry-After` header. |
 
 ## Local Setup
@@ -253,11 +273,12 @@ From the repository root:
 
 ```bash
 dotnet restore ResourceReservationSystem.slnx
+dotnet tool restore
 dotnet ef database update --project backend/ResourceReservation.Api --startup-project backend/ResourceReservation.Api
 dotnet run --project backend/ResourceReservation.Api/ResourceReservation.Api.csproj
 ```
 
-`dotnet ef database update` also applies new migrations to an existing database. Migrations are written to keep existing data.
+`dotnet ef database update` also applies new migrations to an existing database. Migrations are written to keep existing data. `dotnet tool restore` installs the pinned `dotnet-ef` version.
 
 Swagger is available in development at:
 
@@ -322,6 +343,13 @@ This runs two suites:
 
 See [docs/testing.md](docs/testing.md) for what each suite covers and how to produce a coverage report.
 
+Further documentation:
+- [architecture](docs/architecture.md)
+- [configuration](docs/configuration.md)
+- [security](docs/security.md)
+- [deployment](docs/deployment.md)
+- [decision records](docs/adr/)
+
 The integration tests need **Docker Desktop** to be running. To use an existing SQL Server instead, set `INTEGRATION_TEST_CONNECTION_STRING`. The database name must end in `_IntegrationTests`, because the tests delete all of its data between runs.
 
 Frontend checks:
@@ -339,40 +367,46 @@ The Playwright smoke tests cover the main browser flow: Admin login, resource ma
 
 GitHub Actions runs on push and pull request.
 
-The workflow restores and tests the backend, installs frontend dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests. Pull requests fail if any check fails.
+The workflow runs three jobs:
+
+- **Backend:** restores and tests the backend, and reports coverage.
+- **Migration bundle:** builds the migration bundle, applies it to an empty SQL Server, and uploads it.
+- **Frontend:** installs dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests.
+
+Pull requests fail if any check fails.
 
 ## Configuration
 
 The API checks its settings at startup and stops with a message naming any setting that is missing or invalid. Settings can come from `appsettings.*.json`, user secrets, or environment variables. In environment variable names, `:` becomes `__`, so `Jwt:Key` is set as `Jwt__Key`.
 
-| Setting | Required | Default | Notes |
-|---|---|---|---|
-| `ConnectionStrings:DefaultConnection` | Yes | None | SQL Server connection string |
-| `Jwt:Key` | Yes | None | Signing secret, at least 32 characters. Keep it out of source control. |
-| `Jwt:Issuer` | Yes | None | |
-| `Jwt:Audience` | Yes | None | |
-| `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes |
-| `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
-| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](docs/adr/0002-reservation-concurrency.md)) |
-| `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
-| `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
-| `SeedAdmin:Name` | No | `Admin` | |
+| Setting | Required | Default |
+|---|---|---|
+| `ConnectionStrings:DefaultConnection` | Yes | None |
+| `Jwt:Key`, `Jwt:Issuer`, `Jwt:Audience` | Yes | None |
+| `Jwt:ExpiryMinutes` | No | `120` |
+| `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` |
+| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` |
+| `Cors:AllowedOrigins` | No | None |
+| `ReverseProxy:KnownProxies`, `ReverseProxy:KnownNetworks` | No | None |
+| `RateLimiting:Auth:PermitLimit`, `RateLimiting:Auth:WindowSeconds` | No | `10`, `60` |
+| `SeedAdmin:Email`, `SeedAdmin:Password`, `SeedAdmin:Name` | No | None |
 
-`appsettings.Development.json` contains working values for local development only.
+[docs/configuration.md](docs/configuration.md) explains every setting, its limits, which values are secrets, and which environment variables to leave unset. `appsettings.Development.json` contains working values for local development only.
 
 ## Deployment Notes
 
-This project is prepared as a portfolio application, not a live production deployment.
+This project is prepared as a portfolio application and isn't hosted yet. [docs/deployment.md](docs/deployment.md) describes what a deployment needs: HTTPS termination at a reverse proxy, the release order, migration bundles, and health checks.
 
 For production-like hosting:
 
-- Use a real SQL Server database instead of LocalDB
-- Configure `ConnectionStrings:DefaultConnection` through the hosting environment
-- Configure JWT settings and secrets outside source control
+- Use a real SQL Server database instead of LocalDB. SQL Server specifically is required, because reservation locking uses `sp_getapplock`.
+- Apply migrations with the migration bundle that CI builds (the `efbundle-linux-x64` artifact), before starting a new API version. The API never migrates the database itself.
+- Configure `ConnectionStrings:DefaultConnection` and the JWT settings through the hosting environment, with secrets outside source control
 - Set `Scheduling:TimeZoneId` if the resources are not in `Europe/Copenhagen`. Use an IANA time zone ID.
-- SQL Server is required, not just any EF Core provider: reservation locking uses `sp_getapplock`
-- Set `VITE_API_BASE_URL` to the deployed backend URL
-- Build the frontend as static files with `npm run build`
+- If the frontend is on a different origin than the API, add it to `Cors:AllowedOrigins`
+- Behind a reverse proxy, list it in `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`, so the API sees the real client IP and scheme. Don't set `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, which trusts forwarded headers from anyone.
+- Outside Development, the API sends HSTS on HTTPS responses. Every API response also carries security headers and `Cache-Control: no-store`.
+- Set `VITE_API_BASE_URL` to the deployed backend URL, and build the frontend as static files with `npm run build`
 
 ## Roadmap
 

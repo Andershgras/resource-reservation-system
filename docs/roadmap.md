@@ -197,12 +197,12 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | Milestone | Focus | Status |
 |---|---|---|
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
-| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done, awaiting review |
-| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Not started |
+| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
+| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done, awaiting review |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
-| M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack) | Not started |
+| M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
 
 ### M1: Booking Correctness And Data Integrity
 
@@ -232,8 +232,53 @@ Planned changes, in order. The service layer was moved ahead of ProblemDetails s
 Follow-ups noticed during M2, outside its scope:
 
 - Validation messages for missing or malformed fields use DataAnnotations' default wording, such as "The field Password must be a string or array type with a minimum length of '8'." Add friendly `ErrorMessage` values to the request DTOs (M5, UI/UX).
-- `Location` headers and generated links use the controller's casing (`/api/Reservations/1`). Routes are case-insensitive, so nothing breaks, but `RouteOptions.LowercaseUrls` would make URLs consistent (M3).
-- The unused `Microsoft.AspNetCore.OpenApi` package (audit L12) still generates code. That code is excluded from coverage for now; remove the package (M3).
+- [x] `Location` headers and generated links use the controller's casing (`/api/Reservations/1`). Done in M3: URLs are now lowercase.
+- [x] The unused `Microsoft.AspNetCore.OpenApi` package (audit L12) generates code. Done in M3: the package is removed.
+
+### M3: Security And Production Configuration
+
+Agreed decisions:
+- The JWT stays in `localStorage` for now, with proper session-expiry handling. API security headers don't protect the frontend's JavaScript from XSS. **Before any public deployment (M7), review moving to httpOnly cookie authentication.**
+- Login and register allow 10 requests per minute per client IP by default. `Retry-After` is based on the real retry time, as far as the rate limiter can report it.
+- Database migrations run as a separate deployment step from an EF migration bundle, never automatically when the API starts.
+- Registration should not reveal whether an email is already registered, but must not show a misleading success message either. If this can't be done cleanly without email verification, the limitation is documented and an interim approach is proposed before the API contract changes.
+- Forwarded headers are trusted only from explicitly configured proxies.
+
+Planned changes, in order:
+
+- [x] Tidy-ups: remove the unused OpenApi package (L12), lowercase URLs, roadmap update
+- [x] CORS origins from configuration, validated at startup
+- [x] Forwarded headers from configured proxies, HSTS and security headers
+- [x] Rate limiting on login and register, returning 429 with `Retry-After` (M4 in the audit)
+- [x] Health check endpoints for liveness and readiness
+- [x] Session expiry: the login response includes `expiresAt` and `expiresInSeconds`, and the frontend logs out on expiry or 401 (M3 in the audit)
+- [x] Migration bundle built and tested in CI, plus a deployment guide ([ADR 0005](adr/0005-migrations-in-deployment.md))
+- [x] Security and configuration documentation, plus [ADR 0004](adr/0004-token-storage-and-session-expiry.md)
+
+Implementation notes:
+- Rate limiting uses ASP.NET Core's token bucket:
+  - Each client gets a burst of 10 attempts, then one more every 6 seconds, up to 10.
+  - The built-in limiters can't report the time left until the next attempt. The token bucket's `Retry-After` is the 6-second refill interval, which is much closer to the real wait than a fixed window's 60 seconds.
+  - Exact behaviour, as measured, is in [security](security.md#brute-force-protection).
+- The EF tools and migration bundle use a design-time `DbContext` factory, so they no longer start the API.
+
+- [x] Login timing: unknown emails also verify a password hash, so login no longer reveals existing accounts through a large timing difference. This narrows the gap but isn't constant-time ([security](security.md#login-timing)).
+
+Registration still reveals whether an email is already registered. A generic response isn't possible without email verification, so the registration response stays as it is until M6 (approved). See [security](security.md#account-enumeration).
+
+Follow-ups for later milestones:
+
+- Email verification, which allows a generic registration response (M6)
+- Account lockout per user (M6)
+- Re-hash passwords on login when the hasher reports `SuccessRehashNeeded`
+
+### M7: Deployment
+
+Tracked so far:
+
+- [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie, or document why not ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
+- [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them
+- [ ] Run the migration bundle as a deployment step, and configure the reverse proxy as trusted
 
 ## Later Ideas
 

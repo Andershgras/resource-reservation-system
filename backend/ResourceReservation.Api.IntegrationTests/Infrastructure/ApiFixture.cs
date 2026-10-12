@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -140,6 +142,9 @@ public sealed class ApiFixture : IAsyncLifetime
 
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
+    public const string JwtKey = "integration-test-jwt-key-that-is-long-enough-for-hmac";
+    public const string JwtIssuerAndAudience = "ResourceReservation.IntegrationTests";
+
     private readonly string _connectionString;
     private readonly IReadOnlyDictionary<string, string> _settingOverrides;
 
@@ -156,15 +161,45 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // UseSetting is visible while Program.cs reads configuration before Build().
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
-        builder.UseSetting("Jwt:Key", "integration-test-jwt-key-that-is-long-enough-for-hmac");
-        builder.UseSetting("Jwt:Issuer", "ResourceReservation.IntegrationTests");
-        builder.UseSetting("Jwt:Audience", "ResourceReservation.IntegrationTests");
+        builder.UseSetting("Jwt:Key", JwtKey);
+        builder.UseSetting("Jwt:Issuer", JwtIssuerAndAudience);
+        builder.UseSetting("Jwt:Audience", JwtIssuerAndAudience);
         builder.UseSetting("Scheduling:TimeZoneId", "Europe/Copenhagen");
+        // Tests log in many times from one address. RateLimitingTests set a real limit.
+        builder.UseSetting("RateLimiting:Auth:PermitLimit", "10000");
 
         foreach (var (key, value) in _settingOverrides)
         {
             builder.UseSetting(key, value);
         }
+
+        builder.ConfigureServices(services =>
+            services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>());
+    }
+}
+
+// The in-memory test server has no client IP address. A test sets one with the
+// X-Test-Remote-Ip header, as if the request came from that address.
+public sealed class TestRemoteIpStartupFilter : IStartupFilter
+{
+    public const string HeaderName = "X-Test-Remote-Ip";
+
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        return app =>
+        {
+            app.Use(async (context, nextMiddleware) =>
+            {
+                if (context.Request.Headers.Remove(HeaderName, out var remoteIp))
+                {
+                    context.Connection.RemoteIpAddress = IPAddress.Parse(remoteIp.ToString());
+                }
+
+                await nextMiddleware(context);
+            });
+
+            next(app);
+        };
     }
 }
 
