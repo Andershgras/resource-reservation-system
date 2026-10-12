@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
@@ -11,7 +12,7 @@ using ResourceReservation.Api.Models;
 using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Services;
 
-const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
+const string frontendCorsPolicy = "FrontendCors";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,26 +22,23 @@ builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 // Generated links and Location headers use lowercase paths, such as /api/reservations/1.
 builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(frontendDevelopmentCorsPolicy, policy =>
+// Cross-origin browser calls are allowed only from the origins in Cors:AllowedOrigins,
+// plus the local Vite dev server in Development.
+builder.Services.AddCors();
+builder.Services.AddOptions<CorsOptions>()
+    .Configure<IOptions<FrontendCorsOptions>, IWebHostEnvironment>((options, frontendCors, environment) =>
     {
-        policy
-            .SetIsOriginAllowed(origin =>
-            {
-                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
-                {
-                    return false;
-                }
-
-                return (uri.Host == "localhost" || uri.Host == "127.0.0.1") &&
-                    uri.Port >= 5173 &&
-                    uri.Port <= 5185;
-            })
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        options.AddPolicy(frontendCorsPolicy, policy =>
+        {
+            policy
+                .SetIsOriginAllowed(origin =>
+                    frontendCors.Value.IsAllowed(origin) ||
+                    (environment.IsDevelopment() && IsLocalViteOrigin(origin)))
+                .WithMethods("GET", "POST", "PUT", "DELETE")
+                .AllowAnyHeader()
+                .WithExposedHeaders("Retry-After");
+        });
     });
-});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -62,6 +60,10 @@ builder.Services.AddOptions<JwtOptions>()
     .ValidateOnStart();
 builder.Services.AddOptions<SchedulingOptions>()
     .Bind(builder.Configuration.GetSection(SchedulingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<FrontendCorsOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendCorsOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
@@ -181,10 +183,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseCors(frontendDevelopmentCorsPolicy);
-}
+app.UseCors(frontendCorsPolicy);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -204,6 +203,15 @@ static async Task WriteProblemAsync(HttpContext httpContext, int statusCode, str
             HttpContext = httpContext,
             ProblemDetails = { Status = statusCode, Detail = detail }
         });
+}
+
+// The Vite dev server, which picks the next free port from 5173.
+static bool IsLocalViteOrigin(string origin)
+{
+    return Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+        (uri.Host == "localhost" || uri.Host == "127.0.0.1") &&
+        uri.Port >= 5173 &&
+        uri.Port <= 5185;
 }
 
 // Exposes the entry point to WebApplicationFactory in the integration tests.

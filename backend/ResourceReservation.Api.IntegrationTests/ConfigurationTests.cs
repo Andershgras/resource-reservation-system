@@ -16,6 +16,9 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("Jwt:Issuer", "", "Jwt:Issuer is required.")]
     [InlineData("Jwt:ExpiryMinutes", "0", "Jwt:ExpiryMinutes must be between 1 and 1440.")]
     [InlineData("SeedAdmin:Email", "seed@integration.test", "SeedAdmin:Password must be at least 8 characters")]
+    [InlineData("Cors:AllowedOrigins:0", "https://app.example.test/path", "Cors:AllowedOrigins entry 'https://app.example.test/path' must be an origin")]
+    [InlineData("Cors:AllowedOrigins:0", "*", "Cors:AllowedOrigins entry '*' must be an origin")]
+    [InlineData("Cors:AllowedOrigins:0", "https://*.example.test", "Cors:AllowedOrigins entry 'https://*.example.test' must be an origin")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
         string key,

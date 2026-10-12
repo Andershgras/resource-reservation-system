@@ -354,6 +354,7 @@ The API checks its settings at startup and stops with a message naming any setti
 | `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes |
 | `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
 | `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](docs/adr/0002-reservation-concurrency.md)) |
+| `Cors:AllowedOrigins` | No | None | Browser origins allowed to call the API from another origin, such as `https://app.example.com`. Exact origins only, with no path or wildcard. Leave empty when the frontend is served from the same origin. Development also allows the Vite dev server on `localhost` ports 5173–5185. |
 | `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
 | `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
 | `SeedAdmin:Name` | No | `Admin` | |
@@ -372,6 +373,7 @@ For production-like hosting:
 - Set `Scheduling:TimeZoneId` if the resources are not in `Europe/Copenhagen`. Use an IANA time zone ID.
 - SQL Server is required, not just any EF Core provider: reservation locking uses `sp_getapplock`
 - Set `VITE_API_BASE_URL` to the deployed backend URL
+- If the frontend is on a different origin than the API, add it to `Cors:AllowedOrigins`
 - Build the frontend as static files with `npm run build`
 
 ## Roadmap
