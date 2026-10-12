@@ -135,15 +135,17 @@ frontend/
       smoke/
 
 docs/
-  adr/          architecture decision records
-  audit/        project audits
+  adr/             architecture decision records
+  audit/           project audits
+  architecture.md  layers, request flow and data model diagrams
+  testing.md       test suites, how to run them, and coverage
   planning.md
   roadmap.md
 ```
 
 ## Architecture Overview
 
-The application is split into a backend API, a SQL Server database, and a React frontend.
+The application is split into a backend API, a SQL Server database, and a React frontend. Diagrams of the layers, the reservation flow and the data model are in [docs/architecture.md](docs/architecture.md).
 
 The backend owns the business rules. It exposes endpoints for authentication, resources, availability windows, weekly availability rules, generated resource schedules, and reservations.
 
@@ -317,6 +319,8 @@ This runs two suites:
 
 - `ResourceReservation.Api.Tests`: fast unit tests of the controllers, using the EF Core in-memory provider.
 - `ResourceReservation.Api.IntegrationTests`: the whole API over HTTP against a real SQL Server, started in Docker with [Testcontainers](https://dotnet.testcontainers.org/). They cover authorization, validation, booking concurrency, the unique email and the migrations.
+
+See [docs/testing.md](docs/testing.md) for what each suite covers and how to produce a coverage report.
 
 The integration tests need **Docker Desktop** to be running. To use an existing SQL Server instead, set `INTEGRATION_TEST_CONNECTION_STRING`. The database name must end in `_IntegrationTests`, because the tests delete all of its data between runs.
 

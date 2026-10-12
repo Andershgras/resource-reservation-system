@@ -197,7 +197,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | Milestone | Focus | Status |
 |---|---|---|
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
-| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | In progress |
+| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done, awaiting review |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Not started |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
@@ -227,7 +227,13 @@ Planned changes, in order. The service layer was moved ahead of ProblemDetails s
 - [x] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))
 - [x] A booking-lock timeout returns 503 with `Retry-After`. It previously surfaced as an unhandled 500.
 - [x] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
-- [ ] Code coverage reported in CI, plus `docs/testing.md`, `docs/architecture.md` and ADR 0003
+- [x] Code coverage reported in CI, plus `docs/testing.md`, `docs/architecture.md` and ADR 0003
+
+Follow-ups noticed during M2, outside its scope:
+
+- Validation messages for missing or malformed fields use DataAnnotations' default wording, such as "The field Password must be a string or array type with a minimum length of '8'." Add friendly `ErrorMessage` values to the request DTOs (M5, UI/UX).
+- `Location` headers and generated links use the controller's casing (`/api/Reservations/1`). Routes are case-insensitive, so nothing breaks, but `RouteOptions.LowercaseUrls` would make URLs consistent (M3).
+- The unused `Microsoft.AspNetCore.OpenApi` package (audit L12) still generates code. That code is excluded from coverage for now; remove the package (M3).
 
 ## Later Ideas
 

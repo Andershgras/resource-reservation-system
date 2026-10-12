@@ -52,6 +52,51 @@ public class ReservationTests : ApiTestBase
     }
 
     [Fact]
+    public async Task ReservationLifecycle_EnforcesOwnershipAndAdminAccess()
+    {
+        var adminClient = await CreateAdminClientAsync();
+        var resourceId = await CreateResourceWithWeeklyRuleAsync(
+            adminClient,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var ownerClient = await CreateUserClientAsync("owner@integration.test");
+        var otherClient = await CreateUserClientAsync("other@integration.test");
+        var createResponse = await ownerClient.PostAsJsonAsync("/api/reservations", new CreateReservationDto
+        {
+            ResourceId = resourceId,
+            StartTime = BookingDay.AddHours(12),
+            EndTime = BookingDay.AddHours(13)
+        });
+        var reservation = await createResponse.Content.ReadFromJsonAsync<ReservationResponseDto>();
+        var reservationPath = $"/api/reservations/{reservation!.Id}";
+
+        Assert.Equal(reservationPath, createResponse.Headers.Location?.AbsolutePath, ignoreCase: true);
+        Assert.Equal(HttpStatusCode.OK, (await ownerClient.GetAsync(reservationPath)).StatusCode);
+        await ProblemAssert.IsProblemAsync(await otherClient.GetAsync(reservationPath), HttpStatusCode.Forbidden);
+        await ProblemAssert.IsProblemAsync(
+            await otherClient.PutAsync($"{reservationPath}/cancel", null),
+            HttpStatusCode.Forbidden);
+        Assert.Single((await adminClient.GetFromJsonAsync<List<ReservationResponseDto>>(
+            $"/api/reservations/resource/{resourceId}"))!);
+        Assert.Single((await adminClient.GetFromJsonAsync<List<ReservationResponseDto>>(
+            $"/api/reservations/user/{reservation.UserId}"))!);
+        await ProblemAssert.IsProblemAsync(
+            await adminClient.GetAsync("/api/reservations/resource/999"),
+            HttpStatusCode.NotFound,
+            "Resource does not exist.");
+
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await ownerClient.PutAsync($"{reservationPath}/cancel", null)).StatusCode);
+        await ProblemAssert.IsProblemAsync(
+            await ownerClient.PutAsync($"{reservationPath}/cancel", null),
+            HttpStatusCode.BadRequest,
+            "Reservation is already cancelled.");
+        var cancelled = await adminClient.GetFromJsonAsync<ReservationResponseDto>(reservationPath);
+        Assert.Equal(ReservationStatuses.Cancelled, cancelled!.Status);
+    }
+
+    [Fact]
     public async Task CreateReservation_WhenSameSlotIsBookedInParallel_OnlyOneSucceeds()
     {
         const int parallelRequests = 10;
