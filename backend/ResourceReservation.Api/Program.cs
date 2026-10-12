@@ -159,7 +159,7 @@ using (var scope = app.Services.CreateScope())
     var adminPassword = configuration["SeedAdmin:Password"];
     var adminName = configuration["SeedAdmin:Name"]?.Trim();
     var adminEmailExists = string.IsNullOrWhiteSpace(adminEmail) ||
-        await context.Users.AnyAsync(user => user.Email.ToLower() == adminEmail);
+        await context.Users.AnyAsync(user => user.Email == adminEmail);
 
     if (!string.IsNullOrWhiteSpace(adminEmail) &&
         !string.IsNullOrWhiteSpace(adminPassword) &&
