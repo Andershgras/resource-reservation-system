@@ -196,8 +196,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 
 | Milestone | Focus | Status |
 |---|---|---|
-| M1 | Booking correctness and data integrity | Done, awaiting review |
-| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Not started |
+| M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
+| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | In progress |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Not started |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
@@ -215,13 +215,19 @@ Work continues in milestones. Each milestone is made of small changes that are v
 
 ### M2: Backend Structure And Test Coverage
 
-Not started. Items carried over from M1 and the audit:
+Agreed decisions:
+- Errors use the standard ProblemDetails format (RFC 9457) instead of `{ message, errors }`. Frontend error and validation messages must keep working.
+- Integration tests run against real SQL Server using Testcontainers. Locally this needs Docker Desktop; in CI, GitHub Actions provides Docker.
+- A booking-lock timeout returns `503 Service Unavailable` with a `Retry-After` header and a user-friendly message. `409 Conflict` remains reserved for genuine booking overlaps.
 
-- [ ] Move reservation creation, including the per-resource booking lock, from `ReservationsController` into a reservation service ([ADR 0002](adr/0002-reservation-concurrency.md))
-- [ ] Return a clear response when the booking lock times out. Today, `sp_getapplock` waits 10 seconds, then raises SQL error 50000, which surfaces as an unhandled 500. Map it to `503 Service Unavailable` with a retry message in the global error handler.
-- [ ] Add a global exception handler that returns ProblemDetails in the existing `{ message, errors }` shape (M1 in the audit)
-- [ ] Validate configuration at startup using the Options pattern (Jwt, Scheduling, connection string)
-- [ ] Add `WebApplicationFactory` integration tests against real SQL Server, covering authorization, validation, booking concurrency, and the lock timeout (M8 in the audit)
+Planned changes, in order:
+
+- [ ] Integration test harness: `WebApplicationFactory` with Testcontainers SQL Server, plus baseline tests for authorization, validation, booking concurrency, the unique email, and migrations (M8 in the audit)
+- [ ] Configuration validated at startup using the Options pattern (Jwt, Scheduling, SeedAdmin, connection string)
+- [ ] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
+- [ ] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))
+- [ ] A booking-lock timeout returns 503 with `Retry-After`. Today it surfaces as an unhandled 500.
+- [ ] Code coverage reported in CI, plus `docs/testing.md`, `docs/architecture.md` and ADR 0003
 
 ## Later Ideas
 
