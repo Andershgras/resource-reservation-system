@@ -4,27 +4,26 @@ import {
   deleteAvailability,
   getAvailabilities,
   updateAvailability,
-} from './api/availabilitiesApi'
+} from '../api/availabilitiesApi'
 import {
   createAvailabilityRule,
   deleteAvailabilityRule,
   getAvailabilityRules,
   updateAvailabilityRule,
-} from './api/availabilityRulesApi'
-import { login, register } from './api/authApi'
+} from '../api/availabilityRulesApi'
 import {
   createResource,
   deleteResource,
   getResourceSchedule,
   getResources,
   updateResource,
-} from './api/resourcesApi'
+} from '../api/resourcesApi'
 import {
   cancelReservation,
   createReservation,
   getMyReservations,
   getReservations,
-} from './api/reservationsApi'
+} from '../api/reservationsApi'
 import type {
   AvailabilityResponse,
   AvailabilityRuleResponse,
@@ -32,36 +31,25 @@ import type {
   ReservationResponse,
   ResourceScheduleResponse,
   ResourceResponse,
-  UserResponse,
-} from './api/types'
-import {
-  clearAuthSession,
-  expireAuthSessionIfDue,
-  getSessionExpiresAt,
-  onSessionExpired,
-  restoreAuthSession,
-  saveAuthSession,
-} from './auth/authStorage'
-import type { AuthMode } from './components/AuthForm'
+} from '../api/types'
+import { useAuth, useCurrentUser } from '../auth/authContext'
 import {
   addDays,
   formatDateTime,
   toDateInputValue,
   toDateTimeLocalValue,
   toTimeOfDay,
-} from './lib/dates'
-import { getErrorMessage } from './lib/errors'
-import { getSlotKey } from './lib/schedule'
-import { emptyToNull } from './lib/text'
+} from '../lib/dates'
+import { getErrorMessage } from '../lib/errors'
+import { getSlotKey } from '../lib/schedule'
+import { emptyToNull } from '../lib/text'
 import {
   validateAvailabilityForm,
   validateAvailabilityRuleForm,
   validateReservationSlotSelection,
-} from './lib/validation'
-import { AdminHomeView } from './views/AdminHomeView'
-import { AuthView } from './views/AuthView'
-import { UserHomeView } from './views/UserHomeView'
-import './App.css'
+} from '../lib/validation'
+import { AdminHomeView } from '../views/AdminHomeView'
+import { UserHomeView } from '../views/UserHomeView'
 
 type ConfirmationRequest = {
   title: string
@@ -70,22 +58,12 @@ type ConfirmationRequest = {
   onConfirm: () => Promise<void>
 }
 
-const sessionExpiredMessage = 'Your session has expired. Please log in again.'
-const maxTimeoutMilliseconds = 2_147_483_647
-
-function App() {
-  const [authMode, setAuthMode] = useState<AuthMode>('login')
-  const [restoredSession] = useState(restoreAuthSession)
-  const [currentUser, setCurrentUser] = useState<UserResponse | null>(
-    restoredSession.user,
-  )
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState(
-    restoredSession.expired ? sessionExpiredMessage : '',
-  )
-  const [isSubmitting, setIsSubmitting] = useState(false)
+// The logged-in screens and, until they move into feature hooks, all of their
+// state. Mounted inside RequireAuth, so when the session ends the redirect to
+// the login screen unmounts it and discards the previous user's data.
+export function Workspace() {
+  const currentUser = useCurrentUser()
+  const { logOut } = useAuth()
   const [resources, setResources] = useState<ResourceResponse[]>([])
   const [resourceMessage, setResourceMessage] = useState('')
   const [isLoadingResources, setIsLoadingResources] = useState(false)
@@ -177,38 +155,6 @@ function App() {
   const [confirmationRequest, setConfirmationRequest] =
     useState<ConfirmationRequest | null>(null)
   const [isConfirmingAction, setIsConfirmingAction] = useState(false)
-
-  // Back to the login screen when the session ends: the API rejected the token,
-  // or its lifetime ran out. This only reacts to a session that actually ended,
-  // so the login screen never triggers it again.
-  useEffect(() => {
-    return onSessionExpired(() => {
-      setConfirmationRequest(null)
-      setCurrentUser(null)
-      setAuthMode('login')
-      setPassword('')
-      setMessage(sessionExpiredMessage)
-    })
-  }, [])
-
-  useEffect(() => {
-    const expiresAt = getSessionExpiresAt()
-
-    if (!currentUser || expiresAt === null) {
-      return
-    }
-
-    // setTimeout can't wait longer than about 24 days. If it fires early, the
-    // check finds the session still valid and does nothing.
-    const timeoutId = window.setTimeout(
-      expireAuthSessionIfDue,
-      Math.min(Math.max(expiresAt - Date.now(), 0), maxTimeoutMilliseconds),
-    )
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [currentUser])
 
   useEffect(() => {
     if (!currentUser) {
@@ -667,24 +613,6 @@ function App() {
     setAvailabilityRuleValidationMessage('')
   }
 
-  function resetLoadedData() {
-    setResources([])
-    setResourceMessage('')
-    setAvailabilities([])
-    setAvailabilityMessage('')
-    setAvailabilityRules([])
-    setAvailabilityRuleMessage('')
-    setReservationMessage('')
-    setResourceSchedule(null)
-    setResourceScheduleMessage('')
-    setSelectedScheduleResourceId('')
-    resetScheduleSlotSelection()
-    setReservations([])
-    setMyReservationsMessage('')
-    setAdminReservations([])
-    setAdminReservationsMessage('')
-  }
-
   function handleSelectResourceForSchedule(resource: ResourceResponse) {
     setSelectedScheduleResourceId(resource.id.toString())
     void loadResourceSchedule(resource.id.toString())
@@ -833,161 +761,79 @@ function App() {
     setConfirmationRequest(null)
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setMessage('')
-    setIsSubmitting(true)
-
-    try {
-      if (authMode === 'login') {
-        const auth = await login({ email, password })
-        saveAuthSession(auth)
-        // Clear anything left from an earlier session, such as an error from a
-        // request that failed when that session expired.
-        resetLoadedData()
-        setCurrentUser(auth.user)
-        setPassword('')
-        setMessage('Login succeeded.')
-        return
-      }
-
-      await register({ name, email, password })
-      setAuthMode('login')
-      setName('')
-      setPassword('')
-      setMessage('Registration succeeded. You can log in now.')
-    } catch (error) {
-      setMessage(getErrorMessage(error))
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
+  // RequireAuth then sends the browser to the login screen.
   function handleLogout() {
-    clearAuthSession()
-    resetLoadedData()
-    setCurrentUser(null)
-    setMessage('You have been logged out.')
+    logOut()
   }
 
-  if (currentUser) {
-    if (currentUser.role === 'Admin') {
-      return (
-        <>
-          <AdminHomeView
-            currentUser={currentUser}
-            onLogout={handleLogout}
-            resources={resources}
-            resourceMessage={resourceMessage}
-            isLoadingResources={isLoadingResources}
-            resourceName={resourceName}
-            setResourceName={setResourceName}
-            resourceDescription={resourceDescription}
-            setResourceDescription={setResourceDescription}
-            resourceLocation={resourceLocation}
-            setResourceLocation={setResourceLocation}
-            resourceIsActive={resourceIsActive}
-            setResourceIsActive={setResourceIsActive}
-            editingResourceId={editingResourceId}
-            isSavingResource={isSavingResource}
-            deletingResourceId={deletingResourceId}
-            onSaveResource={handleSaveResource}
-            onEditResource={handleEditResource}
-            onDeleteResource={handleDeleteResource}
-            onCancelResourceEdit={resetResourceForm}
-            availabilities={availabilities}
-            availabilityMessage={availabilityMessage}
-            isLoadingAvailabilities={isLoadingAvailabilities}
-            availabilityResourceId={availabilityResourceId}
-            setAvailabilityResourceId={setAvailabilityResourceId}
-            availabilityStartTime={availabilityStartTime}
-            setAvailabilityStartTime={setAvailabilityStartTime}
-            availabilityEndTime={availabilityEndTime}
-            setAvailabilityEndTime={setAvailabilityEndTime}
-            availabilityValidationMessage={availabilityValidationMessage}
-            editingAvailabilityId={editingAvailabilityId}
-            isSavingAvailability={isSavingAvailability}
-            deletingAvailabilityId={deletingAvailabilityId}
-            onSaveAvailability={handleSaveAvailability}
-            onEditAvailability={handleEditAvailability}
-            onDeleteAvailability={handleDeleteAvailability}
-            onCancelAvailabilityEdit={resetAvailabilityForm}
-            availabilityRules={availabilityRules}
-            availabilityRuleMessage={availabilityRuleMessage}
-            isLoadingAvailabilityRules={isLoadingAvailabilityRules}
-            availabilityRuleResourceId={availabilityRuleResourceId}
-            setAvailabilityRuleResourceId={setAvailabilityRuleResourceId}
-            availabilityRuleDayOfWeek={availabilityRuleDayOfWeek}
-            setAvailabilityRuleDayOfWeek={setAvailabilityRuleDayOfWeek}
-            availabilityRuleStartTime={availabilityRuleStartTime}
-            setAvailabilityRuleStartTime={setAvailabilityRuleStartTime}
-            availabilityRuleEndTime={availabilityRuleEndTime}
-            setAvailabilityRuleEndTime={setAvailabilityRuleEndTime}
-            availabilityRuleValidationMessage={
-              availabilityRuleValidationMessage
-            }
-            editingAvailabilityRuleId={editingAvailabilityRuleId}
-            isSavingAvailabilityRule={isSavingAvailabilityRule}
-            deletingAvailabilityRuleId={deletingAvailabilityRuleId}
-            onSaveAvailabilityRule={handleSaveAvailabilityRule}
-            onEditAvailabilityRule={handleEditAvailabilityRule}
-            onDeleteAvailabilityRule={handleDeleteAvailabilityRule}
-            onCancelAvailabilityRuleEdit={resetAvailabilityRuleForm}
-            adminReservations={adminReservations}
-            adminReservationsMessage={adminReservationsMessage}
-            isLoadingAdminReservations={isLoadingAdminReservations}
-            adminCancellingReservationId={adminCancellingReservationId}
-            onAdminCancelReservation={handleAdminCancelReservation}
-            formatDateTime={formatDateTime}
-          />
-          <ConfirmationDialog
-            request={confirmationRequest}
-            isConfirming={isConfirmingAction}
-            onConfirm={() => void handleConfirmAction()}
-            onCancel={handleCancelConfirmation}
-          />
-        </>
-      )
-    }
-
+  if (currentUser.role === 'Admin') {
     return (
       <>
-        <UserHomeView
+        <AdminHomeView
           currentUser={currentUser}
           onLogout={handleLogout}
           resources={resources}
           resourceMessage={resourceMessage}
           isLoadingResources={isLoadingResources}
-          reservations={reservations}
-          reservationMessage={reservationMessage}
-          reservationValidationMessage={reservationValidationMessage}
-          selectedScheduleResourceId={selectedScheduleResourceId}
-          scheduleFromDate={scheduleFromDate}
-          setScheduleFromDate={setScheduleFromDate}
-          scheduleToDate={scheduleToDate}
-          setScheduleToDate={setScheduleToDate}
-          resourceSchedule={resourceSchedule}
-          resourceScheduleMessage={resourceScheduleMessage}
-          isLoadingResourceSchedule={isLoadingResourceSchedule}
-          selectedScheduleSlotKey={selectedScheduleSlotKey}
-          reservingScheduleSlotKey={reservingScheduleSlotKey}
-          myReservationsMessage={myReservationsMessage}
-          isLoadingReservations={isLoadingReservations}
-          reservationStartTime={reservationStartTime}
-          setReservationStartTime={setReservationStartTime}
-          reservationEndTime={reservationEndTime}
-          setReservationEndTime={setReservationEndTime}
-          cancellingReservationId={cancellingReservationId}
-          onSelectResourceForSchedule={handleSelectResourceForSchedule}
-          onLoadResourceSchedule={() => void loadResourceSchedule()}
-          onSelectScheduleSlot={handleSelectScheduleSlot}
-          onCancelScheduleSlotSelection={resetScheduleSlotSelection}
-          onReserveScheduleSlot={(slot) =>
-            void handleCreateReservationFromScheduleSlot(slot)
+          resourceName={resourceName}
+          setResourceName={setResourceName}
+          resourceDescription={resourceDescription}
+          setResourceDescription={setResourceDescription}
+          resourceLocation={resourceLocation}
+          setResourceLocation={setResourceLocation}
+          resourceIsActive={resourceIsActive}
+          setResourceIsActive={setResourceIsActive}
+          editingResourceId={editingResourceId}
+          isSavingResource={isSavingResource}
+          deletingResourceId={deletingResourceId}
+          onSaveResource={handleSaveResource}
+          onEditResource={handleEditResource}
+          onDeleteResource={handleDeleteResource}
+          onCancelResourceEdit={resetResourceForm}
+          availabilities={availabilities}
+          availabilityMessage={availabilityMessage}
+          isLoadingAvailabilities={isLoadingAvailabilities}
+          availabilityResourceId={availabilityResourceId}
+          setAvailabilityResourceId={setAvailabilityResourceId}
+          availabilityStartTime={availabilityStartTime}
+          setAvailabilityStartTime={setAvailabilityStartTime}
+          availabilityEndTime={availabilityEndTime}
+          setAvailabilityEndTime={setAvailabilityEndTime}
+          availabilityValidationMessage={availabilityValidationMessage}
+          editingAvailabilityId={editingAvailabilityId}
+          isSavingAvailability={isSavingAvailability}
+          deletingAvailabilityId={deletingAvailabilityId}
+          onSaveAvailability={handleSaveAvailability}
+          onEditAvailability={handleEditAvailability}
+          onDeleteAvailability={handleDeleteAvailability}
+          onCancelAvailabilityEdit={resetAvailabilityForm}
+          availabilityRules={availabilityRules}
+          availabilityRuleMessage={availabilityRuleMessage}
+          isLoadingAvailabilityRules={isLoadingAvailabilityRules}
+          availabilityRuleResourceId={availabilityRuleResourceId}
+          setAvailabilityRuleResourceId={setAvailabilityRuleResourceId}
+          availabilityRuleDayOfWeek={availabilityRuleDayOfWeek}
+          setAvailabilityRuleDayOfWeek={setAvailabilityRuleDayOfWeek}
+          availabilityRuleStartTime={availabilityRuleStartTime}
+          setAvailabilityRuleStartTime={setAvailabilityRuleStartTime}
+          availabilityRuleEndTime={availabilityRuleEndTime}
+          setAvailabilityRuleEndTime={setAvailabilityRuleEndTime}
+          availabilityRuleValidationMessage={
+            availabilityRuleValidationMessage
           }
-          onCancelReservation={handleCancelReservation}
+          editingAvailabilityRuleId={editingAvailabilityRuleId}
+          isSavingAvailabilityRule={isSavingAvailabilityRule}
+          deletingAvailabilityRuleId={deletingAvailabilityRuleId}
+          onSaveAvailabilityRule={handleSaveAvailabilityRule}
+          onEditAvailabilityRule={handleEditAvailabilityRule}
+          onDeleteAvailabilityRule={handleDeleteAvailabilityRule}
+          onCancelAvailabilityRuleEdit={resetAvailabilityRuleForm}
+          adminReservations={adminReservations}
+          adminReservationsMessage={adminReservationsMessage}
+          isLoadingAdminReservations={isLoadingAdminReservations}
+          adminCancellingReservationId={adminCancellingReservationId}
+          onAdminCancelReservation={handleAdminCancelReservation}
           formatDateTime={formatDateTime}
-          formatDateTimeInput={toDateTimeLocalValue}
         />
         <ConfirmationDialog
           request={confirmationRequest}
@@ -1000,19 +846,51 @@ function App() {
   }
 
   return (
-    <AuthView
-      authMode={authMode}
-      setAuthMode={setAuthMode}
-      name={name}
-      setName={setName}
-      email={email}
-      setEmail={setEmail}
-      password={password}
-      setPassword={setPassword}
-      isSubmitting={isSubmitting}
-      message={message}
-      onSubmit={handleSubmit}
-    />
+    <>
+      <UserHomeView
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        resources={resources}
+        resourceMessage={resourceMessage}
+        isLoadingResources={isLoadingResources}
+        reservations={reservations}
+        reservationMessage={reservationMessage}
+        reservationValidationMessage={reservationValidationMessage}
+        selectedScheduleResourceId={selectedScheduleResourceId}
+        scheduleFromDate={scheduleFromDate}
+        setScheduleFromDate={setScheduleFromDate}
+        scheduleToDate={scheduleToDate}
+        setScheduleToDate={setScheduleToDate}
+        resourceSchedule={resourceSchedule}
+        resourceScheduleMessage={resourceScheduleMessage}
+        isLoadingResourceSchedule={isLoadingResourceSchedule}
+        selectedScheduleSlotKey={selectedScheduleSlotKey}
+        reservingScheduleSlotKey={reservingScheduleSlotKey}
+        myReservationsMessage={myReservationsMessage}
+        isLoadingReservations={isLoadingReservations}
+        reservationStartTime={reservationStartTime}
+        setReservationStartTime={setReservationStartTime}
+        reservationEndTime={reservationEndTime}
+        setReservationEndTime={setReservationEndTime}
+        cancellingReservationId={cancellingReservationId}
+        onSelectResourceForSchedule={handleSelectResourceForSchedule}
+        onLoadResourceSchedule={() => void loadResourceSchedule()}
+        onSelectScheduleSlot={handleSelectScheduleSlot}
+        onCancelScheduleSlotSelection={resetScheduleSlotSelection}
+        onReserveScheduleSlot={(slot) =>
+          void handleCreateReservationFromScheduleSlot(slot)
+        }
+        onCancelReservation={handleCancelReservation}
+        formatDateTime={formatDateTime}
+        formatDateTimeInput={toDateTimeLocalValue}
+      />
+      <ConfirmationDialog
+        request={confirmationRequest}
+        isConfirming={isConfirmingAction}
+        onConfirm={() => void handleConfirmAction()}
+        onCancel={handleCancelConfirmation}
+      />
+    </>
   )
 }
 
@@ -1056,4 +934,3 @@ function ConfirmationDialog({
   )
 }
 
-export default App

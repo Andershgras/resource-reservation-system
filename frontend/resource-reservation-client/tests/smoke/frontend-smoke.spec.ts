@@ -419,6 +419,54 @@ test('an address outside the workspace opens its first screen', async ({ page })
   await expect(sectionByHeading(page, 'Book a resource')).toBeVisible()
 })
 
+test('logging in returns to the page that was asked for', async ({ page }) => {
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/admin/reservations')
+  await expect(page).toHaveURL('/login?returnTo=%2Fadmin%2Freservations')
+  await login(page, 'admin@example.com', 'Admin1234')
+
+  await expect(page).toHaveURL('/admin/reservations')
+  await expect(sectionByHeading(page, 'Reservations')).toBeVisible()
+})
+
+test('after a session expires, logging in again returns to the same screen', async ({ page }) => {
+  await page.clock.install()
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await login(page, 'admin@example.com', 'Admin1234')
+  await selectRoleTab(page, 'Weekly schedule')
+
+  await page.clock.fastForward('02:01:00')
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+  await login(page, 'admin@example.com', 'Admin1234')
+
+  await expect(page).toHaveURL('/admin/weekly-schedule')
+})
+
+test('logging out returns to the login screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/reservations')
+
+  await page.getByRole('button', { name: 'Logout' }).click()
+
+  await expect(page).toHaveURL('/login')
+  await expect(page.getByText('You have been logged out.')).toBeVisible()
+})
+
+test('an unknown address shows a not-found page', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/no-such-page')
+
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
+  await page.getByRole('link', { name: 'Go to the start page' }).click()
+  await expect(page).toHaveURL('/login')
+})
+
 const sessionExpiredMessage = 'Your session has expired. Please log in again.'
 
 // Mirrors the API's login response. Tokens last two hours.
