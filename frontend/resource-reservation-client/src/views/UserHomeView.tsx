@@ -1,4 +1,5 @@
-import { useState, type Dispatch, type SetStateAction } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
+import { Navigate, useLocation } from 'react-router'
 import type {
   BookableSlotResponse,
   ReservationResponse,
@@ -9,13 +10,13 @@ import type {
 import { HomeHeader } from '../components/HomeHeader'
 import { ReservationsSection } from '../components/ReservationsSection'
 import { ResourceBookingSection } from '../components/ResourceBookingSection'
-import { RoleTabs } from '../components/RoleTabs'
+import { NavTabs, type NavTab } from '../components/NavTabs'
 
 type UserScreen = 'resources' | 'my-reservations'
 
-const userTabs: { id: UserScreen; label: string }[] = [
-  { id: 'resources', label: 'Book resource' },
-  { id: 'my-reservations', label: 'My reservations' },
+const userScreens: (NavTab & { id: UserScreen })[] = [
+  { id: 'resources', path: '/book', label: 'Book resource' },
+  { id: 'my-reservations', path: '/my-reservations', label: 'My reservations' },
 ]
 
 interface UserHomeViewProps {
@@ -89,10 +90,16 @@ export function UserHomeView({
   formatDateTime,
   formatDateTimeInput,
 }: UserHomeViewProps) {
-  const [activeScreen, setActiveScreen] = useState<UserScreen>('resources')
+  const { pathname } = useLocation()
+  const activeScreen = userScreens.find((screen) => screen.path === pathname)?.id
   const activeReservationCount = reservations.filter(
     (reservation) => reservation.status === 'Active',
   ).length
+
+  // Any other address, including "/", opens the first screen.
+  if (!activeScreen) {
+    return <Navigate to="/book" replace />
+  }
 
   return (
     <main className="app-shell">
@@ -122,11 +129,7 @@ export function UserHomeView({
           </div>
         </section>
 
-        <RoleTabs
-          tabs={userTabs}
-          activeTab={activeScreen}
-          onTabChange={setActiveScreen}
-        />
+        <NavTabs tabs={userScreens} />
 
         {activeScreen === 'resources' && (
           <UserResourceBookingScreen

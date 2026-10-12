@@ -370,6 +370,55 @@ test('the session ends when the token lifetime runs out', async ({ page }) => {
   await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
 })
 
+test('each admin screen has its own address that survives a reload', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+
+  await page.goto('/')
+  await expect(page).toHaveURL('/admin/resources')
+
+  await selectRoleTab(page, 'Weekly schedule')
+  await expect(page).toHaveURL('/admin/weekly-schedule')
+  await expect(sectionByHeading(page, 'Create weekly schedule')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Weekly schedule' })).toHaveAttribute('aria-current', 'page')
+
+  await page.reload()
+
+  await expect(sectionByHeading(page, 'Create weekly schedule')).toBeVisible()
+})
+
+test('the back button returns to the previous screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/resources')
+
+  await selectRoleTab(page, 'Reservations')
+  await selectRoleTab(page, 'Availability')
+  await page.goBack()
+
+  await expect(page).toHaveURL('/admin/reservations')
+  await expect(sectionByHeading(page, 'Reservations')).toBeVisible()
+})
+
+test('a user can open my reservations directly', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/my-reservations')
+
+  await expect(sectionByHeading(page, 'My reservations')).toBeVisible()
+})
+
+test('an address outside the workspace opens its first screen', async ({ page }) => {
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+
+  await page.goto('/admin/reservations')
+
+  await expect(page).toHaveURL('/book')
+  await expect(sectionByHeading(page, 'Book a resource')).toBeVisible()
+})
+
 const sessionExpiredMessage = 'Your session has expired. Please log in again.'
 
 // Mirrors the API's login response. Tokens last two hours.
@@ -386,21 +435,18 @@ function authResponse(token: string, user: UserResponse) {
 
 // Stores a session as an earlier visit would have. A null expiry mimics a
 // session saved before expiry times were stored.
-async function storeSession(page: Page, expiresAt: number | null) {
-  await page.addInitScript((storedExpiresAt) => {
+async function storeSession(page: Page, expiresAt: number | null, role: UserRole = 'User') {
+  await page.addInitScript(({ storedExpiresAt, storedRole }) => {
     localStorage.clear()
-    localStorage.setItem('resource-reservation-auth-token', 'user-token')
-    localStorage.setItem('resource-reservation-auth-user', JSON.stringify({
-      id: 2,
-      name: 'Smoke Test User',
-      email: 'smoke.user@example.com',
-      role: 'User',
-    }))
+    localStorage.setItem('resource-reservation-auth-token', `${storedRole.toLowerCase()}-token`)
+    localStorage.setItem('resource-reservation-auth-user', JSON.stringify(storedRole === 'Admin'
+      ? { id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' }
+      : { id: 2, name: 'Smoke Test User', email: 'smoke.user@example.com', role: 'User' }))
 
     if (storedExpiresAt !== null) {
       localStorage.setItem('resource-reservation-auth-expires-at', String(storedExpiresAt))
     }
-  }, expiresAt)
+  }, { storedExpiresAt: expiresAt, storedRole: role })
 }
 
 // Mirrors the API's RFC 9457 problem details responses.
@@ -431,7 +477,9 @@ function sectionByHeading(page: Page, heading: string) {
 }
 
 async function selectRoleTab(page: Page, tabName: string) {
-  await page.getByRole('button', { name: tabName, exact: true }).click()
+  await page.getByRole('navigation', { name: 'Section navigation' })
+    .getByRole('link', { name: tabName, exact: true })
+    .click()
 }
 
 async function login(page: Page, email: string, password: string) {

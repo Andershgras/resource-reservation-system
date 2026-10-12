@@ -1,4 +1,5 @@
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
+import { Navigate, useLocation } from 'react-router'
 import type {
   AvailabilityRuleResponse,
   AvailabilityResponse,
@@ -15,15 +16,15 @@ import { HomeHeader } from '../components/HomeHeader'
 import { ReservationsSection } from '../components/ReservationsSection'
 import { ResourceFormSection } from '../components/ResourceFormSection'
 import { ResourcesSection } from '../components/ResourcesSection'
-import { RoleTabs } from '../components/RoleTabs'
+import { NavTabs, type NavTab } from '../components/NavTabs'
 
 type AdminScreen = 'resources' | 'availability' | 'weekly-schedule' | 'reservations'
 
-const adminTabs: { id: AdminScreen; label: string }[] = [
-  { id: 'resources', label: 'Resources' },
-  { id: 'availability', label: 'Availability' },
-  { id: 'weekly-schedule', label: 'Weekly schedule' },
-  { id: 'reservations', label: 'Reservations' },
+const adminScreens: (NavTab & { id: AdminScreen })[] = [
+  { id: 'resources', path: '/admin/resources', label: 'Resources' },
+  { id: 'availability', path: '/admin/availability', label: 'Availability' },
+  { id: 'weekly-schedule', path: '/admin/weekly-schedule', label: 'Weekly schedule' },
+  { id: 'reservations', path: '/admin/reservations', label: 'Reservations' },
 ]
 
 interface AdminHomeViewProps {
@@ -155,7 +156,8 @@ export function AdminHomeView({
   onAdminCancelReservation,
   formatDateTime,
 }: AdminHomeViewProps) {
-  const [activeScreen, setActiveScreen] = useState<AdminScreen>('resources')
+  const { pathname } = useLocation()
+  const activeScreen = adminScreens.find((screen) => screen.path === pathname)?.id
   const [reservationResourceFilter, setReservationResourceFilter] = useState('')
   const [reservationStatusFilter, setReservationStatusFilter] = useState<
     '' | ReservationStatus
@@ -218,6 +220,11 @@ export function AdminHomeView({
     [availabilityRules],
   )
 
+  // Any other address, including "/", opens the first screen.
+  if (!activeScreen) {
+    return <Navigate to="/admin/resources" replace />
+  }
+
   return (
     <main className="app-shell">
       <section className="home-panel">
@@ -250,11 +257,7 @@ export function AdminHomeView({
           </div>
         </section>
 
-        <RoleTabs
-          tabs={adminTabs}
-          activeTab={activeScreen}
-          onTabChange={setActiveScreen}
-        />
+        <NavTabs tabs={adminScreens} />
 
         {activeScreen === 'resources' && (
           <AdminResourcesScreen
