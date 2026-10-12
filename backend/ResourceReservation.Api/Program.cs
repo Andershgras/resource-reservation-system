@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
@@ -15,6 +16,7 @@ using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Services;
 
 const string frontendCorsPolicy = "FrontendCors";
+const string readyHealthCheckTag = "ready";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -102,6 +104,10 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
     });
 
 builder.Services.AddAuthRateLimiting();
+
+// Readiness checks that the database is reachable. Liveness runs no checks.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>(tags: [readyHealthCheckTag]);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(serviceProvider => new SchedulingClock(
@@ -238,6 +244,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// For the hosting platform. Both are anonymous, are not rate limited, and return
+// only "Healthy" or "Unhealthy" (503), never error details.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains(readyHealthCheckTag)
+});
 
 app.Run();
 

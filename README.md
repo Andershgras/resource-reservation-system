@@ -172,6 +172,15 @@ POST /api/auth/login
 
 Login and registration are rate limited per client IP address. By default a client can make 10 attempts at once, then one more every 6 seconds (10 per minute on average). Further attempts get a `429` with `Retry-After`.
 
+### Health
+
+```text
+GET /health/live    The process is running. Checks nothing else.
+GET /health/ready   The API can reach its database. Returns 503 if not.
+```
+
+Both are anonymous and return only `Healthy` or `Unhealthy`.
+
 ### Resources
 
 ```text
