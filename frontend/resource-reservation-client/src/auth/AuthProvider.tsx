@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { login } from '../api/authApi'
 import type { LoginUserRequest, UserResponse } from '../api/types'
@@ -15,8 +16,11 @@ import {
 const maxTimeoutMilliseconds = 2_147_483_647
 
 // Holds the logged-in user and ends the session when the token expires or the
-// API rejects it (see authStorage.ts and ADR 0004).
+// API rejects it (see authStorage.ts and ADR 0004). Cached server data is
+// cleared whenever a session starts or ends, so one user never sees another
+// user's data.
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [restoredSession] = useState(restoreAuthSession)
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(restoredSession.user)
   const [sessionEnd, setSessionEnd] = useState<SessionEnd>(
@@ -27,10 +31,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // which makes no authenticated requests, never triggers it again.
   useEffect(() => {
     return onSessionExpired(() => {
+      queryClient.clear()
       setCurrentUser(null)
       setSessionEnd('expired')
     })
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     const expiresAt = getSessionExpiresAt()
@@ -55,17 +60,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = await login(credentials)
 
     saveAuthSession(auth)
+    queryClient.clear()
     setSessionEnd(null)
     setCurrentUser(auth.user)
 
     return auth.user
-  }, [])
+  }, [queryClient])
 
   const logOut = useCallback(() => {
     clearAuthSession()
+    queryClient.clear()
     setSessionEnd('loggedOut')
     setCurrentUser(null)
-  }, [])
+  }, [queryClient])
 
   const clearSessionEnd = useCallback(() => setSessionEnd(null), [])
 

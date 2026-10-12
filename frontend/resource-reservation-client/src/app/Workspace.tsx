@@ -12,11 +12,7 @@ import {
   updateAvailabilityRule,
 } from '../api/availabilityRulesApi'
 import {
-  createResource,
-  deleteResource,
   getResourceSchedule,
-  getResources,
-  updateResource,
 } from '../api/resourcesApi'
 import {
   cancelReservation,
@@ -33,6 +29,8 @@ import type {
   ResourceResponse,
 } from '../api/types'
 import { useAuth, useCurrentUser } from '../auth/authContext'
+import { useConfirm } from '../components/confirmContext'
+import { useResources } from '../features/resources/resourceQueries'
 import {
   addDays,
   formatDateTime,
@@ -40,9 +38,8 @@ import {
   toDateTimeLocalValue,
   toTimeOfDay,
 } from '../lib/dates'
-import { getErrorMessage } from '../lib/errors'
+import { getErrorMessage, getQueryErrorMessage } from '../lib/errors'
 import { getSlotKey } from '../lib/schedule'
-import { emptyToNull } from '../lib/text'
 import {
   validateAvailabilityForm,
   validateAvailabilityRuleForm,
@@ -51,31 +48,17 @@ import {
 import { AdminHomeView } from '../views/AdminHomeView'
 import { UserHomeView } from '../views/UserHomeView'
 
-type ConfirmationRequest = {
-  title: string
-  message: string
-  confirmLabel: string
-  onConfirm: () => Promise<void>
-}
-
 // The logged-in screens and, until they move into feature hooks, all of their
 // state. Mounted inside RequireAuth, so when the session ends the redirect to
 // the login screen unmounts it and discards the previous user's data.
 export function Workspace() {
   const currentUser = useCurrentUser()
   const { logOut } = useAuth()
-  const [resources, setResources] = useState<ResourceResponse[]>([])
-  const [resourceMessage, setResourceMessage] = useState('')
-  const [isLoadingResources, setIsLoadingResources] = useState(false)
-  const [resourceName, setResourceName] = useState('')
-  const [resourceDescription, setResourceDescription] = useState('')
-  const [resourceLocation, setResourceLocation] = useState('')
-  const [resourceIsActive, setResourceIsActive] = useState(true)
-  const [editingResourceId, setEditingResourceId] = useState<number | null>(null)
-  const [isSavingResource, setIsSavingResource] = useState(false)
-  const [deletingResourceId, setDeletingResourceId] = useState<number | null>(
-    null,
-  )
+  const confirm = useConfirm()
+  const resourcesQuery = useResources()
+  const resources = resourcesQuery.data ?? []
+  const resourceMessage = getQueryErrorMessage(resourcesQuery.error)
+  const isLoadingResources = resourcesQuery.isPending
   const [availabilities, setAvailabilities] = useState<AvailabilityResponse[]>(
     [],
   )
@@ -152,9 +135,6 @@ export function Workspace() {
   >(null)
   const [adminCancellingReservationId, setAdminCancellingReservationId] =
     useState<number | null>(null)
-  const [confirmationRequest, setConfirmationRequest] =
-    useState<ConfirmationRequest | null>(null)
-  const [isConfirmingAction, setIsConfirmingAction] = useState(false)
 
   useEffect(() => {
     if (!currentUser) {
@@ -162,8 +142,6 @@ export function Workspace() {
     }
 
     let isActive = true
-
-    void loadResources(() => isActive)
 
     if (currentUser.role === 'User') {
       void loadMyReservations(() => isActive)
@@ -179,27 +157,6 @@ export function Workspace() {
       isActive = false
     }
   }, [currentUser])
-
-  async function loadResources(shouldUpdate = () => true) {
-    setIsLoadingResources(true)
-    setResourceMessage('')
-
-    try {
-      const loadedResources = await getResources()
-
-      if (shouldUpdate()) {
-        setResources(loadedResources)
-      }
-    } catch (error) {
-      if (shouldUpdate()) {
-        setResourceMessage(getErrorMessage(error))
-      }
-    } finally {
-      if (shouldUpdate()) {
-        setIsLoadingResources(false)
-      }
-    }
-  }
 
   async function loadAvailabilities(shouldUpdate = () => true) {
     setIsLoadingAvailabilities(true)
@@ -327,44 +284,6 @@ export function Workspace() {
     }
   }
 
-  async function handleSaveResource(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setResourceMessage('')
-    setIsSavingResource(true)
-
-    try {
-      if (editingResourceId) {
-        await updateResource(editingResourceId, {
-          name: resourceName.trim(),
-          description: emptyToNull(resourceDescription),
-          location: emptyToNull(resourceLocation),
-          isActive: resourceIsActive,
-        })
-      } else {
-        await createResource({
-          name: resourceName.trim(),
-          description: emptyToNull(resourceDescription),
-          location: emptyToNull(resourceLocation),
-        })
-      }
-
-      const loadedResources = await getResources()
-
-      setResources(loadedResources)
-
-      if (currentUser?.role === 'Admin') {
-        setAvailabilityRules(await getAvailabilityRules())
-      }
-
-      resetResourceForm()
-      setResourceMessage(editingResourceId ? 'Resource updated.' : 'Resource created.')
-    } catch (error) {
-      setResourceMessage(getErrorMessage(error))
-    } finally {
-      setIsSavingResource(false)
-    }
-  }
-
   async function handleSaveAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setAvailabilityMessage('')
@@ -407,41 +326,6 @@ export function Workspace() {
       setAvailabilityMessage(getErrorMessage(error))
     } finally {
       setIsSavingAvailability(false)
-    }
-  }
-
-  function handleEditResource(resource: ResourceResponse) {
-    setEditingResourceId(resource.id)
-    setResourceName(resource.name)
-    setResourceDescription(resource.description ?? '')
-    setResourceLocation(resource.location ?? '')
-    setResourceIsActive(resource.isActive)
-    setResourceMessage('')
-  }
-
-  async function deleteResourceAfterConfirmation(resource: ResourceResponse) {
-    setResourceMessage('')
-    setDeletingResourceId(resource.id)
-
-    try {
-      await deleteResource(resource.id)
-      const loadedResources = await getResources()
-
-      setResources(loadedResources)
-
-      if (currentUser?.role === 'Admin') {
-        setAvailabilityRules(await getAvailabilityRules())
-      }
-
-      if (editingResourceId === resource.id) {
-        resetResourceForm()
-      }
-
-      setResourceMessage('Resource deleted.')
-    } catch (error) {
-      setResourceMessage(getErrorMessage(error))
-    } finally {
-      setDeletingResourceId(null)
     }
   }
 
@@ -494,23 +378,6 @@ export function Workspace() {
     }
   }
 
-  function handleDeleteResource(resource: ResourceResponse) {
-    setConfirmationRequest({
-      title: 'Delete resource',
-      message: `Delete resource "${resource.name}"?`,
-      confirmLabel: 'Delete resource',
-      onConfirm: () => deleteResourceAfterConfirmation(resource),
-    })
-  }
-
-  function resetResourceForm() {
-    setEditingResourceId(null)
-    setResourceName('')
-    setResourceDescription('')
-    setResourceLocation('')
-    setResourceIsActive(true)
-  }
-
   function handleEditAvailability(availability: AvailabilityResponse) {
     setEditingAvailabilityId(availability.id)
     setAvailabilityResourceId(availability.resourceId.toString())
@@ -545,7 +412,7 @@ export function Workspace() {
   }
 
   function handleDeleteAvailability(availability: AvailabilityResponse) {
-    setConfirmationRequest({
+    confirm({
       title: 'Delete availability',
       message: `Delete availability for "${availability.resourceName}"?`,
       confirmLabel: 'Delete availability',
@@ -596,7 +463,7 @@ export function Workspace() {
   }
 
   function handleDeleteAvailabilityRule(rule: AvailabilityRuleResponse) {
-    setConfirmationRequest({
+    confirm({
       title: 'Delete weekly schedule',
       message: `Delete ${rule.dayName} schedule for "${rule.resourceName}"?`,
       confirmLabel: 'Delete weekly schedule',
@@ -702,7 +569,7 @@ export function Workspace() {
   }
 
   function handleCancelReservation(reservation: ReservationResponse) {
-    setConfirmationRequest({
+    confirm({
       title: 'Cancel reservation',
       message: `Cancel reservation for "${reservation.resourceName}"?`,
       confirmLabel: 'Cancel reservation',
@@ -730,35 +597,12 @@ export function Workspace() {
   }
 
   function handleAdminCancelReservation(reservation: ReservationResponse) {
-    setConfirmationRequest({
+    confirm({
       title: 'Cancel reservation',
       message: `Cancel reservation for "${reservation.resourceName}"?`,
       confirmLabel: 'Cancel reservation',
       onConfirm: () => adminCancelReservationAfterConfirmation(reservation),
     })
-  }
-
-  async function handleConfirmAction() {
-    if (!confirmationRequest) {
-      return
-    }
-
-    setIsConfirmingAction(true)
-
-    try {
-      await confirmationRequest.onConfirm()
-      setConfirmationRequest(null)
-    } finally {
-      setIsConfirmingAction(false)
-    }
-  }
-
-  function handleCancelConfirmation() {
-    if (isConfirmingAction) {
-      return
-    }
-
-    setConfirmationRequest(null)
   }
 
   // RequireAuth then sends the browser to the login screen.
@@ -773,23 +617,6 @@ export function Workspace() {
           currentUser={currentUser}
           onLogout={handleLogout}
           resources={resources}
-          resourceMessage={resourceMessage}
-          isLoadingResources={isLoadingResources}
-          resourceName={resourceName}
-          setResourceName={setResourceName}
-          resourceDescription={resourceDescription}
-          setResourceDescription={setResourceDescription}
-          resourceLocation={resourceLocation}
-          setResourceLocation={setResourceLocation}
-          resourceIsActive={resourceIsActive}
-          setResourceIsActive={setResourceIsActive}
-          editingResourceId={editingResourceId}
-          isSavingResource={isSavingResource}
-          deletingResourceId={deletingResourceId}
-          onSaveResource={handleSaveResource}
-          onEditResource={handleEditResource}
-          onDeleteResource={handleDeleteResource}
-          onCancelResourceEdit={resetResourceForm}
           availabilities={availabilities}
           availabilityMessage={availabilityMessage}
           isLoadingAvailabilities={isLoadingAvailabilities}
@@ -835,12 +662,6 @@ export function Workspace() {
           onAdminCancelReservation={handleAdminCancelReservation}
           formatDateTime={formatDateTime}
         />
-        <ConfirmationDialog
-          request={confirmationRequest}
-          isConfirming={isConfirmingAction}
-          onConfirm={() => void handleConfirmAction()}
-          onCancel={handleCancelConfirmation}
-        />
       </>
     )
   }
@@ -884,53 +705,6 @@ export function Workspace() {
         formatDateTime={formatDateTime}
         formatDateTimeInput={toDateTimeLocalValue}
       />
-      <ConfirmationDialog
-        request={confirmationRequest}
-        isConfirming={isConfirmingAction}
-        onConfirm={() => void handleConfirmAction()}
-        onCancel={handleCancelConfirmation}
-      />
     </>
   )
 }
-
-interface ConfirmationDialogProps {
-  request: ConfirmationRequest | null
-  isConfirming: boolean
-  onConfirm: () => void
-  onCancel: () => void
-}
-
-function ConfirmationDialog({
-  request,
-  isConfirming,
-  onConfirm,
-  onCancel,
-}: ConfirmationDialogProps) {
-  if (!request) {
-    return null
-  }
-
-  return (
-    <div className="confirm-backdrop" role="presentation">
-      <div
-        className="confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-      >
-        <h2 id="confirm-dialog-title">{request.title}</h2>
-        <p>{request.message}</p>
-        <div className="confirm-actions">
-          <button type="button" disabled={isConfirming} onClick={onCancel}>
-            Keep unchanged
-          </button>
-          <button type="button" disabled={isConfirming} onClick={onConfirm}>
-            {isConfirming ? 'Working...' : request.confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-

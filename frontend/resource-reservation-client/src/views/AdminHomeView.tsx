@@ -14,9 +14,8 @@ import { AvailabilityRulesSection } from '../components/AvailabilityRulesSection
 import { AvailabilitySection } from '../components/AvailabilitySection'
 import { HomeHeader } from '../components/HomeHeader'
 import { ReservationsSection } from '../components/ReservationsSection'
-import { ResourceFormSection } from '../components/ResourceFormSection'
-import { ResourcesSection } from '../components/ResourcesSection'
 import { NavTabs, type NavTab } from '../components/NavTabs'
+import { AdminResourcesPage } from '../features/resources/AdminResourcesPage'
 
 type AdminScreen = 'resources' | 'availability' | 'weekly-schedule' | 'reservations'
 
@@ -31,23 +30,6 @@ interface AdminHomeViewProps {
   currentUser: UserResponse
   onLogout: () => void
   resources: ResourceResponse[]
-  resourceMessage: string
-  isLoadingResources: boolean
-  resourceName: string
-  setResourceName: Dispatch<SetStateAction<string>>
-  resourceDescription: string
-  setResourceDescription: Dispatch<SetStateAction<string>>
-  resourceLocation: string
-  setResourceLocation: Dispatch<SetStateAction<string>>
-  resourceIsActive: boolean
-  setResourceIsActive: Dispatch<SetStateAction<boolean>>
-  editingResourceId: number | null
-  isSavingResource: boolean
-  deletingResourceId: number | null
-  onSaveResource: (event: FormEvent<HTMLFormElement>) => void
-  onEditResource: (resource: ResourceResponse) => void
-  onDeleteResource: (resource: ResourceResponse) => void
-  onCancelResourceEdit: () => void
   availabilities: AvailabilityResponse[]
   availabilityMessage: string
   isLoadingAvailabilities: boolean
@@ -96,23 +78,6 @@ export function AdminHomeView({
   currentUser,
   onLogout,
   resources,
-  resourceMessage,
-  isLoadingResources,
-  resourceName,
-  setResourceName,
-  resourceDescription,
-  setResourceDescription,
-  resourceLocation,
-  setResourceLocation,
-  resourceIsActive,
-  setResourceIsActive,
-  editingResourceId,
-  isSavingResource,
-  deletingResourceId,
-  onSaveResource,
-  onEditResource,
-  onDeleteResource,
-  onCancelResourceEdit,
   availabilities,
   availabilityMessage,
   isLoadingAvailabilities,
@@ -259,28 +224,7 @@ export function AdminHomeView({
 
         <NavTabs tabs={adminScreens} />
 
-        {activeScreen === 'resources' && (
-          <AdminResourcesScreen
-            resources={resources}
-            resourceMessage={resourceMessage}
-            isLoadingResources={isLoadingResources}
-            resourceName={resourceName}
-            setResourceName={setResourceName}
-            resourceDescription={resourceDescription}
-            setResourceDescription={setResourceDescription}
-            resourceLocation={resourceLocation}
-            setResourceLocation={setResourceLocation}
-            resourceIsActive={resourceIsActive}
-            setResourceIsActive={setResourceIsActive}
-            editingResourceId={editingResourceId}
-            isSavingResource={isSavingResource}
-            deletingResourceId={deletingResourceId}
-            onSaveResource={onSaveResource}
-            onEditResource={onEditResource}
-            onDeleteResource={onDeleteResource}
-            onCancelResourceEdit={onCancelResourceEdit}
-          />
-        )}
+        {activeScreen === 'resources' && <AdminResourcesPage />}
 
         {activeScreen === 'availability' && (
           <AdminAvailabilityScreen
@@ -353,77 +297,6 @@ export function AdminHomeView({
         )}
       </section>
     </main>
-  )
-}
-
-interface AdminResourcesScreenProps {
-  resources: ResourceResponse[]
-  resourceMessage: string
-  isLoadingResources: boolean
-  resourceName: string
-  setResourceName: Dispatch<SetStateAction<string>>
-  resourceDescription: string
-  setResourceDescription: Dispatch<SetStateAction<string>>
-  resourceLocation: string
-  setResourceLocation: Dispatch<SetStateAction<string>>
-  resourceIsActive: boolean
-  setResourceIsActive: Dispatch<SetStateAction<boolean>>
-  editingResourceId: number | null
-  isSavingResource: boolean
-  deletingResourceId: number | null
-  onSaveResource: (event: FormEvent<HTMLFormElement>) => void
-  onEditResource: (resource: ResourceResponse) => void
-  onDeleteResource: (resource: ResourceResponse) => void
-  onCancelResourceEdit: () => void
-}
-
-function AdminResourcesScreen({
-  resources,
-  resourceMessage,
-  isLoadingResources,
-  resourceName,
-  setResourceName,
-  resourceDescription,
-  setResourceDescription,
-  resourceLocation,
-  setResourceLocation,
-  resourceIsActive,
-  setResourceIsActive,
-  editingResourceId,
-  isSavingResource,
-  deletingResourceId,
-  onSaveResource,
-  onEditResource,
-  onDeleteResource,
-  onCancelResourceEdit,
-}: AdminResourcesScreenProps) {
-  return (
-    <>
-      <ResourceFormSection
-        editingResourceId={editingResourceId}
-        resourceName={resourceName}
-        setResourceName={setResourceName}
-        resourceDescription={resourceDescription}
-        setResourceDescription={setResourceDescription}
-        resourceLocation={resourceLocation}
-        setResourceLocation={setResourceLocation}
-        resourceIsActive={resourceIsActive}
-        setResourceIsActive={setResourceIsActive}
-        isSavingResource={isSavingResource}
-        onSubmit={onSaveResource}
-        onCancelEdit={onCancelResourceEdit}
-      />
-
-      <ResourcesSection
-        currentUserRole="Admin"
-        resources={resources}
-        isLoadingResources={isLoadingResources}
-        resourceMessage={resourceMessage}
-        deletingResourceId={deletingResourceId}
-        onEditResource={onEditResource}
-        onDeleteResource={onDeleteResource}
-      />
-    </>
   )
 }
 

@@ -11,3 +11,8 @@ export function getErrorMessage(error: unknown) {
 
   return 'Something went wrong.'
 }
+
+// The message for a failed query, or an empty string while there is no error.
+export function getQueryErrorMessage(error: unknown) {
+  return error ? getErrorMessage(error) : ''
+}

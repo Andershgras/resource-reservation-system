@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router'
 import { AuthPage } from '../auth/AuthPage'
+import { ConfirmProvider } from '../components/ConfirmProvider'
 import { NotFoundPage } from './NotFoundPage'
 import { HomeRedirect, RequireAuth, RequireLoggedOut } from './RequireAuth'
 import { Workspace } from './Workspace'
@@ -16,7 +17,7 @@ export function App() {
         <Route path="/register" />
       </Route>
 
-      <Route element={<RequireAuth role="Admin"><Workspace /></RequireAuth>}>
+      <Route element={<RequireAuth role="Admin"><ConfirmProvider><Workspace /></ConfirmProvider></RequireAuth>}>
         <Route path="/admin" />
         <Route path="/admin/resources" />
         <Route path="/admin/availability" />
@@ -24,7 +25,7 @@ export function App() {
         <Route path="/admin/reservations" />
       </Route>
 
-      <Route element={<RequireAuth role="User"><Workspace /></RequireAuth>}>
+      <Route element={<RequireAuth role="User"><ConfirmProvider><Workspace /></ConfirmProvider></RequireAuth>}>
         <Route path="/book" />
         <Route path="/my-reservations" />
       </Route>
