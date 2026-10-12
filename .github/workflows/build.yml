@@ -156,3 +156,11 @@ jobs:
       - name: Run frontend smoke tests
         working-directory: frontend/resource-reservation-client
         run: npm run test:smoke
+
+      - name: Upload smoke test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-smoke-results
+          path: frontend/resource-reservation-client/test-results
+          retention-days: 7
