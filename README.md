@@ -339,6 +339,13 @@ This runs two suites:
 
 See [docs/testing.md](docs/testing.md) for what each suite covers and how to produce a coverage report.
 
+Further documentation:
+- [architecture](docs/architecture.md)
+- [configuration](docs/configuration.md)
+- [security](docs/security.md)
+- [deployment](docs/deployment.md)
+- [decision records](docs/adr/)
+
 The integration tests need **Docker Desktop** to be running. To use an existing SQL Server instead, set `INTEGRATION_TEST_CONNECTION_STRING`. The database name must end in `_IntegrationTests`, because the tests delete all of its data between runs.
 
 Frontend checks:
@@ -368,25 +375,19 @@ Pull requests fail if any check fails.
 
 The API checks its settings at startup and stops with a message naming any setting that is missing or invalid. Settings can come from `appsettings.*.json`, user secrets, or environment variables. In environment variable names, `:` becomes `__`, so `Jwt:Key` is set as `Jwt__Key`.
 
-| Setting | Required | Default | Notes |
-|---|---|---|---|
-| `ConnectionStrings:DefaultConnection` | Yes | None | SQL Server connection string |
-| `Jwt:Key` | Yes | None | Signing secret, at least 32 characters. Keep it out of source control. |
-| `Jwt:Issuer` | Yes | None | |
-| `Jwt:Audience` | Yes | None | |
-| `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes |
-| `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
-| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](docs/adr/0002-reservation-concurrency.md)) |
-| `Cors:AllowedOrigins` | No | None | Browser origins allowed to call the API from another origin, such as `https://app.example.com`. Exact origins only, with no path or wildcard. Leave empty when the frontend is served from the same origin. Development also allows the Vite dev server on `localhost` ports 5173–5185. |
-| `ReverseProxy:KnownProxies` | No | None | IP addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, such as `10.0.0.5`. With no proxies configured, forwarded headers are ignored. |
-| `ReverseProxy:KnownNetworks` | No | None | The same as `KnownProxies`, as CIDR ranges such as `10.0.0.0/24` |
-| `RateLimiting:Auth:PermitLimit` | No | `10` | Login and registration attempts allowed per client IP per window, 1–10000 |
-| `RateLimiting:Auth:WindowSeconds` | No | `60` | The window, 1–3600 seconds. After the first `PermitLimit` attempts, one more is allowed every `WindowSeconds / PermitLimit` seconds. |
-| `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
-| `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
-| `SeedAdmin:Name` | No | `Admin` | |
+| Setting | Required | Default |
+|---|---|---|
+| `ConnectionStrings:DefaultConnection` | Yes | None |
+| `Jwt:Key`, `Jwt:Issuer`, `Jwt:Audience` | Yes | None |
+| `Jwt:ExpiryMinutes` | No | `120` |
+| `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` |
+| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` |
+| `Cors:AllowedOrigins` | No | None |
+| `ReverseProxy:KnownProxies`, `ReverseProxy:KnownNetworks` | No | None |
+| `RateLimiting:Auth:PermitLimit`, `RateLimiting:Auth:WindowSeconds` | No | `10`, `60` |
+| `SeedAdmin:Email`, `SeedAdmin:Password`, `SeedAdmin:Name` | No | None |
 
-`appsettings.Development.json` contains working values for local development only.
+[docs/configuration.md](docs/configuration.md) explains every setting, its limits, which values are secrets, and which environment variables to leave unset. `appsettings.Development.json` contains working values for local development only.
 
 ## Deployment Notes
 

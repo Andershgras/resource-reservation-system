@@ -77,7 +77,7 @@ Both are anonymous and return only `Healthy` or `Unhealthy`.
 
 ## Configuration
 
-Every setting, with what production needs, is listed in the README's [configuration section](../README.md#configuration). At minimum, production needs:
+Every setting is described in [configuration](configuration.md). At minimum, production needs:
 
 - `ConnectionStrings:DefaultConnection`
 - `Jwt:Key`, `Jwt:Issuer` and `Jwt:Audience`, with the key kept in the platform's secret store

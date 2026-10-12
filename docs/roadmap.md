@@ -198,7 +198,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 |---|---|---|
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
-| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | In progress |
+| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done, awaiting review |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
@@ -247,13 +247,33 @@ Agreed decisions:
 Planned changes, in order:
 
 - [x] Tidy-ups: remove the unused OpenApi package (L12), lowercase URLs, roadmap update
-- [ ] CORS origins from configuration, validated at startup
-- [ ] Forwarded headers from configured proxies, HSTS and security headers
-- [ ] Rate limiting on login and register, returning 429 with `Retry-After` (M4 in the audit)
-- [ ] Health check endpoints for liveness and readiness
-- [ ] Session expiry: the login response includes `expiresAt`, and the frontend logs out on expiry or 401 (M3 in the audit)
-- [ ] Migration bundle built in CI, and a deployment guide
-- [ ] Security, configuration and deployment documentation, plus ADRs
+- [x] CORS origins from configuration, validated at startup
+- [x] Forwarded headers from configured proxies, HSTS and security headers
+- [x] Rate limiting on login and register, returning 429 with `Retry-After` (M4 in the audit)
+- [x] Health check endpoints for liveness and readiness
+- [x] Session expiry: the login response includes `expiresAt` and `expiresInSeconds`, and the frontend logs out on expiry or 401 (M3 in the audit)
+- [x] Migration bundle built and tested in CI, plus a deployment guide ([ADR 0005](adr/0005-migrations-in-deployment.md))
+- [x] Security and configuration documentation, plus [ADR 0004](adr/0004-token-storage-and-session-expiry.md)
+
+Implementation notes:
+- Rate limiting uses a token bucket rather than a fixed window, because only the token bucket reports the actual retry time. It allows 10 attempts at once, then one every 6 seconds.
+- The EF tools and migration bundle use a design-time `DbContext` factory, so they no longer start the API.
+
+Registration still reveals whether an email is already registered. A generic response isn't possible without email verification, so the limitation is documented in [security](security.md#account-enumeration) and the API contract is unchanged.
+
+Follow-ups noticed during M3, awaiting a decision:
+
+- Login timing reveals existing accounts: about 90 ms for an existing email against about 5 ms for an unknown one. Hash a dummy password for unknown emails so both take the same time. No API change.
+- Email verification, which would allow a generic registration response (M6).
+- Account lockout per user (M6).
+
+### M7: Deployment
+
+Tracked so far:
+
+- [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie, or document why not ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
+- [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them
+- [ ] Run the migration bundle as a deployment step, and configure the reverse proxy as trusted
 
 ## Later Ideas
 
