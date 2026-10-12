@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 
 const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
 
@@ -56,6 +57,23 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<AvailabilityService>();
+
+var schedulingTimeZoneId = builder.Configuration["Scheduling:TimeZoneId"];
+
+if (string.IsNullOrWhiteSpace(schedulingTimeZoneId))
+{
+    throw new InvalidOperationException("Scheduling time zone is not configured.");
+}
+
+// Resolved at startup so an unknown time zone ID stops the app immediately.
+var schedulingTimeZone = TimeZoneInfo.FindSystemTimeZoneById(schedulingTimeZoneId);
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(serviceProvider => new SchedulingClock(
+    serviceProvider.GetRequiredService<TimeProvider>(),
+    schedulingTimeZone));
+
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey))
@@ -143,7 +161,7 @@ using (var scope = app.Services.CreateScope())
     var adminPassword = configuration["SeedAdmin:Password"];
     var adminName = configuration["SeedAdmin:Name"]?.Trim();
     var adminEmailExists = string.IsNullOrWhiteSpace(adminEmail) ||
-        await context.Users.AnyAsync(user => user.Email.ToLower() == adminEmail);
+        await context.Users.AnyAsync(user => user.Email == adminEmail);
 
     if (!string.IsNullOrWhiteSpace(adminEmail) &&
         !string.IsNullOrWhiteSpace(adminPassword) &&

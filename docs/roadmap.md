@@ -36,19 +36,6 @@ Completed frontend areas:
 - User reservation listing and cancellation
 - Admin reservation listing and cancellation
 
-## Next Focus
-
-The next phase should improve confidence, maintainability, and portfolio presentation before adding larger features.
-
-Recommended focus areas:
-
-- Stabilization
-- Automated tests
-- Frontend validation and feedback
-- Demo data
-- Portfolio documentation
-- Simple deployment preparation
-
 ## Recommended GitHub Issue Workflow
 
 Use GitHub Issues as small User Stories.
@@ -201,26 +188,47 @@ Acceptance criteria:
 - `npm run build` passes
 - `npm run test:smoke` passes
 
+## Production Readiness Roadmap
+
+After the MVP, the project was audited. The full findings are in [audit/2026-10-initial-audit.md](audit/2026-10-initial-audit.md), and finding IDs such as H1 and M2 refer to that document.
+
+Work continues in milestones. Each milestone is made of small changes that are verified independently. A milestone starts only after the previous one has been reviewed and approved.
+
+| Milestone | Focus | Status |
+|---|---|---|
+| M1 | Booking correctness and data integrity | Done, awaiting review |
+| M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Not started |
+| M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Not started |
+| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Not started |
+| M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
+| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
+| M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack) | Not started |
+
+### M1: Booking Correctness And Data Integrity
+
+- [x] Booking validation and the generated schedule share one availability calculation (H2)
+- [x] Reservations must start in the future, and schedules hide past time, using the `Europe/Copenhagen` time zone (H3, M5)
+- [x] The schedule date range is limited (H4)
+- [x] Concurrent overlapping bookings are prevented, and conflicts return 409 (H1, L5)
+- [x] Schema hardening: unique email, column lengths, overlap index, restrictive deletes, existing data preserved (M2)
+- [x] README, decision records and roadmap updated
+
+### M2: Backend Structure And Test Coverage
+
+Not started. Items carried over from M1 and the audit:
+
+- [ ] Move reservation creation, including the per-resource booking lock, from `ReservationsController` into a reservation service ([ADR 0002](adr/0002-reservation-concurrency.md))
+- [ ] Return a clear response when the booking lock times out. Today, `sp_getapplock` waits 10 seconds, then raises SQL error 50000, which surfaces as an unhandled 500. Map it to `503 Service Unavailable` with a retry message in the global error handler.
+- [ ] Add a global exception handler that returns ProblemDetails in the existing `{ message, errors }` shape (M1 in the audit)
+- [ ] Validate configuration at startup using the Options pattern (Jwt, Scheduling, connection string)
+- [ ] Add `WebApplicationFactory` integration tests against real SQL Server, covering authorization, validation, booking concurrency, and the lock timeout (M8 in the audit)
+
 ## Later Ideas
 
-These ideas should wait until the MVP is stable and well documented:
+These are tracked as part of milestones M5–M7 above:
 
 - Resource categories
 - Reservation history filters
-- Admin view by resource
-- User reservation editing
 - Availability exceptions
 - Email notifications
 - Calendar export
-- Docker setup
-- Deployment
-
-## Current Priority
-
-The next recommended work is:
-
-```text
-Add README Screenshots
-```
-
-Reason: the core booking flow now matches the resource-first schedule model, so screenshots can show a more realistic portfolio-ready workflow.

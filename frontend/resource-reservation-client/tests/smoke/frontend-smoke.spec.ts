@@ -516,7 +516,7 @@ async function mockApi(
 
       if (hasOverlap) {
         await route.fulfill({
-          status: 400,
+          status: 409,
           json: { message: 'Resource is already reserved in this time period.' },
         })
         return

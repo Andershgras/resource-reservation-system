@@ -43,10 +43,7 @@ public class AuthController : ControllerBase
             return BadRequest(ApiError("Password must be at least 8 characters."));
         }
 
-        var emailExists = await _context.Users
-            .AnyAsync(user => user.Email.ToLower() == normalizedEmail);
-
-        if (emailExists)
+        if (await EmailExistsAsync(normalizedEmail))
         {
             return BadRequest(ApiError("Email is already registered."));
         }
@@ -61,7 +58,22 @@ public class AuthController : ControllerBase
         user.PasswordHash = _passwordHasher.HashPassword(user, registerUserDto.Password);
 
         _context.Users.Add(user);
-        await _context.SaveChangesAsync();
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent registration may have claimed the email first, in which
+            // case the unique index rejected this insert.
+            if (!await EmailExistsAsync(normalizedEmail))
+            {
+                throw;
+            }
+
+            return BadRequest(ApiError("Email is already registered."));
+        }
 
         var userResponseDto = new UserResponseDto
         {
@@ -83,7 +95,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await _context.Users
-            .FirstOrDefaultAsync(user => user.Email.ToLower() == normalizedEmail);
+            .FirstOrDefaultAsync(user => user.Email == normalizedEmail);
 
         if (user is null)
         {
@@ -145,6 +157,13 @@ public class AuthController : ControllerBase
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private Task<bool> EmailExistsAsync(string normalizedEmail)
+    {
+        return _context.Users
+            .AsNoTracking()
+            .AnyAsync(user => user.Email == normalizedEmail);
     }
 
     private static bool TryNormalizeEmail(string email, out string normalizedEmail)

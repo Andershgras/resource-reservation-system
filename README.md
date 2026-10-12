@@ -74,10 +74,13 @@ The project intentionally stays generic. A resource can represent a meeting room
 
 - Reservations require an active resource
 - Reservation end time must be after start time
-- Reservations must fit inside either a one-off availability window or a weekly availability rule
-- Active overlapping reservations are rejected
+- Reservations must start in the future
+- Reservations must fit inside the resource's availability, which is its one-off windows and weekly rules merged together. A booking can span adjacent windows, as long as it doesn't cross a gap.
+- Active overlapping reservations are rejected with `409 Conflict`, including when the requests arrive at the same moment (see [ADR 0002](docs/adr/0002-reservation-concurrency.md))
 - Cancelled reservations do not block new reservations
-- Resources with reservation history cannot be deleted and should be marked inactive instead
+- Resources with reservation history cannot be deleted and should be marked inactive instead. The database enforces this too.
+- Generated schedules cover at most 62 days per request and never offer time that has already passed
+- All times are wall-clock times in one configured time zone, `Europe/Copenhagen` by default (see [ADR 0001](docs/adr/0001-time-zone-convention.md))
 
 ## Tech Stack
 
@@ -116,6 +119,7 @@ backend/
     DTOs/
     Migrations/
     Models/
+    Services/
 
   ResourceReservation.Api.Tests/
 
@@ -130,6 +134,8 @@ frontend/
       smoke/
 
 docs/
+  adr/          architecture decision records
+  audit/        project audits
   planning.md
   roadmap.md
 ```
@@ -166,7 +172,7 @@ POST /api/auth/login
 ```text
 GET    /api/resources
 GET    /api/resources/{id}
-GET    /api/resources/{id}/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET    /api/resources/{id}/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD   max 62 days
 POST   /api/resources        Admin only
 PUT    /api/resources/{id}   Admin only
 DELETE /api/resources/{id}   Admin only
@@ -204,6 +210,18 @@ GET /api/reservations/resource/{id}      Admin only
 GET /api/reservations/user/{id}          Admin only
 ```
 
+### Errors
+
+Errors return a JSON body with a `message`. Validation errors also include an `errors` object, keyed by field.
+
+| Status | Meaning |
+|---|---|
+| `400` | Invalid input, or a business rule was broken (for example, outside availability or in the past) |
+| `401` | Missing or invalid token |
+| `403` | Authenticated, but not allowed |
+| `404` | Resource, availability or reservation not found |
+| `409` | The time overlaps an active reservation |
+
 ## Local Setup
 
 ### Prerequisites
@@ -221,6 +239,8 @@ dotnet restore ResourceReservationSystem.slnx
 dotnet ef database update --project backend/ResourceReservation.Api --startup-project backend/ResourceReservation.Api
 dotnet run --project backend/ResourceReservation.Api/ResourceReservation.Api.csproj
 ```
+
+`dotnet ef database update` also applies new migrations to an existing database. Migrations are written to keep existing data.
 
 Swagger is available in development at:
 
@@ -293,7 +313,7 @@ The Playwright smoke tests cover the main browser flow: Admin login, resource ma
 
 GitHub Actions runs on push and pull request.
 
-The workflow restores and tests the backend, installs frontend dependencies, runs lint, and builds the frontend. Pull requests fail if any check fails.
+The workflow restores and tests the backend, installs frontend dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests. Pull requests fail if any check fails.
 
 ## Deployment Notes
 
@@ -304,8 +324,14 @@ For production-like hosting:
 - Use a real SQL Server database instead of LocalDB
 - Configure `ConnectionStrings:DefaultConnection` through the hosting environment
 - Configure JWT settings and secrets outside source control
+- Set `Scheduling:TimeZoneId` if the resources are not in `Europe/Copenhagen`. Use an IANA time zone ID.
+- SQL Server is required, not just any EF Core provider: reservation locking uses `sp_getapplock`
 - Set `VITE_API_BASE_URL` to the deployed backend URL
 - Build the frontend as static files with `npm run build`
+
+## Roadmap
+
+The MVP has been audited for production readiness. See the [audit](docs/audit/2026-10-initial-audit.md) and the milestone [roadmap](docs/roadmap.md).
 
 ## Potential Future Improvements
 

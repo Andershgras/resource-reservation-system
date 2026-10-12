@@ -4,6 +4,7 @@ using ResourceReservation.Api.Controllers;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.Tests;
 
@@ -15,7 +16,7 @@ public class ResourcesControllerTests
     public async Task CreateResource_WhenNameIsMissing_ReturnsBadRequest(string name)
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.CreateResource(new CreateResourceDto
         {
@@ -30,7 +31,7 @@ public class ResourcesControllerTests
     public async Task CreateResource_WhenNameHasOuterWhitespace_TrimsNameBeforeSaving()
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.CreateResource(new CreateResourceDto
         {
@@ -53,7 +54,7 @@ public class ResourcesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -67,7 +68,7 @@ public class ResourcesControllerTests
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
         var reservation = await SeedReservationAsync(context, resource.Id);
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -88,7 +89,7 @@ public class ResourcesControllerTests
             context,
             resource.Id,
             ReservationStatuses.Cancelled);
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.DeleteResource(resource.Id);
 
@@ -109,7 +110,7 @@ public class ResourcesControllerTests
     public async Task GetResourceSchedule_WhenResourceDoesNotExist_ReturnsNotFound()
     {
         await using var context = CreateContext();
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             999,
@@ -125,7 +126,7 @@ public class ResourcesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -134,6 +135,55 @@ public class ResourcesControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         AssertApiError(badRequest, "To date must be on or after from date.");
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenDateRangeIsAtMaximum_ReturnsSchedule()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = CreateController(context);
+        var from = new DateOnly(2030, 1, 1);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            from,
+            from.AddDays(ResourcesController.MaxScheduleDays - 1));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenDateRangeIsTooLong_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = CreateController(context);
+        var from = new DateOnly(2030, 1, 1);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            from,
+            from.AddDays(ResourcesController.MaxScheduleDays));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(badRequest, "Date range cannot be longer than 62 days.");
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenToDateIsMaxValue_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = CreateController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            DateOnly.MaxValue,
+            DateOnly.MaxValue);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(badRequest, "Date range cannot be longer than 62 days.");
     }
 
     [Fact]
@@ -153,7 +203,7 @@ public class ResourcesControllerTests
             ReservationStatuses.Active,
             new DateTime(2030, 1, 16, 10, 0, 0),
             new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -200,7 +250,7 @@ public class ResourcesControllerTests
             ReservationStatuses.Cancelled,
             new DateTime(2030, 1, 16, 10, 0, 0),
             new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -226,7 +276,7 @@ public class ResourcesControllerTests
             resource.Id,
             new DateTime(2030, 1, 17, 14, 0, 0),
             new DateTime(2030, 1, 17, 15, 0, 0));
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -252,7 +302,7 @@ public class ResourcesControllerTests
             DayOfWeek.Wednesday,
             new TimeOnly(8, 0),
             new TimeOnly(16, 0));
-        var controller = new ResourcesController(context);
+        var controller = CreateController(context);
 
         var result = await controller.GetResourceSchedule(
             resource.Id,
@@ -264,6 +314,44 @@ public class ResourcesControllerTests
 
         Assert.Empty(response.BookableSlots);
         Assert.Empty(response.ReservedSlots);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenSlotsAreInThePast_ReturnsOnlyFutureTime()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var controller = CreateController(
+            context,
+            localNow: new DateTime(2030, 1, 16, 10, 37, 20));
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            new DateOnly(2030, 1, 15),
+            new DateOnly(2030, 1, 16));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
+        var bookableSlot = Assert.Single(response.BookableSlots);
+
+        Assert.Equal(new DateTime(2030, 1, 16, 10, 38, 0), bookableSlot.StartTime);
+        Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), bookableSlot.EndTime);
+    }
+
+    private static ResourcesController CreateController(
+        AppDbContext context,
+        DateTime? localNow = null)
+    {
+        return new ResourcesController(
+            context,
+            new AvailabilityService(context),
+            TestSchedulingClock.Create(localNow));
     }
 
     private static AppDbContext CreateContext()
