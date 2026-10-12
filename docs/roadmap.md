@@ -223,7 +223,7 @@ Agreed decisions:
 Planned changes, in order:
 
 - [x] Integration test harness: `WebApplicationFactory` with Testcontainers SQL Server, plus baseline tests for authorization, validation, booking concurrency, the unique email, and migrations (M8 in the audit)
-- [ ] Configuration validated at startup using the Options pattern (Jwt, Scheduling, SeedAdmin, connection string)
+- [x] Configuration validated at startup using the Options pattern (Jwt, Scheduling, SeedAdmin, connection string)
 - [ ] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
 - [ ] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))
 - [ ] A booking-lock timeout returns 503 with `Retry-After`. Today it surfaces as an unhandled 500.

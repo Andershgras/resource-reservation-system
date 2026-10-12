@@ -4,10 +4,12 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Services;
 
 const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
@@ -55,44 +57,51 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-builder.Services.AddScoped<AvailabilityService>();
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-var schedulingTimeZoneId = builder.Configuration["Scheduling:TimeZoneId"];
-
-if (string.IsNullOrWhiteSpace(schedulingTimeZoneId))
+if (string.IsNullOrWhiteSpace(connectionString))
 {
-    throw new InvalidOperationException("Scheduling time zone is not configured.");
+    throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
 }
 
-// Resolved at startup so an unknown time zone ID stops the app immediately.
-var schedulingTimeZone = TimeZoneInfo.FindSystemTimeZoneById(schedulingTimeZoneId);
+builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+builder.Services.AddScoped<AvailabilityService>();
+
+// Settings are validated when the app starts, so bad configuration never serves a request.
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<SchedulingOptions>()
+    .Bind(builder.Configuration.GetSection(SchedulingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<SeedAdminOptions>()
+    .Bind(builder.Configuration.GetSection(SeedAdminOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(serviceProvider => new SchedulingClock(
     serviceProvider.GetRequiredService<TimeProvider>(),
-    schedulingTimeZone));
-
-var jwtKey = builder.Configuration["Jwt:Key"];
-
-if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    throw new InvalidOperationException("JWT key is not configured.");
-}
+    serviceProvider.GetRequiredService<IOptions<SchedulingOptions>>().Value.GetTimeZone()));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((options, jwtOptions) =>
     {
+        var jwt = jwtOptions.Value;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key))
         };
         options.Events = new JwtBearerEvents
         {
@@ -155,17 +164,14 @@ if (app.Environment.IsDevelopment())
 
 using (var scope = app.Services.CreateScope())
 {
-    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var seedAdmin = scope.ServiceProvider.GetRequiredService<IOptions<SeedAdminOptions>>().Value;
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var adminEmail = configuration["SeedAdmin:Email"]?.Trim().ToLowerInvariant();
-    var adminPassword = configuration["SeedAdmin:Password"];
-    var adminName = configuration["SeedAdmin:Name"]?.Trim();
-    var adminEmailExists = string.IsNullOrWhiteSpace(adminEmail) ||
-        await context.Users.AnyAsync(user => user.Email == adminEmail);
+    var adminEmail = seedAdmin.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+    var adminPassword = seedAdmin.Password;
+    var adminName = seedAdmin.Name?.Trim();
 
-    if (!string.IsNullOrWhiteSpace(adminEmail) &&
-        !string.IsNullOrWhiteSpace(adminPassword) &&
-        !adminEmailExists &&
+    if (seedAdmin.IsConfigured &&
+        !await context.Users.AnyAsync(user => user.Email == adminEmail) &&
         !await context.Users.AnyAsync(user => user.Role == "Admin"))
     {
         var adminUser = new User
@@ -176,7 +182,7 @@ using (var scope = app.Services.CreateScope())
         };
 
         var passwordHasher = new PasswordHasher<User>();
-        adminUser.PasswordHash = passwordHasher.HashPassword(adminUser, adminPassword);
+        adminUser.PasswordHash = passwordHasher.HashPassword(adminUser, adminPassword!);
 
         context.Users.Add(adminUser);
         await context.SaveChangesAsync();

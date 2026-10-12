@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Controllers;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
@@ -153,19 +154,12 @@ public class AuthControllerTests
 
     private static AuthController CreateController(AppDbContext context)
     {
-        return new AuthController(context, CreateConfiguration());
-    }
-
-    private static IConfiguration CreateConfiguration()
-    {
-        return new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"] = "test-jwt-key-that-is-long-enough-for-hmac",
-                ["Jwt:Issuer"] = "ResourceReservation.Tests",
-                ["Jwt:Audience"] = "ResourceReservation.Tests"
-            })
-            .Build();
+        return new AuthController(context, Options.Create(new JwtOptions
+        {
+            Key = "test-jwt-key-that-is-long-enough-for-hmac",
+            Issuer = "ResourceReservation.Tests",
+            Audience = "ResourceReservation.Tests"
+        }));
     }
 
     private static AppDbContext CreateContext()

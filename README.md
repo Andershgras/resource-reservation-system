@@ -324,6 +324,24 @@ GitHub Actions runs on push and pull request.
 
 The workflow restores and tests the backend, installs frontend dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests. Pull requests fail if any check fails.
 
+## Configuration
+
+The API checks its settings at startup and stops with a message naming any setting that is missing or invalid. Settings can come from `appsettings.*.json`, user secrets, or environment variables. In environment variable names, `:` becomes `__`, so `Jwt:Key` is set as `Jwt__Key`.
+
+| Setting | Required | Default | Notes |
+|---|---|---|---|
+| `ConnectionStrings:DefaultConnection` | Yes | None | SQL Server connection string |
+| `Jwt:Key` | Yes | None | Signing secret, at least 32 characters. Keep it out of source control. |
+| `Jwt:Issuer` | Yes | None | |
+| `Jwt:Audience` | Yes | None | |
+| `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes |
+| `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
+| `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
+| `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
+| `SeedAdmin:Name` | No | `Admin` | |
+
+`appsettings.Development.json` contains working values for local development only.
+
 ## Deployment Notes
 
 This project is prepared as a portfolio application, not a live production deployment.

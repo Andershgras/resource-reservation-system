@@ -141,10 +141,14 @@ public sealed class ApiFixture : IAsyncLifetime
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
+    private readonly IReadOnlyDictionary<string, string> _settingOverrides;
 
-    public ApiFactory(string connectionString)
+    public ApiFactory(
+        string connectionString,
+        IReadOnlyDictionary<string, string>? settingOverrides = null)
     {
         _connectionString = connectionString;
+        _settingOverrides = settingOverrides ?? new Dictionary<string, string>();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -156,6 +160,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Issuer", "ResourceReservation.IntegrationTests");
         builder.UseSetting("Jwt:Audience", "ResourceReservation.IntegrationTests");
         builder.UseSetting("Scheduling:TimeZoneId", "Europe/Copenhagen");
+
+        foreach (var (key, value) in _settingOverrides)
+        {
+            builder.UseSetting(key, value);
+        }
     }
 }
 
