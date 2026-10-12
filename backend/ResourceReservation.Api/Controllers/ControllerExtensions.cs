@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
-using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.Controllers;
@@ -44,6 +43,7 @@ public static class ControllerExtensions
             controller.Response.Headers.RetryAfter = RetryAfterSeconds.ToString();
         }
 
-        return controller.StatusCode(statusCode, new ApiErrorResponseDto { Message = error.Message });
+        // Problem() fills in the RFC 9457 title, type and traceId for the status code.
+        return controller.Problem(detail: error.Message, statusCode: statusCode);
     }
 }

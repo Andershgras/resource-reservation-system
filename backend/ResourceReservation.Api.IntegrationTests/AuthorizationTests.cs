@@ -49,8 +49,7 @@ public class AuthorizationTests : ApiTestBase
 
         var response = await client.SendAsync(CreateRequest(method, path));
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        await AssertErrorMessageAsync(response, "Authentication is required.");
+        await ProblemAssert.IsProblemAsync(response, HttpStatusCode.Unauthorized, "Authentication is required.");
     }
 
     [Theory]
@@ -61,8 +60,10 @@ public class AuthorizationTests : ApiTestBase
 
         var response = await client.SendAsync(CreateRequest(method, path));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        await AssertErrorMessageAsync(response, "You do not have permission to access this resource.");
+        await ProblemAssert.IsProblemAsync(
+            response,
+            HttpStatusCode.Forbidden,
+            "You do not have permission to access this resource.");
     }
 
     [Fact]
@@ -99,13 +100,4 @@ public class AuthorizationTests : ApiTestBase
 
         return request;
     }
-
-    private static async Task AssertErrorMessageAsync(HttpResponseMessage response, string expectedMessage)
-    {
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-
-        Assert.Equal(expectedMessage, error?.Message);
-    }
-
-    private sealed record ErrorResponse(string? Message);
 }

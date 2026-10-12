@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Controllers;
@@ -13,7 +14,7 @@ public class AvailabilityRulesControllerTests
     public async Task CreateAvailabilityRule_WhenResourceDoesNotExist_ReturnsBadRequest()
     {
         await using var context = CreateContext();
-        var controller = new AvailabilityRulesController(context);
+        var controller = new AvailabilityRulesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailabilityRule(new CreateAvailabilityRuleDto
         {
@@ -23,8 +24,7 @@ public class AvailabilityRulesControllerTests
             EndTime = new TimeOnly(16, 0)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Resource does not exist.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "Resource does not exist.");
     }
 
     [Theory]
@@ -38,7 +38,7 @@ public class AvailabilityRulesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new AvailabilityRulesController(context);
+        var controller = new AvailabilityRulesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailabilityRule(new CreateAvailabilityRuleDto
         {
@@ -48,8 +48,7 @@ public class AvailabilityRulesControllerTests
             EndTime = new TimeOnly(endHour, endMinute)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "EndTime must be after StartTime.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "EndTime must be after StartTime.");
     }
 
     [Fact]
@@ -57,7 +56,7 @@ public class AvailabilityRulesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new AvailabilityRulesController(context);
+        var controller = new AvailabilityRulesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailabilityRule(new CreateAvailabilityRuleDto
         {
@@ -86,7 +85,7 @@ public class AvailabilityRulesControllerTests
             DayOfWeek.Monday,
             new TimeOnly(8, 0),
             new TimeOnly(12, 0));
-        var controller = new AvailabilityRulesController(context);
+        var controller = new AvailabilityRulesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailabilityRule(new CreateAvailabilityRuleDto
         {
@@ -96,10 +95,7 @@ public class AvailabilityRulesControllerTests
             EndTime = new TimeOnly(16, 0)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(
-            badRequest,
-            "Availability rule overlaps an existing rule for this resource.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "Availability rule overlaps an existing rule for this resource.");
         Assert.Single(context.AvailabilityRules);
     }
 
@@ -114,7 +110,7 @@ public class AvailabilityRulesControllerTests
             DayOfWeek.Monday,
             new TimeOnly(8, 0),
             new TimeOnly(12, 0));
-        var controller = new AvailabilityRulesController(context);
+        var controller = new AvailabilityRulesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailabilityRule(new CreateAvailabilityRuleDto
         {
@@ -145,7 +141,7 @@ public class AvailabilityRulesControllerTests
             DayOfWeek.Monday,
             new TimeOnly(13, 0),
             new TimeOnly(16, 0));
-        var controller = new AvailabilityRulesController(context);
+        var controller = new AvailabilityRulesController(context).WithHttpContext();
 
         var result = await controller.UpdateAvailabilityRule(
             ruleToUpdate.Id,
@@ -157,10 +153,7 @@ public class AvailabilityRulesControllerTests
                 EndTime = new TimeOnly(14, 0)
             });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        AssertApiError(
-            badRequest,
-            "Availability rule overlaps an existing rule for this resource.");
+        ProblemAssert.IsProblem(result, StatusCodes.Status400BadRequest, "Availability rule overlaps an existing rule for this resource.");
     }
 
     private static AppDbContext CreateContext()
@@ -207,11 +200,5 @@ public class AvailabilityRulesControllerTests
         await context.SaveChangesAsync();
 
         return rule;
-    }
-
-    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
-    {
-        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
-        Assert.Equal(expectedMessage, error.Message);
     }
 }

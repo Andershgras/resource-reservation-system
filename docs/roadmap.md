@@ -226,7 +226,7 @@ Planned changes, in order. The service layer was moved ahead of ProblemDetails s
 - [x] Configuration validated at startup using the Options pattern (Jwt, Scheduling, SeedAdmin, connection string)
 - [x] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))
 - [x] A booking-lock timeout returns 503 with `Retry-After`. It previously surfaced as an unhandled 500.
-- [ ] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
+- [x] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
 - [ ] Code coverage reported in CI, plus `docs/testing.md`, `docs/architecture.md` and ADR 0003
 
 ## Later Ideas

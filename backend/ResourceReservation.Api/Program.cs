@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
 using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Services;
@@ -16,26 +15,10 @@ const string frontendDevelopmentCorsPolicy = "FrontendDevelopmentCors";
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers()
-    .ConfigureApiBehaviorOptions(options =>
-    {
-        options.InvalidModelStateResponseFactory = context =>
-        {
-            var errors = context.ModelState
-                .Where(modelState => modelState.Value?.Errors.Count > 0)
-                .ToDictionary(
-                    modelState => modelState.Key,
-                    modelState => modelState.Value!.Errors
-                        .Select(error => error.ErrorMessage)
-                        .ToArray());
-
-            return new BadRequestObjectResult(new ApiErrorResponseDto
-            {
-                Message = "Validation failed.",
-                Errors = errors
-            });
-        };
-    });
+// Every error response is RFC 9457 ProblemDetails, including model validation
+// errors (ValidationProblemDetails) and unhandled exceptions.
+builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(frontendDevelopmentCorsPolicy, policy =>
@@ -111,24 +94,16 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
             OnChallenge = context =>
             {
                 context.HandleResponse();
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
 
-                return context.Response.WriteAsJsonAsync(new ApiErrorResponseDto
-                {
-                    Message = "Authentication is required."
-                });
+                return WriteProblemAsync(
+                    context.HttpContext,
+                    StatusCodes.Status401Unauthorized,
+                    "Authentication is required.");
             },
-            OnForbidden = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                context.Response.ContentType = "application/json";
-
-                return context.Response.WriteAsJsonAsync(new ApiErrorResponseDto
-                {
-                    Message = "You do not have permission to access this resource."
-                });
-            }
+            OnForbidden = context => WriteProblemAsync(
+                context.HttpContext,
+                StatusCodes.Status403Forbidden,
+                "You do not have permission to access this resource.")
         };
     });
 
@@ -193,6 +168,9 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
+// Logs unhandled exceptions and returns a 500 ProblemDetails without exception details.
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -212,6 +190,19 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static async Task WriteProblemAsync(HttpContext httpContext, int statusCode, string detail)
+{
+    httpContext.Response.StatusCode = statusCode;
+
+    await httpContext.RequestServices
+        .GetRequiredService<IProblemDetailsService>()
+        .TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = httpContext,
+            ProblemDetails = { Status = statusCode, Detail = detail }
+        });
+}
 
 // Exposes the entry point to WebApplicationFactory in the integration tests.
 public partial class Program

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
+using ResourceReservation.Api.Services;
 using ResourceReservation.Api.Models;
 
 namespace ResourceReservation.Api.Controllers;
@@ -39,7 +40,7 @@ public class AvailabilityRulesController : ControllerBase
 
         if (rule is null)
         {
-            return NotFound(ApiError("Availability rule not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Availability rule not found."));
         }
 
         return Ok(ToAvailabilityRuleResponseDto(rule));
@@ -55,12 +56,12 @@ public class AvailabilityRulesController : ControllerBase
 
         if (resource is null)
         {
-            return BadRequest(ApiError("Resource does not exist."));
+            return this.ToErrorResult(ServiceError.Validation("Resource does not exist."));
         }
 
         if (createAvailabilityRuleDto.EndTime <= createAvailabilityRuleDto.StartTime)
         {
-            return BadRequest(ApiError("EndTime must be after StartTime."));
+            return this.ToErrorResult(ServiceError.Validation("EndTime must be after StartTime."));
         }
 
         var dayOfWeek = (DayOfWeek)createAvailabilityRuleDto.DayOfWeek;
@@ -71,7 +72,7 @@ public class AvailabilityRulesController : ControllerBase
             createAvailabilityRuleDto.StartTime,
             createAvailabilityRuleDto.EndTime))
         {
-            return BadRequest(ApiError(
+            return this.ToErrorResult(ServiceError.Validation(
                 "Availability rule overlaps an existing rule for this resource."));
         }
 
@@ -103,7 +104,7 @@ public class AvailabilityRulesController : ControllerBase
 
         if (rule is null)
         {
-            return NotFound(ApiError("Availability rule not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Availability rule not found."));
         }
 
         var resourceExists = await _context.Resources
@@ -111,12 +112,12 @@ public class AvailabilityRulesController : ControllerBase
 
         if (!resourceExists)
         {
-            return BadRequest(ApiError("Resource does not exist."));
+            return this.ToErrorResult(ServiceError.Validation("Resource does not exist."));
         }
 
         if (updateAvailabilityRuleDto.EndTime <= updateAvailabilityRuleDto.StartTime)
         {
-            return BadRequest(ApiError("EndTime must be after StartTime."));
+            return this.ToErrorResult(ServiceError.Validation("EndTime must be after StartTime."));
         }
 
         var dayOfWeek = (DayOfWeek)updateAvailabilityRuleDto.DayOfWeek;
@@ -128,7 +129,7 @@ public class AvailabilityRulesController : ControllerBase
             updateAvailabilityRuleDto.EndTime,
             id))
         {
-            return BadRequest(ApiError(
+            return this.ToErrorResult(ServiceError.Validation(
                 "Availability rule overlaps an existing rule for this resource."));
         }
 
@@ -150,7 +151,7 @@ public class AvailabilityRulesController : ControllerBase
 
         if (rule is null)
         {
-            return NotFound(ApiError("Availability rule not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Availability rule not found."));
         }
 
         _context.AvailabilityRules.Remove(rule);
@@ -188,10 +189,5 @@ public class AvailabilityRulesController : ControllerBase
                 rule.Id != ignoredRuleId &&
                 startTime < rule.EndTime &&
                 endTime > rule.StartTime);
-    }
-
-    private static ApiErrorResponseDto ApiError(string message)
-    {
-        return new ApiErrorResponseDto { Message = message };
     }
 }

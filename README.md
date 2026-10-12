@@ -213,7 +213,19 @@ GET /api/reservations/user/{id}          Admin only
 
 ### Errors
 
-Errors return a JSON body with a `message`. Validation errors also include an `errors` object, keyed by field.
+Every error is returned as [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) with the content type `application/problem+json`. `detail` explains the problem, and `traceId` matches the server logs:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.10",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Resource is already reserved in this time period.",
+  "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+}
+```
+
+Validation errors also include `errors`, keyed by field name. Unexpected server errors return a `500` with no internal details.
 
 | Status | Meaning |
 |---|---|

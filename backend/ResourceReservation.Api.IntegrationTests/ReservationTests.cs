@@ -120,12 +120,11 @@ public class ReservationTests : ApiTestBase
         transaction.Rollback();
         var retryResponse = await client.PostAsJsonAsync("/api/reservations", request);
 
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, busyResponse.StatusCode);
+        await ProblemAssert.IsProblemAsync(
+            busyResponse,
+            HttpStatusCode.ServiceUnavailable,
+            ReservationService.ResourceBusyMessage);
         Assert.Equal(TimeSpan.FromSeconds(5), busyResponse.Headers.RetryAfter?.Delta);
-        var error = await busyResponse.Content.ReadFromJsonAsync<ErrorResponse>();
-        Assert.Equal(ReservationService.ResourceBusyMessage, error?.Message);
         Assert.Equal(HttpStatusCode.Created, retryResponse.StatusCode);
     }
-
-    private sealed record ErrorResponse(string? Message);
 }

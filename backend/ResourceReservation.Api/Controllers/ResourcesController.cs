@@ -36,7 +36,7 @@ public class ResourcesController : ControllerBase
 
         if (resource is null)
         {
-            return NotFound(ApiError("Resource not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Resource not found."));
         }
 
         return Ok(ToResourceResponseDto(resource));
@@ -59,7 +59,7 @@ public class ResourcesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(createResourceDto.Name))
         {
-            return BadRequest(ApiError("Name is required."));
+            return this.ToErrorResult(ServiceError.Validation("Name is required."));
         }
 
         var resource = new Resource
@@ -85,14 +85,14 @@ public class ResourcesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(updateResourceDto.Name))
         {
-            return BadRequest(ApiError("Name is required."));
+            return this.ToErrorResult(ServiceError.Validation("Name is required."));
         }
 
         var resource = await _context.Resources.FindAsync(id);
 
         if (resource is null)
         {
-            return NotFound(ApiError("Resource not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Resource not found."));
         }
 
         resource.Name = updateResourceDto.Name.Trim();
@@ -113,7 +113,7 @@ public class ResourcesController : ControllerBase
 
         if (resource is null)
         {
-            return NotFound(ApiError("Resource not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Resource not found."));
         }
 
         var hasReservationHistory = await _context.Reservations
@@ -121,7 +121,7 @@ public class ResourcesController : ControllerBase
 
         if (hasReservationHistory)
         {
-            return BadRequest(ApiError(
+            return this.ToErrorResult(ServiceError.Validation(
                 "Resource has reservation history and cannot be deleted. Mark it inactive instead."));
         }
 
@@ -151,10 +151,5 @@ public class ResourcesController : ControllerBase
         }
 
         return value.Trim();
-    }
-
-    private static ApiErrorResponseDto ApiError(string message)
-    {
-        return new ApiErrorResponseDto { Message = message };
     }
 }

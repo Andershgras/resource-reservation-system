@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Controllers;
@@ -23,8 +24,7 @@ public class ResourcesControllerTests
             Name = name
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Name is required.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "Name is required.");
     }
 
     [Fact]
@@ -72,10 +72,7 @@ public class ResourcesControllerTests
 
         var result = await controller.DeleteResource(resource.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        AssertApiError(
-            badRequest,
-            "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
+        ProblemAssert.IsProblem(result, StatusCodes.Status400BadRequest, "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
         Assert.NotNull(await context.Resources.FindAsync(resource.Id));
         Assert.NotNull(await context.Reservations.FindAsync(reservation.Id));
     }
@@ -93,10 +90,7 @@ public class ResourcesControllerTests
 
         var result = await controller.DeleteResource(resource.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        AssertApiError(
-            badRequest,
-            "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
+        ProblemAssert.IsProblem(result, StatusCodes.Status400BadRequest, "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
 
         var savedResource = await context.Resources.FindAsync(resource.Id);
         var savedReservation = await context.Reservations.FindAsync(reservation.Id);
@@ -110,7 +104,8 @@ public class ResourcesControllerTests
     {
         return new ResourcesController(
             context,
-            new AvailabilityService(context, TestSchedulingClock.Create()));
+            new AvailabilityService(context, TestSchedulingClock.Create()))
+            .WithHttpContext();
     }
 
     private static AppDbContext CreateContext()
@@ -159,11 +154,5 @@ public class ResourcesControllerTests
         await context.SaveChangesAsync();
 
         return reservation;
-    }
-
-    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
-    {
-        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
-        Assert.Equal(expectedMessage, error.Message);
     }
 }

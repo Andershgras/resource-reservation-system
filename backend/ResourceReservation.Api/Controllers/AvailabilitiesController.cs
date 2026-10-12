@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.Models;
 using ResourceReservation.Api.DTOs;
+using ResourceReservation.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 
 namespace ResourceReservation.Api.Controllers;
@@ -36,7 +37,7 @@ public class AvailabilitiesController : ControllerBase
 
         if (availability is null)
         {
-            return NotFound(ApiError("Availability not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Availability not found."));
         }
 
         return Ok(ToAvailabilityResponseDto(availability));
@@ -51,12 +52,12 @@ public class AvailabilitiesController : ControllerBase
 
         if (resource is null)
         {
-            return BadRequest(ApiError("Resource does not exist."));
+            return this.ToErrorResult(ServiceError.Validation("Resource does not exist."));
         }
 
         if (createAvailabilityDto.EndTime <= createAvailabilityDto.StartTime)
         {
-            return BadRequest(ApiError("EndTime must be after StartTime."));
+            return this.ToErrorResult(ServiceError.Validation("EndTime must be after StartTime."));
         }
 
         if (await HasOverlappingAvailability(
@@ -64,7 +65,7 @@ public class AvailabilitiesController : ControllerBase
             createAvailabilityDto.StartTime,
             createAvailabilityDto.EndTime))
         {
-            return BadRequest(ApiError(
+            return this.ToErrorResult(ServiceError.Validation(
                 "Availability overlaps an existing window for this resource."));
         }
 
@@ -93,7 +94,7 @@ public class AvailabilitiesController : ControllerBase
 
         if (availability is null)
         {
-            return NotFound(ApiError("Availability not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Availability not found."));
         }
 
         var resourceExists = await _context.Resources
@@ -101,12 +102,12 @@ public class AvailabilitiesController : ControllerBase
 
         if (!resourceExists)
         {
-            return BadRequest(ApiError("Resource does not exist."));
+            return this.ToErrorResult(ServiceError.Validation("Resource does not exist."));
         }
 
         if (updateAvailabilityDto.EndTime <= updateAvailabilityDto.StartTime)
         {
-            return BadRequest(ApiError("EndTime must be after StartTime."));
+            return this.ToErrorResult(ServiceError.Validation("EndTime must be after StartTime."));
         }
 
         if (await HasOverlappingAvailability(
@@ -115,7 +116,7 @@ public class AvailabilitiesController : ControllerBase
             updateAvailabilityDto.EndTime,
             id))
         {
-            return BadRequest(ApiError(
+            return this.ToErrorResult(ServiceError.Validation(
                 "Availability overlaps an existing window for this resource."));
         }
 
@@ -136,7 +137,7 @@ public class AvailabilitiesController : ControllerBase
 
         if (availability is null)
         {
-            return NotFound(ApiError("Availability not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Availability not found."));
         }
 
         _context.Availabilities.Remove(availability);
@@ -169,10 +170,5 @@ public class AvailabilitiesController : ControllerBase
                 availability.Id != ignoredAvailabilityId &&
                 startTime < availability.EndTime &&
                 endTime > availability.StartTime);
-    }
-
-    private static ApiErrorResponseDto ApiError(string message)
-    {
-        return new ApiErrorResponseDto { Message = message };
     }
 }

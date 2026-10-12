@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using ResourceReservation.Api.Controllers;
-using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.Tests;
@@ -47,8 +46,7 @@ public class ControllerExtensionsTests
 
         var result = controller.ToErrorResult(new ServiceError(kind, "Message"));
 
-        Assert.Equal(expectedStatusCode, result.StatusCode);
-        Assert.Equal("Message", Assert.IsType<ApiErrorResponseDto>(result.Value).Message);
+        ProblemAssert.IsProblem(result, expectedStatusCode, "Message");
     }
 
     [Fact]
@@ -63,10 +61,7 @@ public class ControllerExtensionsTests
 
     private static TestController CreateController()
     {
-        return new TestController
-        {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
-        };
+        return new TestController().WithHttpContext();
     }
 
     private sealed class TestController : ControllerBase

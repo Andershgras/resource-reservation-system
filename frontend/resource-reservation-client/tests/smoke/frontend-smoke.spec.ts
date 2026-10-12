@@ -228,6 +228,55 @@ test('overlap error is shown when an active reservation already exists', async (
   ).toBeVisible()
 })
 
+test('validation errors from the API are shown per field', async ({ page }) => {
+  await page.route('http://localhost:5052/api/auth/register', async (route) => {
+    await route.fulfill(problemResponse(
+      400,
+      'One or more validation errors occurred.',
+      undefined,
+      {
+        errors: {
+          Email: ['Email is already registered.'],
+          Password: ['Password must contain a number.'],
+        },
+      },
+    ))
+  })
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Register', exact: true }).click()
+  await page.getByLabel('Name').fill('Validation User')
+  await page.getByLabel('Email').fill('taken@example.com')
+  await page.getByLabel('Password').fill('Password')
+  await page.getByRole('button', { name: 'Create account' }).click()
+
+  await expect(
+    page.getByText('Error: Email is already registered. Password must contain a number.'),
+  ).toBeVisible()
+})
+
+// Mirrors the API's RFC 9457 problem details responses.
+function problemResponse(
+  status: number,
+  title: string,
+  detail?: string,
+  extensions: Record<string, unknown> = {},
+) {
+  return {
+    status,
+    contentType: 'application/problem+json',
+    body: JSON.stringify({
+      type: 'https://tools.ietf.org/html/rfc9110',
+      title,
+      status,
+      detail,
+      traceId: '00-smoke-test',
+      ...extensions,
+    }),
+  }
+}
+
 function sectionByHeading(page: Page, heading: string) {
   return page.locator('section.panel-section').filter({
     has: page.getByRole('heading', { name: heading, exact: true }),
@@ -515,10 +564,11 @@ async function mockApi(
       )
 
       if (hasOverlap) {
-        await route.fulfill({
-          status: 409,
-          json: { message: 'Resource is already reserved in this time period.' },
-        })
+        await route.fulfill(problemResponse(
+          409,
+          'Conflict',
+          'Resource is already reserved in this time period.',
+        ))
         return
       }
 
