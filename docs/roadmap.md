@@ -208,7 +208,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 
 - [x] Booking validation and the generated schedule share one availability calculation (H2)
 - [x] Reservations must start in the future, and schedules hide past time, using the `Europe/Copenhagen` time zone (H3, M5)
-- [ ] The schedule date range is limited (H4)
+- [x] The schedule date range is limited (H4)
 - [ ] Concurrent overlapping bookings are prevented, and conflicts return 409 (H1, L5)
 - [ ] Schema hardening: unique email, column lengths, overlap index, restrictive deletes, existing data preserved (M2)
 - [ ] README, decision records and roadmap updated

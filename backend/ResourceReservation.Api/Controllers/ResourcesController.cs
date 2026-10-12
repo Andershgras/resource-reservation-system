@@ -12,6 +12,8 @@ namespace ResourceReservation.Api.Controllers;
 [Route("api/[controller]")]
 public class ResourcesController : ControllerBase
 {
+    public const int MaxScheduleDays = 62;
+
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
     private readonly SchedulingClock _schedulingClock;
@@ -61,6 +63,13 @@ public class ResourcesController : ControllerBase
         if (to < from)
         {
             return BadRequest(ApiError("To date must be on or after from date."));
+        }
+
+        if (to.Value == DateOnly.MaxValue ||
+            to.Value.DayNumber - from.Value.DayNumber + 1 > MaxScheduleDays)
+        {
+            return BadRequest(ApiError(
+                $"Date range cannot be longer than {MaxScheduleDays} days."));
         }
 
         var resource = await _context.Resources.FindAsync(id);

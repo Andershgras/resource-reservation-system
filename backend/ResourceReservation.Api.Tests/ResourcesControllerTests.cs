@@ -138,6 +138,55 @@ public class ResourcesControllerTests
     }
 
     [Fact]
+    public async Task GetResourceSchedule_WhenDateRangeIsAtMaximum_ReturnsSchedule()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = CreateController(context);
+        var from = new DateOnly(2030, 1, 1);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            from,
+            from.AddDays(ResourcesController.MaxScheduleDays - 1));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenDateRangeIsTooLong_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = CreateController(context);
+        var from = new DateOnly(2030, 1, 1);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            from,
+            from.AddDays(ResourcesController.MaxScheduleDays));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(badRequest, "Date range cannot be longer than 62 days.");
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_WhenToDateIsMaxValue_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        var controller = CreateController(context);
+
+        var result = await controller.GetResourceSchedule(
+            resource.Id,
+            DateOnly.MaxValue,
+            DateOnly.MaxValue);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        AssertApiError(badRequest, "Date range cannot be longer than 62 days.");
+    }
+
+    [Fact]
     public async Task GetResourceSchedule_WhenRuleHasActiveReservation_ReturnsRemainingBookableSlots()
     {
         await using var context = CreateContext();
