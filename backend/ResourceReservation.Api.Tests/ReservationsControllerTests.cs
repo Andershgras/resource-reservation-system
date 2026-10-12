@@ -13,7 +13,7 @@ namespace ResourceReservation.Api.Tests;
 public class ReservationsControllerTests
 {
     [Fact]
-    public async Task CreateReservation_WhenActiveReservationOverlapsSameResource_ReturnsBadRequest()
+    public async Task CreateReservation_WhenActiveReservationOverlapsSameResource_ReturnsConflict()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityAsync(context);
@@ -34,9 +34,9 @@ public class ReservationsControllerTests
             EndTime = new DateTime(2030, 1, 15, 11, 30, 0)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         AssertApiError(
-            badRequest,
+            conflict,
             "Resource is already reserved in this time period.");
     }
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -126,6 +127,11 @@ public class ReservationsController : ControllerBase
             return BadRequest(ApiError("Resource is not available in this time period."));
         }
 
+        // Serialize bookings per resource so the overlap check and the insert
+        // cannot interleave with another request for the same resource.
+        await using var transaction = await BeginResourceBookingLockAsync(
+            createReservationDto.ResourceId);
+
         var overlapsExistingReservation = await _context.Reservations
             .AnyAsync(reservation =>
                 reservation.ResourceId == createReservationDto.ResourceId &&
@@ -135,7 +141,7 @@ public class ReservationsController : ControllerBase
 
         if (overlapsExistingReservation)
         {
-            return BadRequest(ApiError("Resource is already reserved in this time period."));
+            return Conflict(ApiError("Resource is already reserved in this time period."));
         }
 
         var reservation = new Reservation
@@ -150,6 +156,11 @@ public class ReservationsController : ControllerBase
 
         _context.Reservations.Add(reservation);
         await _context.SaveChangesAsync();
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
 
         return CreatedAtAction(
             nameof(GetReservation),
@@ -224,6 +235,32 @@ public class ReservationsController : ControllerBase
         }
 
         return userId;
+    }
+
+    private async Task<IDbContextTransaction?> BeginResourceBookingLockAsync(int resourceId)
+    {
+        // The in-memory test provider has no transactions or locks.
+        if (!_context.Database.IsRelational())
+        {
+            return null;
+        }
+
+        var transaction = await _context.Database.BeginTransactionAsync();
+        var lockName = $"reservation:resource:{resourceId}";
+
+        // The lock is owned by the transaction and released on commit or rollback.
+        await _context.Database.ExecuteSqlInterpolatedAsync($"""
+            DECLARE @result int;
+            EXEC @result = sp_getapplock
+                @Resource = {lockName},
+                @LockMode = 'Exclusive',
+                @LockOwner = 'Transaction',
+                @LockTimeout = 10000;
+            IF @result < 0
+                THROW 50000, 'Could not acquire the reservation lock for this resource.', 1;
+            """);
+
+        return transaction;
     }
 
     private static ReservationResponseDto ToReservationResponseDto(Reservation reservation)
