@@ -213,6 +213,16 @@ Work continues in milestones. Each milestone is made of small changes that are v
 - [x] Schema hardening: unique email, column lengths, overlap index, restrictive deletes, existing data preserved (M2)
 - [x] README, decision records and roadmap updated
 
+### M2: Backend Structure And Test Coverage
+
+Not started. Items carried over from M1 and the audit:
+
+- [ ] Move reservation creation, including the per-resource booking lock, from `ReservationsController` into a reservation service ([ADR 0002](adr/0002-reservation-concurrency.md))
+- [ ] Return a clear response when the booking lock times out. Today, `sp_getapplock` waits 10 seconds, then raises SQL error 50000, which surfaces as an unhandled 500. Map it to `503 Service Unavailable` with a retry message in the global error handler.
+- [ ] Add a global exception handler that returns ProblemDetails in the existing `{ message, errors }` shape (M1 in the audit)
+- [ ] Validate configuration at startup using the Options pattern (Jwt, Scheduling, connection string)
+- [ ] Add `WebApplicationFactory` integration tests against real SQL Server, covering authorization, validation, booking concurrency, and the lock timeout (M8 in the audit)
+
 ## Later Ideas
 
 These are tracked as part of milestones M5–M7 above:
