@@ -222,7 +222,7 @@ Agreed decisions:
 
 Planned changes, in order:
 
-- [ ] Integration test harness: `WebApplicationFactory` with Testcontainers SQL Server, plus baseline tests for authorization, validation, booking concurrency, the unique email, and migrations (M8 in the audit)
+- [x] Integration test harness: `WebApplicationFactory` with Testcontainers SQL Server, plus baseline tests for authorization, validation, booking concurrency, the unique email, and migrations (M8 in the audit)
 - [ ] Configuration validated at startup using the Options pattern (Jwt, Scheduling, SeedAdmin, connection string)
 - [ ] ProblemDetails for every error, plus a global exception handler (M1 in the audit), with the frontend client updated to match
 - [ ] Service layer: reservation, auth and schedule logic moves out of the controllers, including the per-resource booking lock ([ADR 0002](adr/0002-reservation-concurrency.md))

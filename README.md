@@ -122,6 +122,7 @@ backend/
     Services/
 
   ResourceReservation.Api.Tests/
+  ResourceReservation.Api.IntegrationTests/
 
 frontend/
   resource-reservation-client/
@@ -229,6 +230,7 @@ Errors return a JSON body with a `message`. Validation errors also include an `e
 - .NET SDK matching the project target framework
 - Node.js
 - SQL Server LocalDB
+- Docker Desktop (only for the integration tests)
 
 ### Backend
 
@@ -297,6 +299,13 @@ Backend tests:
 ```bash
 dotnet test ResourceReservationSystem.slnx
 ```
+
+This runs two suites:
+
+- `ResourceReservation.Api.Tests`: fast unit tests of the controllers, using the EF Core in-memory provider.
+- `ResourceReservation.Api.IntegrationTests`: the whole API over HTTP against a real SQL Server, started in Docker with [Testcontainers](https://dotnet.testcontainers.org/). They cover authorization, validation, booking concurrency, the unique email and the migrations.
+
+The integration tests need **Docker Desktop** to be running. To use an existing SQL Server instead, set `INTEGRATION_TEST_CONNECTION_STRING`. The database name must end in `_IntegrationTests`, because the tests delete all of its data between runs.
 
 Frontend checks:
 
