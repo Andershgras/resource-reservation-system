@@ -6,8 +6,9 @@ type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
 }
 
-interface ApiErrorResponse {
-  message?: string
+// RFC 9457 problem details, as returned by the API for every error.
+// Validation errors add `errors`, keyed by field name.
+interface ProblemDetailsResponse {
   title?: string
   detail?: string
   errors?: Record<string, string[]>
@@ -65,17 +66,14 @@ async function readErrorMessage(response: Response) {
   }
 
   try {
-    const errorResponse = JSON.parse(text) as ApiErrorResponse
-    const validationMessages = Object.values(errorResponse.errors ?? {}).flat()
+    const problem = JSON.parse(text) as ProblemDetailsResponse
+    const validationMessages = Object.values(problem.errors ?? {}).flat()
 
-    if (errorResponse.message && validationMessages.length > 0) {
-      return `${errorResponse.message} ${validationMessages.join(' ')}`
+    if (validationMessages.length > 0) {
+      return validationMessages.join(' ')
     }
 
-    return errorResponse.message ??
-      errorResponse.detail ??
-      errorResponse.title ??
-      fallbackMessage
+    return problem.detail ?? problem.title ?? fallbackMessage
   } catch {
     return text
   }

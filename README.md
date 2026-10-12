@@ -122,6 +122,7 @@ backend/
     Services/
 
   ResourceReservation.Api.Tests/
+  ResourceReservation.Api.IntegrationTests/
 
 frontend/
   resource-reservation-client/
@@ -134,15 +135,17 @@ frontend/
       smoke/
 
 docs/
-  adr/          architecture decision records
-  audit/        project audits
+  adr/             architecture decision records
+  audit/           project audits
+  architecture.md  layers, request flow and data model diagrams
+  testing.md       test suites, how to run them, and coverage
   planning.md
   roadmap.md
 ```
 
 ## Architecture Overview
 
-The application is split into a backend API, a SQL Server database, and a React frontend.
+The application is split into a backend API, a SQL Server database, and a React frontend. Diagrams of the layers, the reservation flow and the data model are in [docs/architecture.md](docs/architecture.md).
 
 The backend owns the business rules. It exposes endpoints for authentication, resources, availability windows, weekly availability rules, generated resource schedules, and reservations.
 
@@ -212,7 +215,19 @@ GET /api/reservations/user/{id}          Admin only
 
 ### Errors
 
-Errors return a JSON body with a `message`. Validation errors also include an `errors` object, keyed by field.
+Every error is returned as [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) with the content type `application/problem+json`. `detail` explains the problem, and `traceId` matches the server logs:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.10",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Resource is already reserved in this time period.",
+  "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+}
+```
+
+Validation errors also include `errors`, keyed by field name. Unexpected server errors return a `500` with no internal details.
 
 | Status | Meaning |
 |---|---|
@@ -221,6 +236,7 @@ Errors return a JSON body with a `message`. Validation errors also include an `e
 | `403` | Authenticated, but not allowed |
 | `404` | Resource, availability or reservation not found |
 | `409` | The time overlaps an active reservation |
+| `503` | Another booking for the same resource is in progress. Retry after the number of seconds in the `Retry-After` header. |
 
 ## Local Setup
 
@@ -229,6 +245,7 @@ Errors return a JSON body with a `message`. Validation errors also include an `e
 - .NET SDK matching the project target framework
 - Node.js
 - SQL Server LocalDB
+- Docker Desktop (only for the integration tests)
 
 ### Backend
 
@@ -298,6 +315,15 @@ Backend tests:
 dotnet test ResourceReservationSystem.slnx
 ```
 
+This runs two suites:
+
+- `ResourceReservation.Api.Tests`: fast unit tests of the controllers, using the EF Core in-memory provider.
+- `ResourceReservation.Api.IntegrationTests`: the whole API over HTTP against a real SQL Server, started in Docker with [Testcontainers](https://dotnet.testcontainers.org/). They cover authorization, validation, booking concurrency, the unique email and the migrations.
+
+See [docs/testing.md](docs/testing.md) for what each suite covers and how to produce a coverage report.
+
+The integration tests need **Docker Desktop** to be running. To use an existing SQL Server instead, set `INTEGRATION_TEST_CONNECTION_STRING`. The database name must end in `_IntegrationTests`, because the tests delete all of its data between runs.
+
 Frontend checks:
 
 ```bash
@@ -314,6 +340,25 @@ The Playwright smoke tests cover the main browser flow: Admin login, resource ma
 GitHub Actions runs on push and pull request.
 
 The workflow restores and tests the backend, installs frontend dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests. Pull requests fail if any check fails.
+
+## Configuration
+
+The API checks its settings at startup and stops with a message naming any setting that is missing or invalid. Settings can come from `appsettings.*.json`, user secrets, or environment variables. In environment variable names, `:` becomes `__`, so `Jwt:Key` is set as `Jwt__Key`.
+
+| Setting | Required | Default | Notes |
+|---|---|---|---|
+| `ConnectionStrings:DefaultConnection` | Yes | None | SQL Server connection string |
+| `Jwt:Key` | Yes | None | Signing secret, at least 32 characters. Keep it out of source control. |
+| `Jwt:Issuer` | Yes | None | |
+| `Jwt:Audience` | Yes | None | |
+| `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes |
+| `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation times ([ADR 0001](docs/adr/0001-time-zone-convention.md)) |
+| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](docs/adr/0002-reservation-concurrency.md)) |
+| `SeedAdmin:Email` | No | None | If set, an Admin user is created on startup when no Admin exists yet |
+| `SeedAdmin:Password` | When `SeedAdmin:Email` is set | None | At least 8 characters |
+| `SeedAdmin:Name` | No | `Admin` | |
+
+`appsettings.Development.json` contains working values for local development only.
 
 ## Deployment Notes
 

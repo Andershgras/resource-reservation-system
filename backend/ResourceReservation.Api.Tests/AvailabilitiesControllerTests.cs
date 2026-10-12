@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Controllers;
@@ -13,7 +14,7 @@ public class AvailabilitiesControllerTests
     public async Task CreateAvailability_WhenResourceDoesNotExist_ReturnsBadRequest()
     {
         await using var context = CreateContext();
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -22,8 +23,7 @@ public class AvailabilitiesControllerTests
             EndTime = new DateTime(2030, 1, 15, 10, 0, 0)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Resource does not exist.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "Resource does not exist.");
     }
 
     [Theory]
@@ -37,7 +37,7 @@ public class AvailabilitiesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -46,8 +46,7 @@ public class AvailabilitiesControllerTests
             EndTime = new DateTime(2030, 1, 15, endHour, endMinute, 0)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "EndTime must be after StartTime.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "EndTime must be after StartTime.");
     }
 
     [Fact]
@@ -55,7 +54,7 @@ public class AvailabilitiesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -80,7 +79,7 @@ public class AvailabilitiesControllerTests
             resource.Id,
             new DateTime(2030, 1, 15, 9, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0));
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -89,10 +88,7 @@ public class AvailabilitiesControllerTests
             EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(
-            badRequest,
-            "Availability overlaps an existing window for this resource.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "Availability overlaps an existing window for this resource.");
         Assert.Single(context.Availabilities);
     }
 
@@ -106,7 +102,7 @@ public class AvailabilitiesControllerTests
             resource.Id,
             new DateTime(2030, 1, 15, 9, 0, 0),
             new DateTime(2030, 1, 15, 10, 0, 0));
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -130,7 +126,7 @@ public class AvailabilitiesControllerTests
             firstResource.Id,
             new DateTime(2030, 1, 15, 9, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0));
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -158,7 +154,7 @@ public class AvailabilitiesControllerTests
             resource.Id,
             new DateTime(2030, 1, 15, 12, 0, 0),
             new DateTime(2030, 1, 15, 13, 0, 0));
-        var controller = new AvailabilitiesController(context);
+        var controller = new AvailabilitiesController(context).WithHttpContext();
 
         var result = await controller.UpdateAvailability(
             availabilityToUpdate.Id,
@@ -169,10 +165,7 @@ public class AvailabilitiesControllerTests
                 EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
             });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        AssertApiError(
-            badRequest,
-            "Availability overlaps an existing window for this resource.");
+        ProblemAssert.IsProblem(result, StatusCodes.Status400BadRequest, "Availability overlaps an existing window for this resource.");
     }
 
     private static AppDbContext CreateContext()
@@ -217,11 +210,5 @@ public class AvailabilitiesControllerTests
         await context.SaveChangesAsync();
 
         return availability;
-    }
-
-    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
-    {
-        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
-        Assert.Equal(expectedMessage, error.Message);
     }
 }

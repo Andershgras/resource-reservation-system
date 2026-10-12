@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Controllers;
@@ -23,8 +24,7 @@ public class ResourcesControllerTests
             Name = name
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Name is required.");
+        ProblemAssert.IsProblem(result.Result, StatusCodes.Status400BadRequest, "Name is required.");
     }
 
     [Fact]
@@ -72,10 +72,7 @@ public class ResourcesControllerTests
 
         var result = await controller.DeleteResource(resource.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        AssertApiError(
-            badRequest,
-            "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
+        ProblemAssert.IsProblem(result, StatusCodes.Status400BadRequest, "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
         Assert.NotNull(await context.Resources.FindAsync(resource.Id));
         Assert.NotNull(await context.Reservations.FindAsync(reservation.Id));
     }
@@ -93,10 +90,7 @@ public class ResourcesControllerTests
 
         var result = await controller.DeleteResource(resource.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        AssertApiError(
-            badRequest,
-            "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
+        ProblemAssert.IsProblem(result, StatusCodes.Status400BadRequest, "Resource has reservation history and cannot be deleted. Mark it inactive instead.");
 
         var savedResource = await context.Resources.FindAsync(resource.Id);
         var savedReservation = await context.Reservations.FindAsync(reservation.Id);
@@ -106,252 +100,12 @@ public class ResourcesControllerTests
         Assert.NotNull(savedReservation);
     }
 
-    [Fact]
-    public async Task GetResourceSchedule_WhenResourceDoesNotExist_ReturnsNotFound()
-    {
-        await using var context = CreateContext();
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            999,
-            new DateOnly(2030, 1, 16),
-            new DateOnly(2030, 1, 16));
-
-        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
-        AssertApiError(notFound, "Resource not found.");
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenDateRangeIsInvalid_ReturnsBadRequest()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            new DateOnly(2030, 1, 17),
-            new DateOnly(2030, 1, 16));
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "To date must be on or after from date.");
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenDateRangeIsAtMaximum_ReturnsSchedule()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        var controller = CreateController(context);
-        var from = new DateOnly(2030, 1, 1);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            from,
-            from.AddDays(ResourcesController.MaxScheduleDays - 1));
-
-        Assert.IsType<OkObjectResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenDateRangeIsTooLong_ReturnsBadRequest()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        var controller = CreateController(context);
-        var from = new DateOnly(2030, 1, 1);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            from,
-            from.AddDays(ResourcesController.MaxScheduleDays));
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Date range cannot be longer than 62 days.");
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenToDateIsMaxValue_ReturnsBadRequest()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            DateOnly.MaxValue,
-            DateOnly.MaxValue);
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Date range cannot be longer than 62 days.");
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenRuleHasActiveReservation_ReturnsRemainingBookableSlots()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        await SeedAvailabilityRuleAsync(
-            context,
-            resource.Id,
-            DayOfWeek.Wednesday,
-            new TimeOnly(8, 0),
-            new TimeOnly(16, 0));
-        var reservation = await SeedReservationAsync(
-            context,
-            resource.Id,
-            ReservationStatuses.Active,
-            new DateTime(2030, 1, 16, 10, 0, 0),
-            new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            new DateOnly(2030, 1, 16),
-            new DateOnly(2030, 1, 16));
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
-
-        Assert.Equal(resource.Id, response.ResourceId);
-        Assert.Equal("Meeting Room", response.ResourceName);
-        Assert.Collection(
-            response.BookableSlots,
-            first =>
-            {
-                Assert.Equal(new DateTime(2030, 1, 16, 8, 0, 0), first.StartTime);
-                Assert.Equal(new DateTime(2030, 1, 16, 10, 0, 0), first.EndTime);
-            },
-            second =>
-            {
-                Assert.Equal(new DateTime(2030, 1, 16, 11, 0, 0), second.StartTime);
-                Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), second.EndTime);
-            });
-        var reservedSlot = Assert.Single(response.ReservedSlots);
-        Assert.Equal(reservation.Id, reservedSlot.ReservationId);
-        Assert.Equal(new DateTime(2030, 1, 16, 10, 0, 0), reservedSlot.StartTime);
-        Assert.Equal(new DateTime(2030, 1, 16, 11, 0, 0), reservedSlot.EndTime);
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenCancelledReservationOverlaps_ReturnsFullRuleSlot()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        await SeedAvailabilityRuleAsync(
-            context,
-            resource.Id,
-            DayOfWeek.Wednesday,
-            new TimeOnly(8, 0),
-            new TimeOnly(16, 0));
-        await SeedReservationAsync(
-            context,
-            resource.Id,
-            ReservationStatuses.Cancelled,
-            new DateTime(2030, 1, 16, 10, 0, 0),
-            new DateTime(2030, 1, 16, 11, 0, 0));
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            new DateOnly(2030, 1, 16),
-            new DateOnly(2030, 1, 16));
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
-        var bookableSlot = Assert.Single(response.BookableSlots);
-
-        Assert.Equal(new DateTime(2030, 1, 16, 8, 0, 0), bookableSlot.StartTime);
-        Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), bookableSlot.EndTime);
-        Assert.Empty(response.ReservedSlots);
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenOneOffAvailabilityExists_ReturnsBookableSlot()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        await SeedAvailabilityAsync(
-            context,
-            resource.Id,
-            new DateTime(2030, 1, 17, 14, 0, 0),
-            new DateTime(2030, 1, 17, 15, 0, 0));
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            new DateOnly(2030, 1, 17),
-            new DateOnly(2030, 1, 17));
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
-        var bookableSlot = Assert.Single(response.BookableSlots);
-
-        Assert.Equal(new DateTime(2030, 1, 17, 14, 0, 0), bookableSlot.StartTime);
-        Assert.Equal(new DateTime(2030, 1, 17, 15, 0, 0), bookableSlot.EndTime);
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenNoRuleMatchesDate_ReturnsNoBookableSlots()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        await SeedAvailabilityRuleAsync(
-            context,
-            resource.Id,
-            DayOfWeek.Wednesday,
-            new TimeOnly(8, 0),
-            new TimeOnly(16, 0));
-        var controller = CreateController(context);
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            new DateOnly(2030, 1, 17),
-            new DateOnly(2030, 1, 17));
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
-
-        Assert.Empty(response.BookableSlots);
-        Assert.Empty(response.ReservedSlots);
-    }
-
-    [Fact]
-    public async Task GetResourceSchedule_WhenSlotsAreInThePast_ReturnsOnlyFutureTime()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceAsync(context);
-        await SeedAvailabilityRuleAsync(
-            context,
-            resource.Id,
-            DayOfWeek.Wednesday,
-            new TimeOnly(8, 0),
-            new TimeOnly(16, 0));
-        var controller = CreateController(
-            context,
-            localNow: new DateTime(2030, 1, 16, 10, 37, 20));
-
-        var result = await controller.GetResourceSchedule(
-            resource.Id,
-            new DateOnly(2030, 1, 15),
-            new DateOnly(2030, 1, 16));
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ResourceScheduleResponseDto>(ok.Value);
-        var bookableSlot = Assert.Single(response.BookableSlots);
-
-        Assert.Equal(new DateTime(2030, 1, 16, 10, 38, 0), bookableSlot.StartTime);
-        Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), bookableSlot.EndTime);
-    }
-
-    private static ResourcesController CreateController(
-        AppDbContext context,
-        DateTime? localNow = null)
+    private static ResourcesController CreateController(AppDbContext context)
     {
         return new ResourcesController(
             context,
-            new AvailabilityService(context),
-            TestSchedulingClock.Create(localNow));
+            new AvailabilityService(context, TestSchedulingClock.Create()))
+            .WithHttpContext();
     }
 
     private static AppDbContext CreateContext()
@@ -379,46 +133,6 @@ public class ResourcesControllerTests
         return resource;
     }
 
-    private static async Task<AvailabilityRule> SeedAvailabilityRuleAsync(
-        AppDbContext context,
-        int resourceId,
-        DayOfWeek dayOfWeek,
-        TimeOnly startTime,
-        TimeOnly endTime)
-    {
-        var rule = new AvailabilityRule
-        {
-            ResourceId = resourceId,
-            DayOfWeek = dayOfWeek,
-            StartTime = startTime,
-            EndTime = endTime
-        };
-
-        context.AvailabilityRules.Add(rule);
-        await context.SaveChangesAsync();
-
-        return rule;
-    }
-
-    private static async Task<Availability> SeedAvailabilityAsync(
-        AppDbContext context,
-        int resourceId,
-        DateTime startTime,
-        DateTime endTime)
-    {
-        var availability = new Availability
-        {
-            ResourceId = resourceId,
-            StartTime = startTime,
-            EndTime = endTime
-        };
-
-        context.Availabilities.Add(availability);
-        await context.SaveChangesAsync();
-
-        return availability;
-    }
-
     private static async Task<Reservation> SeedReservationAsync(
         AppDbContext context,
         int resourceId,
@@ -440,11 +154,5 @@ public class ResourcesControllerTests
         await context.SaveChangesAsync();
 
         return reservation;
-    }
-
-    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
-    {
-        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
-        Assert.Equal(expectedMessage, error.Message);
     }
 }

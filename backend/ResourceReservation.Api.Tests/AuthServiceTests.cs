@@ -1,31 +1,31 @@
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using ResourceReservation.Api.Controllers;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.Tests;
 
-public class AuthControllerTests
+public class AuthServiceTests
 {
     [Fact]
     public async Task Register_WithValidInput_CreatesUser()
     {
         await using var context = CreateContext();
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Register(new RegisterUserDto
+        var result = await service.RegisterAsync(new RegisterUserDto
         {
             Name = "Test User",
             Email = "test@example.com",
             Password = "password123"
         });
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var response = Assert.IsType<UserResponseDto>(created.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.Equal("Test User", response.Name);
         Assert.Equal("test@example.com", response.Email);
         Assert.Equal("User", response.Role);
@@ -36,59 +36,56 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task Register_WhenEmailAlreadyExists_ReturnsBadRequest()
+    public async Task Register_WhenEmailAlreadyExists_ReturnsValidationError()
     {
         await using var context = CreateContext();
         await SeedUser(context, email: "test@example.com");
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Register(new RegisterUserDto
+        var result = await service.RegisterAsync(new RegisterUserDto
         {
             Name = "Other User",
             Email = "TEST@example.com",
             Password = "password123"
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Email is already registered.");
+        AssertError(result, ServiceErrorKind.Validation, "Email is already registered.");
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("not-an-email")]
-    public async Task Register_WhenEmailIsInvalid_ReturnsBadRequest(string email)
+    public async Task Register_WhenEmailIsInvalid_ReturnsValidationError(string email)
     {
         await using var context = CreateContext();
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Register(new RegisterUserDto
+        var result = await service.RegisterAsync(new RegisterUserDto
         {
             Name = "Test User",
             Email = email,
             Password = "password123"
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "A valid email is required.");
+        AssertError(result, ServiceErrorKind.Validation, "A valid email is required.");
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("short")]
-    public async Task Register_WhenPasswordIsTooShort_ReturnsBadRequest(string password)
+    public async Task Register_WhenPasswordIsTooShort_ReturnsValidationError(string password)
     {
         await using var context = CreateContext();
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Register(new RegisterUserDto
+        var result = await service.RegisterAsync(new RegisterUserDto
         {
             Name = "Test User",
             Email = "test@example.com",
             Password = password
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Password must be at least 8 characters.");
+        AssertError(result, ServiceErrorKind.Validation, "Password must be at least 8 characters.");
     }
 
     [Fact]
@@ -96,16 +93,16 @@ public class AuthControllerTests
     {
         await using var context = CreateContext();
         await SeedUser(context, email: "test@example.com", password: "password123");
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Login(new LoginUserDto
+        var result = await service.LoginAsync(new LoginUserDto
         {
             Email = "test@example.com",
             Password = "password123"
         });
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<AuthResponseDto>(ok.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.False(string.IsNullOrWhiteSpace(response.Token));
         Assert.Equal("test@example.com", response.User.Email);
         Assert.Equal("User", response.User.Role);
@@ -118,54 +115,48 @@ public class AuthControllerTests
     {
         await using var context = CreateContext();
         await SeedUser(context, email: "test@example.com", password: "password123");
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Login(new LoginUserDto
+        var result = await service.LoginAsync(new LoginUserDto
         {
             Email = email,
             Password = password
         });
 
-        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
-        AssertApiError(unauthorized, "Invalid email or password.");
+        AssertError(result, ServiceErrorKind.Unauthorized, "Invalid email or password.");
     }
 
     [Fact]
     public async Task Register_AlwaysCreatesNormalUserRole()
     {
         await using var context = CreateContext();
-        var controller = CreateController(context);
+        var service = CreateService(context);
 
-        var result = await controller.Register(new RegisterUserDto
+        var result = await service.RegisterAsync(new RegisterUserDto
         {
             Name = "Public User",
             Email = "public@example.com",
             Password = "password123"
         });
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var response = Assert.IsType<UserResponseDto>(created.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.Equal("User", response.Role);
 
         var savedUser = await context.Users.SingleAsync();
         Assert.Equal("User", savedUser.Role);
     }
 
-    private static AuthController CreateController(AppDbContext context)
+    private static AuthService CreateService(AppDbContext context)
     {
-        return new AuthController(context, CreateConfiguration());
-    }
+        var jwtOptions = Options.Create(new JwtOptions
+        {
+            Key = "test-jwt-key-that-is-long-enough-for-hmac",
+            Issuer = "ResourceReservation.Tests",
+            Audience = "ResourceReservation.Tests"
+        });
 
-    private static IConfiguration CreateConfiguration()
-    {
-        return new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"] = "test-jwt-key-that-is-long-enough-for-hmac",
-                ["Jwt:Issuer"] = "ResourceReservation.Tests",
-                ["Jwt:Audience"] = "ResourceReservation.Tests"
-            })
-            .Build();
+        return new AuthService(context, new JwtTokenService(jwtOptions, TimeProvider.System));
     }
 
     private static AppDbContext CreateContext()
@@ -196,9 +187,10 @@ public class AuthControllerTests
         await context.SaveChangesAsync();
     }
 
-    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
+    private static void AssertError<T>(ServiceResult<T> result, ServiceErrorKind kind, string message)
     {
-        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
-        Assert.Equal(expectedMessage, error.Message);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(kind, result.Error.Kind);
+        Assert.Equal(message, result.Error.Message);
     }
 }

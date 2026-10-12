@@ -21,8 +21,34 @@ jobs:
       - name: Restore backend
         run: dotnet restore ResourceReservationSystem.slnx
 
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      # Unit tests and integration tests. The integration tests start SQL Server
+      # in Docker through Testcontainers, which GitHub-hosted runners support.
       - name: Test backend
-        run: dotnet test ResourceReservationSystem.slnx --no-restore
+        run: >
+          dotnet test ResourceReservationSystem.slnx --no-restore
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults/coverage/raw
+
+      - name: Generate coverage report
+        run: >
+          dotnet reportgenerator
+          -reports:"TestResults/coverage/raw/**/coverage.cobertura.xml"
+          -targetdir:TestResults/coverage/report
+          -reporttypes:"MarkdownSummaryGithub;Html"
+          -assemblyfilters:"+ResourceReservation.Api"
+          -classfilters:"-ResourceReservation.Api.Migrations.*;-Microsoft.AspNetCore.OpenApi.Generated*;-System.Runtime.CompilerServices*"
+
+      - name: Publish coverage summary
+        run: cat TestResults/coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: TestResults/coverage/report
 
   frontend:
     name: Frontend checks

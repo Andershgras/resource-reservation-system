@@ -1,8 +1,6 @@
-using System.Security.Claims;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ResourceReservation.Api.Controllers;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -10,7 +8,7 @@ using ResourceReservation.Api.Services;
 
 namespace ResourceReservation.Api.Tests;
 
-public class ReservationsControllerTests
+public class ReservationServiceTests
 {
     [Fact]
     public async Task CreateReservation_WhenActiveReservationOverlapsSameResource_ReturnsConflict()
@@ -25,19 +23,16 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 10, 30, 0),
             EndTime = new DateTime(2030, 1, 15, 11, 30, 0)
-        });
+        }, user.Id);
 
-        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
-        AssertApiError(
-            conflict,
-            "Resource is already reserved in this time period.");
+        AssertError(result, ServiceErrorKind.Conflict, "Resource is already reserved in this time period.");
     }
 
     [Fact]
@@ -53,39 +48,36 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Cancelled);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 10, 30, 0),
             EndTime = new DateTime(2030, 1, 15, 11, 30, 0)
-        });
+        }, user.Id);
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var response = Assert.IsType<ReservationResponseDto>(created.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.Equal(ReservationStatuses.Active, response.Status);
     }
 
     [Fact]
-    public async Task CreateReservation_WhenOutsideAvailabilityWindow_ReturnsBadRequest()
+    public async Task CreateReservation_WhenOutsideAvailabilityWindow_ReturnsValidationError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityAsync(context);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 8, 30, 0),
             EndTime = new DateTime(2030, 1, 15, 9, 30, 0)
-        });
+        }, user.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(
-            badRequest,
-            "Resource is not available in this time period.");
+        AssertError(result, ServiceErrorKind.Validation, "Resource is not available in this time period.");
     }
 
     [Fact]
@@ -94,79 +86,72 @@ public class ReservationsControllerTests
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityRuleAsync(context);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 16, 10, 0, 0),
             EndTime = new DateTime(2030, 1, 16, 11, 0, 0)
-        });
+        }, user.Id);
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var response = Assert.IsType<ReservationResponseDto>(created.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.Equal(ReservationStatuses.Active, response.Status);
     }
 
     [Fact]
-    public async Task CreateReservation_WhenOutsideAvailabilityRule_ReturnsBadRequest()
+    public async Task CreateReservation_WhenOutsideAvailabilityRule_ReturnsValidationError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityRuleAsync(context);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 16, 15, 30, 0),
             EndTime = new DateTime(2030, 1, 16, 16, 30, 0)
-        });
+        }, user.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(
-            badRequest,
-            "Resource is not available in this time period.");
+        AssertError(result, ServiceErrorKind.Validation, "Resource is not available in this time period.");
     }
 
     [Fact]
-    public async Task CreateReservation_WhenAvailabilityRuleIsForDifferentDay_ReturnsBadRequest()
+    public async Task CreateReservation_WhenAvailabilityRuleIsForDifferentDay_ReturnsValidationError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityRuleAsync(context);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 19, 10, 0, 0),
             EndTime = new DateTime(2030, 1, 19, 11, 0, 0)
-        });
+        }, user.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(
-            badRequest,
-            "Resource is not available in this time period.");
+        AssertError(result, ServiceErrorKind.Validation, "Resource is not available in this time period.");
     }
 
     [Fact]
-    public async Task CreateReservation_WhenResourceIsInactive_ReturnsBadRequest()
+    public async Task CreateReservation_WhenResourceIsInactive_ReturnsValidationError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityAsync(context, isActive: false);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
             EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
-        });
+        }, user.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Resource is not active.");
+        AssertError(result, ServiceErrorKind.Validation, "Resource is not active.");
     }
 
     [Fact]
@@ -174,12 +159,11 @@ public class ReservationsControllerTests
     {
         await using var context = CreateContext();
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.GetReservation(999);
+        var result = await service.GetAsync(999, new CurrentUser(user.Id, false));
 
-        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
-        AssertApiError(notFound, "Reservation not found.");
+        AssertError(result, ServiceErrorKind.NotFound, "Reservation not found.");
     }
 
     [Fact]
@@ -195,12 +179,12 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.GetReservation(reservation.Id);
+        var result = await service.GetAsync(reservation.Id, new CurrentUser(user.Id, false));
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ReservationResponseDto>(ok.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.Equal(reservation.Id, response.Id);
         Assert.Equal(user.Id, response.UserId);
     }
@@ -219,15 +203,11 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, currentUser.Id);
+        var service = CreateService(context);
 
-        var result = await controller.GetReservation(reservation.Id);
+        var result = await service.GetAsync(reservation.Id, new CurrentUser(currentUser.Id, false));
 
-        var forbidden = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
-        AssertApiError(
-            forbidden,
-            "You do not have permission to access this resource.");
+        AssertError(result, ServiceErrorKind.Forbidden, "You do not have permission to access this resource.");
     }
 
     [Fact]
@@ -244,32 +224,14 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, admin.Id, isAdmin: true);
+        var service = CreateService(context);
 
-        var result = await controller.GetReservation(reservation.Id);
+        var result = await service.GetAsync(reservation.Id, new CurrentUser(admin.Id, true));
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<ReservationResponseDto>(ok.Value);
+        Assert.True(result.IsSuccess);
+        var response = result.Value;
         Assert.Equal(reservation.Id, response.Id);
         Assert.Equal(reservationOwner.Id, response.UserId);
-    }
-
-    [Fact]
-    public async Task CreateReservation_WhenCurrentUserIsMissing_ReturnsUnauthorizedError()
-    {
-        await using var context = CreateContext();
-        var resource = await SeedResourceWithAvailabilityAsync(context);
-        var controller = CreateController(context, null);
-
-        var result = await controller.CreateReservation(new CreateReservationDto
-        {
-            ResourceId = resource.Id,
-            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
-            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
-        });
-
-        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
-        AssertApiError(unauthorized, "Authentication is required.");
     }
 
     [Fact]
@@ -285,11 +247,11 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CancelReservation(reservation.Id);
+        var result = await service.CancelAsync(reservation.Id, new CurrentUser(user.Id, false));
 
-        Assert.IsType<NoContentResult>(result);
+        Assert.True(result.IsSuccess);
         var cancelledReservation = await context.Reservations.FindAsync(reservation.Id);
         Assert.NotNull(cancelledReservation);
         Assert.Equal(ReservationStatuses.Cancelled, cancelledReservation.Status);
@@ -309,15 +271,11 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, currentUser.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CancelReservation(reservation.Id);
+        var result = await service.CancelAsync(reservation.Id, new CurrentUser(currentUser.Id, false));
 
-        var forbidden = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
-        AssertApiError(
-            forbidden,
-            "You do not have permission to access this resource.");
+        AssertError(result, ServiceErrorKind.Forbidden, "You do not have permission to access this resource.");
     }
 
     [Fact]
@@ -334,11 +292,11 @@ public class ReservationsControllerTests
             new DateTime(2030, 1, 15, 10, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0),
             ReservationStatuses.Active);
-        var controller = CreateController(context, admin.Id, isAdmin: true);
+        var service = CreateService(context);
 
-        var result = await controller.CancelReservation(reservation.Id);
+        var result = await service.CancelAsync(reservation.Id, new CurrentUser(admin.Id, true));
 
-        Assert.IsType<NoContentResult>(result);
+        Assert.True(result.IsSuccess);
         var cancelledReservation = await context.Reservations.FindAsync(reservation.Id);
         Assert.NotNull(cancelledReservation);
         Assert.Equal(ReservationStatuses.Cancelled, cancelledReservation.Status);
@@ -352,16 +310,16 @@ public class ReservationsControllerTests
         await SeedAvailabilityRuleAsync(context, resource.Id, DayOfWeek.Wednesday, new TimeOnly(8, 0), new TimeOnly(12, 0));
         await SeedAvailabilityRuleAsync(context, resource.Id, DayOfWeek.Wednesday, new TimeOnly(12, 0), new TimeOnly(16, 0));
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 16, 11, 0, 0),
             EndTime = new DateTime(2030, 1, 16, 13, 0, 0)
-        });
+        }, user.Id);
 
-        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]
@@ -378,61 +336,54 @@ public class ReservationsControllerTests
         });
         await context.SaveChangesAsync();
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 16, 11, 0, 0),
             EndTime = new DateTime(2030, 1, 16, 17, 0, 0)
-        });
+        }, user.Id);
 
-        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]
-    public async Task CreateReservation_WhenSpanningGapBetweenRules_ReturnsBadRequest()
+    public async Task CreateReservation_WhenSpanningGapBetweenRules_ReturnsValidationError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
         await SeedAvailabilityRuleAsync(context, resource.Id, DayOfWeek.Wednesday, new TimeOnly(8, 0), new TimeOnly(12, 0));
         await SeedAvailabilityRuleAsync(context, resource.Id, DayOfWeek.Wednesday, new TimeOnly(13, 0), new TimeOnly(16, 0));
         var user = await SeedUserAsync(context);
-        var controller = CreateController(context, user.Id);
+        var service = CreateService(context);
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 16, 11, 0, 0),
             EndTime = new DateTime(2030, 1, 16, 14, 0, 0)
-        });
+        }, user.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(
-            badRequest,
-            "Resource is not available in this time period.");
+        AssertError(result, ServiceErrorKind.Validation, "Resource is not available in this time period.");
     }
 
     [Fact]
-    public async Task CreateReservation_WhenStartTimeIsInThePast_ReturnsBadRequest()
+    public async Task CreateReservation_WhenStartTimeIsInThePast_ReturnsValidationError()
     {
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityAsync(context);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(
-            context,
-            user.Id,
-            localNow: new DateTime(2030, 1, 15, 10, 0, 1));
+        var service = CreateService(context, localNow: new DateTime(2030, 1, 15, 10, 0, 1));
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
             EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
-        });
+        }, user.Id);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        AssertApiError(badRequest, "Reservations must start in the future.");
+        AssertError(result, ServiceErrorKind.Validation, "Reservations must start in the future.");
     }
 
     [Fact]
@@ -441,19 +392,16 @@ public class ReservationsControllerTests
         await using var context = CreateContext();
         var resource = await SeedResourceWithAvailabilityAsync(context);
         var user = await SeedUserAsync(context);
-        var controller = CreateController(
-            context,
-            user.Id,
-            localNow: new DateTime(2030, 1, 15, 10, 0, 0));
+        var service = CreateService(context, localNow: new DateTime(2030, 1, 15, 10, 0, 0));
 
-        var result = await controller.CreateReservation(new CreateReservationDto
+        var result = await service.CreateAsync(new CreateReservationDto
         {
             ResourceId = resource.Id,
             StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
             EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
-        });
+        }, user.Id);
 
-        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.True(result.IsSuccess);
     }
 
     private static async Task<Resource> SeedResourceAsync(AppDbContext context)
@@ -496,43 +444,29 @@ public class ReservationsControllerTests
         return new AppDbContext(options);
     }
 
-    private static ReservationsController CreateController(
-        AppDbContext context,
-        int? userId,
-        bool isAdmin = false,
-        DateTime? localNow = null)
+    private static ReservationService CreateService(AppDbContext context, DateTime? localNow = null)
     {
-        var claims = new List<Claim>();
-        if (userId is not null)
-        {
-            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.ToString()!));
-        }
+        var clock = TestSchedulingClock.Create(localNow);
 
-        if (isAdmin)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
-        }
-
-        var user = new ClaimsPrincipal(new ClaimsIdentity(
-            claims,
-            "TestAuth"));
-
-        return new ReservationsController(
+        return new ReservationService(
             context,
-            new AvailabilityService(context),
-            TestSchedulingClock.Create(localNow))
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext { User = user }
-            }
-        };
+            new AvailabilityService(context, clock),
+            clock,
+            Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }));
     }
 
-    private static void AssertApiError(ObjectResult objectResult, string expectedMessage)
+    private static void AssertError<T>(ServiceResult<T> result, ServiceErrorKind kind, string message)
     {
-        var error = Assert.IsType<ApiErrorResponseDto>(objectResult.Value);
-        Assert.Equal(expectedMessage, error.Message);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(kind, result.Error.Kind);
+        Assert.Equal(message, result.Error.Message);
+    }
+
+    private static void AssertError(ServiceResult result, ServiceErrorKind kind, string message)
+    {
+        Assert.False(result.IsSuccess);
+        Assert.Equal(kind, result.Error.Kind);
+        Assert.Equal(message, result.Error.Message);
     }
 
     private static async Task<Resource> SeedResourceWithAvailabilityAsync(

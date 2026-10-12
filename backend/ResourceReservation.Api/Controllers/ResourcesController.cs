@@ -12,20 +12,13 @@ namespace ResourceReservation.Api.Controllers;
 [Route("api/[controller]")]
 public class ResourcesController : ControllerBase
 {
-    public const int MaxScheduleDays = 62;
-
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
-    private readonly SchedulingClock _schedulingClock;
 
-    public ResourcesController(
-        AppDbContext context,
-        AvailabilityService availabilityService,
-        SchedulingClock schedulingClock)
+    public ResourcesController(AppDbContext context, AvailabilityService availabilityService)
     {
         _context = context;
         _availabilityService = availabilityService;
-        _schedulingClock = schedulingClock;
     }
 
     [HttpGet]
@@ -43,7 +36,7 @@ public class ResourcesController : ControllerBase
 
         if (resource is null)
         {
-            return NotFound(ApiError("Resource not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Resource not found."));
         }
 
         return Ok(ToResourceResponseDto(resource));
@@ -55,70 +48,9 @@ public class ResourcesController : ControllerBase
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to)
     {
-        if (from is null || to is null)
-        {
-            return BadRequest(ApiError("From and to dates are required."));
-        }
+        var result = await _availabilityService.GetScheduleAsync(id, from, to);
 
-        if (to < from)
-        {
-            return BadRequest(ApiError("To date must be on or after from date."));
-        }
-
-        if (to.Value == DateOnly.MaxValue ||
-            to.Value.DayNumber - from.Value.DayNumber + 1 > MaxScheduleDays)
-        {
-            return BadRequest(ApiError(
-                $"Date range cannot be longer than {MaxScheduleDays} days."));
-        }
-
-        var resource = await _context.Resources.FindAsync(id);
-
-        if (resource is null)
-        {
-            return NotFound(ApiError("Resource not found."));
-        }
-
-        if (!resource.IsActive)
-        {
-            return BadRequest(ApiError("Resource is not active."));
-        }
-
-        var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue);
-        var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var reservedSlots = await GetReservedSlots(id, rangeStart, rangeEnd);
-        var availabilityIntervals = await _availabilityService.GetAvailabilityIntervalsAsync(
-            id,
-            from.Value,
-            to.Value);
-        var bookableSlots = AvailabilityService.RemoveTimeBefore(
-            AvailabilityService.SubtractReservedSlots(
-                availabilityIntervals,
-                reservedSlots.Select(slot => new TimeRange(slot.StartTime, slot.EndTime))),
-            GetNextWholeMinute(_schedulingClock.GetLocalNow()));
-
-        return Ok(new ResourceScheduleResponseDto
-        {
-            ResourceId = resource.Id,
-            ResourceName = resource.Name,
-            FromDate = from.Value,
-            ToDate = to.Value,
-            BookableSlots = bookableSlots
-                .Select(slot => new BookableSlotResponseDto
-                {
-                    StartTime = slot.StartTime,
-                    EndTime = slot.EndTime
-                })
-                .ToList(),
-            ReservedSlots = reservedSlots
-                .Select(slot => new ReservedSlotResponseDto
-                {
-                    ReservationId = slot.Id,
-                    StartTime = slot.StartTime,
-                    EndTime = slot.EndTime
-                })
-                .ToList()
-        });
+        return result.IsSuccess ? Ok(result.Value) : this.ToErrorResult(result.Error);
     }
 
     [HttpPost]
@@ -127,7 +59,7 @@ public class ResourcesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(createResourceDto.Name))
         {
-            return BadRequest(ApiError("Name is required."));
+            return this.ToErrorResult(ServiceError.Validation("Name is required."));
         }
 
         var resource = new Resource
@@ -153,14 +85,14 @@ public class ResourcesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(updateResourceDto.Name))
         {
-            return BadRequest(ApiError("Name is required."));
+            return this.ToErrorResult(ServiceError.Validation("Name is required."));
         }
 
         var resource = await _context.Resources.FindAsync(id);
 
         if (resource is null)
         {
-            return NotFound(ApiError("Resource not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Resource not found."));
         }
 
         resource.Name = updateResourceDto.Name.Trim();
@@ -181,7 +113,7 @@ public class ResourcesController : ControllerBase
 
         if (resource is null)
         {
-            return NotFound(ApiError("Resource not found."));
+            return this.ToErrorResult(ServiceError.NotFound("Resource not found."));
         }
 
         var hasReservationHistory = await _context.Reservations
@@ -189,7 +121,7 @@ public class ResourcesController : ControllerBase
 
         if (hasReservationHistory)
         {
-            return BadRequest(ApiError(
+            return this.ToErrorResult(ServiceError.Validation(
                 "Resource has reservation history and cannot be deleted. Mark it inactive instead."));
         }
 
@@ -211,38 +143,6 @@ public class ResourcesController : ControllerBase
         };
     }
 
-    private async Task<List<ReservedTimeRange>> GetReservedSlots(
-        int resourceId,
-        DateTime rangeStart,
-        DateTime rangeEnd)
-    {
-        return await _context.Reservations
-            .Where(reservation =>
-                reservation.ResourceId == resourceId &&
-                reservation.Status == ReservationStatuses.Active &&
-                reservation.StartTime < rangeEnd &&
-                reservation.EndTime > rangeStart)
-            .OrderBy(reservation => reservation.StartTime)
-            .Select(reservation => new ReservedTimeRange(
-                reservation.Id,
-                reservation.StartTime < rangeStart ? rangeStart : reservation.StartTime,
-                reservation.EndTime > rangeEnd ? rangeEnd : reservation.EndTime))
-            .ToListAsync();
-    }
-
-    private static DateTime GetNextWholeMinute(DateTime value)
-    {
-        var wholeMinute = new DateTime(
-            value.Year,
-            value.Month,
-            value.Day,
-            value.Hour,
-            value.Minute,
-            0);
-
-        return wholeMinute == value ? wholeMinute : wholeMinute.AddMinutes(1);
-    }
-
     private static string? NormalizeOptionalText(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -252,14 +152,4 @@ public class ResourcesController : ControllerBase
 
         return value.Trim();
     }
-
-    private static ApiErrorResponseDto ApiError(string message)
-    {
-        return new ApiErrorResponseDto { Message = message };
-    }
-
-    private sealed record ReservedTimeRange(
-        int Id,
-        DateTime StartTime,
-        DateTime EndTime);
 }
