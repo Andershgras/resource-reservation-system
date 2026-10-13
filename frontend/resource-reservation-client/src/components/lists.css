@@ -52,16 +52,20 @@
 
 .item-meta div {
   display: flex;
-  gap: var(--space-1);
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  min-width: 0;
 }
 
 .item-meta dt {
   font-weight: var(--weight-medium);
+  white-space: nowrap;
 }
 
 .item-meta dd {
   margin: 0;
   color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 .item-actions {
