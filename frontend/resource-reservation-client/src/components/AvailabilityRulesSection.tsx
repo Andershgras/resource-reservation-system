@@ -1,5 +1,5 @@
 import type { AvailabilityRuleResponse } from '../api/types'
-import { toTimeOfDay } from '../lib/dates'
+import { formatTimeRange } from '../lib/dates'
 
 interface AvailabilityRulesSectionProps {
   availabilityRules: AvailabilityRuleResponse[]
@@ -48,7 +48,7 @@ export function AvailabilityRulesSection({
                   </p>
                   <p>
                     <span>Time</span>
-                    {toTimeOfDay(rule.startTime)} - {toTimeOfDay(rule.endTime)}
+                    {formatTimeRange(rule.startTime, rule.endTime)}
                   </p>
                 </div>
               </div>

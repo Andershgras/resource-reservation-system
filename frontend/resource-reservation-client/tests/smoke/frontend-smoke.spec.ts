@@ -106,14 +106,14 @@ test('main frontend reservation flow', async ({ page }) => {
   const weeklyScheduleSection = sectionByHeading(page, 'Weekly schedule')
   await expect(weeklyScheduleSection.getByText('Smoke Test Room Updated')).toBeVisible()
   await expect(weeklyScheduleSection.getByText('Monday')).toBeVisible()
-  await expect(weeklyScheduleSection.getByText('08:00 - 16:00')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('08:00–16:00')).toBeVisible()
 
   await weeklyScheduleSection.getByRole('button', { name: 'Edit' }).click()
   const editWeeklyScheduleForm = sectionByHeading(page, 'Edit weekly schedule')
   await editWeeklyScheduleForm.getByLabel('End time').fill('17:00')
   await editWeeklyScheduleForm.getByRole('button', { name: 'Save weekly schedule' }).click()
   await expect(page.getByText('Weekly schedule updated.')).toBeVisible()
-  await expect(weeklyScheduleSection.getByText('08:00 - 17:00')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('08:00–17:00')).toBeVisible()
 
   await selectRoleTab(page, 'Availability')
   const availabilityForm = sectionByHeading(page, 'Create availability')

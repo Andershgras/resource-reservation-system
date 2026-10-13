@@ -3,7 +3,7 @@ import type {
   ResourceResponse,
   ResourceScheduleResponse,
 } from '../api/types'
-import { formatClockTime } from '../lib/dates'
+import { formatTimeRange } from '../lib/dates'
 import { getSlotKey, groupScheduleByDay } from '../lib/schedule'
 
 interface ResourceBookingSectionProps {
@@ -193,7 +193,7 @@ export function ResourceBookingSection({
                     <div className="reserved-slots" aria-label="Reserved times">
                       {day.reservedSlots.map((slot) => (
                         <span key={`${slot.startTime}-${slot.endTime}`}>
-                          Reserved {formatClockTime(slot.startTime)}-{formatClockTime(slot.endTime)}
+                          Reserved {formatTimeRange(slot.startTime, slot.endTime)}
                         </span>
                       ))}
                     </div>
@@ -208,7 +208,7 @@ export function ResourceBookingSection({
                         <li key={slotKey} className="schedule-slot">
                           <div className="item-main">
                             <strong>
-                              {formatClockTime(slot.startTime)}-{formatClockTime(slot.endTime)}
+                              {formatTimeRange(slot.startTime, slot.endTime)}
                             </strong>
                           </div>
                           <div className="resource-actions">

@@ -1,5 +1,5 @@
 import type { ResourceResponse } from '../../api/types'
-import { addDays, toDateInputValue } from '../../lib/dates'
+import { addDaysToDateKey, todayInSchedulingZone } from '../../lib/dates'
 
 // The booking screen's selection, kept in the address so a reload or a shared
 // link shows the same schedule: /book?resource=3&from=2030-01-14&to=2030-01-20
@@ -9,9 +9,11 @@ export interface BookingSelection {
   toDate: string
 }
 
-// Today and the six days after it.
+// Today in the scheduling time zone, and the six days after it.
 export function defaultDateRange(now = new Date()) {
-  return { fromDate: toDateInputValue(now), toDate: toDateInputValue(addDays(now, 6)) }
+  const today = todayInSchedulingZone(now)
+
+  return { fromDate: today, toDate: addDaysToDateKey(today, 6) }
 }
 
 // Reads the selection from the address. Anything invalid is ignored rather than
