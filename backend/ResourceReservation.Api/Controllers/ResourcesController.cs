@@ -16,15 +16,18 @@ public class ResourcesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
+    private readonly ReservationService _reservationService;
     private readonly BookingPolicyOptions _bookingPolicyOptions;
 
     public ResourcesController(
         AppDbContext context,
         AvailabilityService availabilityService,
+        ReservationService reservationService,
         IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
+        _reservationService = reservationService;
         _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
@@ -49,13 +52,36 @@ public class ResourcesController : ControllerBase
         return Ok(ToResourceResponseDto(resource));
     }
 
+    // Anonymous, except that leaving out a reservation that is being moved
+    // needs its owner or an admin.
     [HttpGet("{id}/schedule")]
     public async Task<ActionResult<ResourceScheduleResponseDto>> GetResourceSchedule(
         int id,
         [FromQuery] DateOnly? from,
-        [FromQuery] DateOnly? to)
+        [FromQuery] DateOnly? to,
+        [FromQuery] int? excludeReservationId)
     {
-        var result = await _availabilityService.GetScheduleAsync(id, from, to);
+        if (excludeReservationId is not null)
+        {
+            if (User.GetCurrentUser() is not { } currentUser)
+            {
+                return this.AuthenticationRequired();
+            }
+
+            var reservation = await _reservationService.GetAsync(excludeReservationId.Value, currentUser);
+
+            if (!reservation.IsSuccess)
+            {
+                return this.ToErrorResult(reservation.Error);
+            }
+
+            if (reservation.Value.ResourceId != id)
+            {
+                return this.ToErrorResult(ServiceError.Validation("The reservation is for a different resource."));
+            }
+        }
+
+        var result = await _availabilityService.GetScheduleAsync(id, from, to, excludeReservationId);
 
         return result.IsSuccess ? Ok(result.Value) : this.ToErrorResult(result.Error);
     }

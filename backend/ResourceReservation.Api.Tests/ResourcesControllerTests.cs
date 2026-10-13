@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Controllers;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
@@ -102,10 +104,20 @@ public class ResourcesControllerTests
 
     private static ResourcesController CreateController(AppDbContext context)
     {
+        var clock = TestSchedulingClock.Create();
+        var bookingPolicy = TestBookingPolicy.Create();
+        var availabilityService = new AvailabilityService(context, clock, bookingPolicy);
+
         return new ResourcesController(
             context,
-            new AvailabilityService(context, TestSchedulingClock.Create(), TestBookingPolicy.Create()),
-            TestBookingPolicy.Create())
+            availabilityService,
+            new ReservationService(
+                context,
+                availabilityService,
+                clock,
+                Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }),
+                bookingPolicy),
+            bookingPolicy)
             .WithHttpContext();
     }
 

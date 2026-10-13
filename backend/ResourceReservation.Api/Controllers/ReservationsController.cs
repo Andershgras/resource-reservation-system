@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Services;
 
@@ -66,15 +67,33 @@ public class ReservationsController : ControllerBase
         return CreatedAtAction(nameof(GetReservation), new { id = result.Value.Id }, result.Value);
     }
 
-    [HttpPut("{id}/cancel")]
-    public async Task<IActionResult> CancelReservation(int id)
+    [HttpPut("{id}")]
+    public async Task<ActionResult<ReservationResponseDto>> RescheduleReservation(
+        int id,
+        RescheduleReservationDto rescheduleReservationDto)
     {
         if (User.GetCurrentUser() is not { } currentUser)
         {
             return this.AuthenticationRequired();
         }
 
-        var result = await _reservationService.CancelAsync(id, currentUser);
+        var result = await _reservationService.RescheduleAsync(id, rescheduleReservationDto, currentUser);
+
+        return result.IsSuccess ? Ok(result.Value) : this.ToErrorResult(result.Error);
+    }
+
+    // The body is optional, so clients that send none keep working.
+    [HttpPut("{id}/cancel")]
+    public async Task<IActionResult> CancelReservation(
+        int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CancelReservationDto? cancelReservationDto)
+    {
+        if (User.GetCurrentUser() is not { } currentUser)
+        {
+            return this.AuthenticationRequired();
+        }
+
+        var result = await _reservationService.CancelAsync(id, currentUser, cancelReservationDto?.Version);
 
         return result.IsSuccess ? NoContent() : this.ToErrorResult(result.Error);
     }

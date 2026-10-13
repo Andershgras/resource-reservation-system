@@ -28,10 +28,12 @@ public class AvailabilityService
     // Bookable time for a resource: its merged availability minus active
     // reservations, limited to the time its booking policy allows. Periods
     // shorter than the minimum booking are left out, since nothing fits.
+    // A reservation being moved can be left out, so its own time shows as free.
     public async Task<ServiceResult<ResourceScheduleResponseDto>> GetScheduleAsync(
         int resourceId,
         DateOnly? from,
-        DateOnly? to)
+        DateOnly? to,
+        int? excludedReservationId = null)
     {
         if (from is null || to is null)
         {
@@ -64,7 +66,7 @@ public class AvailabilityService
 
         var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue);
         var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var reservedSlots = await GetReservedSlotsAsync(resourceId, rangeStart, rangeEnd);
+        var reservedSlots = await GetReservedSlotsAsync(resourceId, rangeStart, rangeEnd, excludedReservationId);
         var availabilityIntervals = await GetAvailabilityIntervalsAsync(resourceId, from.Value, to.Value);
         var policy = BookingPolicy.For(resource, _bookingPolicyOptions);
         var localNow = _schedulingClock.GetLocalNow();
@@ -225,10 +227,12 @@ public class AvailabilityService
     private Task<List<TimeRange>> GetReservedSlotsAsync(
         int resourceId,
         DateTime rangeStart,
-        DateTime rangeEnd)
+        DateTime rangeEnd,
+        int? excludedReservationId)
     {
         return _context.Reservations
             .Where(reservation =>
+                reservation.Id != excludedReservationId &&
                 reservation.ResourceId == resourceId &&
                 reservation.Status == ReservationStatuses.Active &&
                 reservation.StartTime < rangeEnd &&
