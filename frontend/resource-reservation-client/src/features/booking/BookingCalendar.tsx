@@ -79,7 +79,7 @@ export function BookingCalendar({
                   {day.segments.map((segment) => (
                     <li
                       key={segmentKey(segment)}
-                      className={`calendar-segment calendar-segment-${segment.kind}`}
+                      className={`calendar-segment calendar-segment-${segment.kind}${segment.overClosed ? ' calendar-segment-over-closed' : ''}`}
                       style={{
                         '--calendar-start': segment.startMinute / 60 - firstHour,
                         '--calendar-length': (segment.endMinute - segment.startMinute) / 60,
@@ -120,19 +120,21 @@ function SegmentContent({ segment, isSelected, onSelect, onSelectReservation }: 
   const times = formatTimeRange(segment.start, segment.end)
 
   if (segment.kind === 'closed') {
+    const reasons = segment.reasons?.join('; ')
+
+    // The title shows the full text when a short period cuts it off.
     return (
-      <p className="calendar-segment-body">
+      <p className="calendar-segment-body" title={reasons ? `Closed ${times}: ${reasons}` : `Closed ${times}`}>
         <span className="calendar-segment-kind">Closed</span>{' '}
         <span className="calendar-segment-times">{times}</span>
-        {segment.reasons && segment.reasons.length > 0 && (
-          <>{' '}<span className="calendar-segment-reason">{segment.reasons.join('; ')}</span></>
-        )}
+        {reasons && <>{' '}<span className="calendar-segment-reason">{reasons}</span></>}
       </p>
     )
   }
 
   if (segment.kind === 'reserved') {
     const { reservation } = segment
+    const title = reservation ? `Reserved ${times} by ${reservation.userName}` : undefined
     const content = (
       <>
         <span className="calendar-segment-kind">Reserved</span>{' '}
@@ -146,6 +148,7 @@ function SegmentContent({ segment, isSelected, onSelect, onSelectReservation }: 
         <button
           type="button"
           className="calendar-segment-body"
+          title={title}
           aria-label={`Reserved ${formatDate(segment.start)}, ${times} by ${reservation.userName}. Move this booking`}
           onClick={() => onSelectReservation(reservation)}
         >
@@ -154,7 +157,7 @@ function SegmentContent({ segment, isSelected, onSelect, onSelectReservation }: 
       )
     }
 
-    return <p className="calendar-segment-body">{content}</p>
+    return <p className="calendar-segment-body" title={title}>{content}</p>
   }
 
   if (!onSelect) {

@@ -146,6 +146,12 @@
   padding: 1px 0;
 }
 
+/* A booking inside a closure sits to the right of it, above it. */
+.calendar-segment-over-closed {
+  left: 35%;
+  z-index: 1;
+}
+
 /* Free time can always be chosen, even if a reservation overlaps it on screen. */
 .calendar-segment-available {
   z-index: 1;
@@ -257,6 +263,11 @@ button.calendar-segment-body[aria-pressed='true'] {
     position: static;
     height: auto;
     padding: 0;
+  }
+
+  /* In the list, a booking inside a closure is indented under it. */
+  .calendar-segment-over-closed {
+    margin-left: var(--space-4);
   }
 
   .calendar-day-panel {

@@ -329,6 +329,27 @@ describe('closed time', () => {
 
     expect(days[1].status).toBe('closed')
     expect(days[2].status).toBe('fullyBooked')
+    expect(days[2].segments.find((segment) => segment.kind === 'reserved')?.overClosed).toBeUndefined()
     expect(visibleHours(days)).toEqual({ firstHour: 8, lastHour: 16 })
+  })
+})
+
+describe('bookings inside a closure', () => {
+  it('are marked, so they can be drawn beside the closure', () => {
+    const days = buildCalendarWeek(
+      schedule(
+        [],
+        [['2030-01-15T10:00:00', '2030-01-15T11:00:00'], ['2030-01-15T13:00:00', '2030-01-15T14:00:00']],
+        [['2030-01-15T09:00:00', '2030-01-15T12:00:00', ['Repairs']]],
+      ),
+      '2030-01-14',
+      '2030-01-14',
+    )
+
+    const reserved = days[1].segments.filter((segment) => segment.kind === 'reserved')
+    expect(reserved.map((segment) => [segment.start, segment.overClosed ?? false])).toEqual([
+      ['2030-01-15T10:00:00', true],
+      ['2030-01-15T13:00:00', false],
+    ])
   })
 })

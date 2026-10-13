@@ -62,6 +62,9 @@ export interface CalendarSegment {
   reasons?: string[]
   // The booking behind a reserved period, in the admin calendar only.
   reservation?: ReservationResponse
+  // A booking that was already there when a closure covered its time. It is
+  // drawn inset, so the closure and its reason stay visible beside it.
+  overClosed?: boolean
 }
 
 // Tells segments apart, such as the one being booked.
@@ -149,9 +152,15 @@ export function buildCalendarWeek(
   }
 
   return weekDates(weekStart).map((date) => {
-    const daySegments = (segmentsByDate.get(date) ?? []).sort(
+    const sorted = (segmentsByDate.get(date) ?? []).sort(
       (first, second) => first.startMinute - second.startMinute || first.endMinute - second.endMinute,
     )
+    const closed = sorted.filter((segment) => segment.kind === 'closed')
+    const daySegments = sorted.map((segment) =>
+      segment.kind === 'reserved' &&
+      closed.some((closure) => closure.startMinute < segment.endMinute && closure.endMinute > segment.startMinute)
+        ? { ...segment, overClosed: true }
+        : segment)
     const hasAvailable = daySegments.some((segment) => segment.kind === 'available')
     const hasReserved = daySegments.some((segment) => segment.kind === 'reserved')
     const status: CalendarDayStatus = hasAvailable

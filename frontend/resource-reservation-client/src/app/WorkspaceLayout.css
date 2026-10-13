@@ -32,10 +32,22 @@
   width: min(100%, var(--content-width));
   min-height: 4rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-6);
+  gap: 0 var(--space-6);
   margin: 0 auto;
-  padding: var(--space-2) var(--page-gutter);
+  padding: var(--space-2) var(--page-gutter) 0;
+}
+
+/*
+ * The section tabs get a row of their own, below the brand and the user, so
+ * every tab stays visible however many a workspace has. Narrow screens
+ * scroll them sideways.
+ */
+.workspace-header .section-nav {
+  order: 3;
+  width: 100%;
+  padding-bottom: var(--space-1);
 }
 
 .workspace-brand {
@@ -131,18 +143,6 @@
   display: grid;
   gap: var(--space-6);
   min-width: 0;
-}
-
-@media (max-width: 960px) {
-  .workspace-header-inner {
-    flex-wrap: wrap;
-    row-gap: 0;
-  }
-
-  .workspace-header .section-nav {
-    order: 3;
-    width: 100%;
-  }
 }
 
 @media (max-width: 560px) {
