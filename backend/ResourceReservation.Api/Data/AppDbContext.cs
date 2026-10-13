@@ -52,6 +52,12 @@ public class AppDbContext : DbContext
                 .WithMany(u => u.Reservations)
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            reservation.HasOne(r => r.CancelledBy)
+                .WithMany()
+                .HasForeignKey(r => r.CancelledByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            reservation.Property(r => r.Version).IsRowVersion();
         });
     }
 }

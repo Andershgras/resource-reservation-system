@@ -131,6 +131,45 @@ public class ReservationTests : ApiTestBase
     }
 
     [Fact]
+    public async Task ReservationAudit_RecordsWhenItWasCreatedAndWhoCancelledIt()
+    {
+        var adminClient = await CreateAdminClientAsync();
+        var resourceId = await CreateResourceWithWeeklyRuleAsync(
+            adminClient,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var userClient = await CreateUserClientAsync();
+        var beforeCreate = DateTimeOffset.UtcNow.AddSeconds(-1);
+
+        var createResponse = await userClient.PostAsJsonAsync("/api/reservations", new CreateReservationDto
+        {
+            ResourceId = resourceId,
+            StartTime = BookingDay.AddHours(9),
+            EndTime = BookingDay.AddHours(10)
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<ReservationResponseDto>();
+
+        Assert.NotNull(created!.CreatedAt);
+        Assert.InRange(created.CreatedAt.Value, beforeCreate, DateTimeOffset.UtcNow.AddSeconds(1));
+        Assert.Equal(TimeSpan.Zero, created.CreatedAt.Value.Offset);
+        Assert.Null(created.UpdatedAt);
+        Assert.Null(created.CancelledAt);
+        Assert.NotEmpty(created.Version);
+
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await adminClient.PutAsync($"/api/reservations/{created.Id}/cancel", null)).StatusCode);
+
+        var cancelled = Assert.Single((await userClient
+            .GetFromJsonAsync<List<ReservationResponseDto>>("/api/reservations/me"))!);
+        Assert.Equal(ReservationStatuses.Cancelled, cancelled.Status);
+        Assert.Equal(created.CreatedAt, cancelled.CreatedAt);
+        Assert.NotNull(cancelled.CancelledAt);
+        Assert.Equal("Integration Admin", cancelled.CancelledByName);
+        Assert.NotEqual(created.Version, cancelled.Version);
+    }
+
+    [Fact]
     public async Task CreateReservation_WhenSameSlotIsBookedInParallel_OnlyOneSucceeds()
     {
         const int parallelRequests = 10;

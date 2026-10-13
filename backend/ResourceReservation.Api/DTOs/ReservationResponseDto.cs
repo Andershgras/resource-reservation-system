@@ -21,4 +21,19 @@ public class ReservationResponseDto
     public DateTime EndTime { get; set; }
 
     public string Status { get; set; } = string.Empty;
+
+    // UTC instants. Null for reservations made before these were recorded.
+    public DateTimeOffset? CreatedAt { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+
+    public int? CancelledByUserId { get; set; }
+
+    public string? CancelledByName { get; set; }
+
+    // Opaque. Send it back when moving or cancelling, so a change based on an
+    // out-of-date copy is rejected.
+    public string Version { get; set; } = string.Empty;
 }

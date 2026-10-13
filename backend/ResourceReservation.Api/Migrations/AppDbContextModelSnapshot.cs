@@ -81,6 +81,15 @@ namespace ResourceReservation.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("CancelledByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("datetime2");
 
@@ -95,10 +104,21 @@ namespace ResourceReservation.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CancelledByUserId");
 
                     b.HasIndex("UserId");
 
@@ -198,6 +218,11 @@ namespace ResourceReservation.Api.Migrations
 
             modelBuilder.Entity("ResourceReservation.Api.Models.Reservation", b =>
                 {
+                    b.HasOne("ResourceReservation.Api.Models.User", "CancelledBy")
+                        .WithMany()
+                        .HasForeignKey("CancelledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ResourceReservation.Api.Models.Resource", "Resource")
                         .WithMany()
                         .HasForeignKey("ResourceId")
@@ -209,6 +234,8 @@ namespace ResourceReservation.Api.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("CancelledBy");
 
                     b.Navigation("Resource");
 

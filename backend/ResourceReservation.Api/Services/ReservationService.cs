@@ -57,6 +57,7 @@ public class ReservationService
         var reservation = await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Include(reservation => reservation.User)
+            .Include(reservation => reservation.CancelledBy)
             .FirstOrDefaultAsync(reservation => reservation.Id == id);
 
         if (reservation is null)
@@ -146,6 +147,7 @@ public class ReservationService
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             Status = ReservationStatuses.Active,
+            CreatedAt = _schedulingClock.GetUtcNow(),
             Resource = resource,
             User = user
         };
@@ -181,6 +183,8 @@ public class ReservationService
         }
 
         reservation.Status = ReservationStatuses.Cancelled;
+        reservation.CancelledAt = _schedulingClock.GetUtcNow();
+        reservation.CancelledByUserId = currentUser.UserId;
         await _context.SaveChangesAsync();
 
         return ServiceResult.Success;
@@ -239,6 +243,7 @@ public class ReservationService
         var reservations = _context.Reservations
             .Include(reservation => reservation.Resource)
             .Include(reservation => reservation.User)
+            .Include(reservation => reservation.CancelledBy)
             .AsQueryable();
 
         if (filter is not null)
@@ -266,7 +271,13 @@ public class ReservationService
             UserEmail = reservation.User?.Email ?? string.Empty,
             StartTime = reservation.StartTime,
             EndTime = reservation.EndTime,
-            Status = reservation.Status
+            Status = reservation.Status,
+            CreatedAt = reservation.CreatedAt,
+            UpdatedAt = reservation.UpdatedAt,
+            CancelledAt = reservation.CancelledAt,
+            CancelledByUserId = reservation.CancelledByUserId,
+            CancelledByName = reservation.CancelledBy?.Name,
+            Version = Convert.ToBase64String(reservation.Version)
         };
     }
 

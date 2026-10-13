@@ -10,6 +10,8 @@ namespace ResourceReservation.Api.Tests;
 
 public class ReservationServiceTests
 {
+    private static readonly DateTime DefaultLocalNow = TestSchedulingClock.DefaultLocalNow;
+
     [Fact]
     public async Task CreateReservation_WhenActiveReservationOverlapsSameResource_ReturnsConflict()
     {
@@ -327,6 +329,30 @@ public class ReservationServiceTests
         var cancelledReservation = await context.Reservations.FindAsync(reservation.Id);
         Assert.NotNull(cancelledReservation);
         Assert.Equal(ReservationStatuses.Cancelled, cancelledReservation.Status);
+        Assert.Equal(admin.Id, cancelledReservation.CancelledByUserId);
+        Assert.Equal(ToUtc(DefaultLocalNow), cancelledReservation.CancelledAt);
+    }
+
+    [Fact]
+    public async Task CreateReservation_RecordsCreationTimeInUtc()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        }, user.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ToUtc(DefaultLocalNow), result.Value.CreatedAt);
+        Assert.Equal(TimeSpan.Zero, result.Value.CreatedAt!.Value.Offset);
+        Assert.Null(result.Value.UpdatedAt);
+        Assert.Null(result.Value.CancelledAt);
     }
 
     [Fact]
@@ -460,6 +486,13 @@ public class ReservationServiceTests
             EndTime = endTime
         });
         await context.SaveChangesAsync();
+    }
+
+    private static DateTimeOffset ToUtc(DateTime localNow)
+    {
+        return new DateTimeOffset(
+            TimeZoneInfo.ConvertTimeToUtc(localNow, TestSchedulingClock.TimeZone),
+            TimeSpan.Zero);
     }
 
     private static AppDbContext CreateContext()
