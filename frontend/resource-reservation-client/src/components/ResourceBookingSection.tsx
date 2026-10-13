@@ -5,6 +5,7 @@ import type {
 } from '../api/types'
 import { formatTimeRange } from '../lib/dates'
 import { getSlotKey, groupScheduleByDay } from '../lib/schedule'
+import { Alert, type Notice } from '../ui/Alert'
 
 interface ResourceBookingSectionProps {
   resources: ResourceResponse[]
@@ -17,7 +18,7 @@ interface ResourceBookingSectionProps {
   setScheduleToDate: (value: string) => void
   resourceSchedule: ResourceScheduleResponse | null
   resourceScheduleMessage: string
-  reservationMessage: string
+  reservationNotice: Notice | null
   reservationValidationMessage: string
   isLoadingResourceSchedule: boolean
   selectedScheduleSlotKey: string | null
@@ -45,7 +46,7 @@ export function ResourceBookingSection({
   setScheduleToDate,
   resourceSchedule,
   resourceScheduleMessage,
-  reservationMessage,
+  reservationNotice,
   reservationValidationMessage,
   isLoadingResourceSchedule,
   selectedScheduleSlotKey,
@@ -150,8 +151,8 @@ export function ResourceBookingSection({
         {resourceScheduleMessage && (
           <p className="status-message">{resourceScheduleMessage}</p>
         )}
-        {reservationMessage && (
-          <p className="status-message">{reservationMessage}</p>
+        {reservationNotice && (
+          <Alert tone={reservationNotice.tone}>{reservationNotice.text}</Alert>
         )}
         {reservationValidationMessage && (
           <p className="status-message" role="alert">

@@ -3,9 +3,18 @@ import type { ResourceResponse } from '../../api/types'
 import { useConfirm } from '../../components/confirmContext'
 import { ResourceFormSection } from '../../components/ResourceFormSection'
 import { ResourcesSection } from '../../components/ResourcesSection'
-import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
+import {
+  getErrorMessage,
+  getFormErrors,
+  getQueryErrorMessage,
+  hasFieldErrors,
+  type FieldErrors,
+} from '../../lib/errors'
 import { emptyToNull } from '../../lib/text'
+import { validateResourceForm, type ResourceField } from '../../lib/validation'
 import { useDeleteResource, useResources, useSaveResource } from './resourceQueries'
+
+const resourceFields: readonly ResourceField[] = ['name', 'description', 'location']
 
 // /admin/resources: create, edit and delete resources.
 export function AdminResourcesPage() {
@@ -19,6 +28,8 @@ export function AdminResourcesPage() {
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<ResourceField>>({})
+  const [formError, setFormError] = useState('')
 
   function resetForm() {
     setEditingResourceId(null)
@@ -26,11 +37,21 @@ export function AdminResourcesPage() {
     setDescription('')
     setLocation('')
     setIsActive(true)
+    setFieldErrors({})
+    setFormError('')
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setMessage('')
+    setFormError('')
+
+    const validationErrors = validateResourceForm(name)
+    setFieldErrors(validationErrors)
+
+    if (hasFieldErrors(validationErrors)) {
+      return
+    }
 
     try {
       if (editingResourceId) {
@@ -57,7 +78,9 @@ export function AdminResourcesPage() {
       resetForm()
       setMessage(editingResourceId ? 'Resource updated.' : 'Resource created.')
     } catch (error) {
-      setMessage(getErrorMessage(error))
+      const formErrors = getFormErrors(error, resourceFields)
+      setFieldErrors(formErrors.fieldErrors)
+      setFormError(formErrors.message)
     }
   }
 
@@ -68,6 +91,8 @@ export function AdminResourcesPage() {
     setLocation(resource.location ?? '')
     setIsActive(resource.isActive)
     setMessage('')
+    setFieldErrors({})
+    setFormError('')
   }
 
   function handleDelete(resource: ResourceResponse) {
@@ -105,6 +130,8 @@ export function AdminResourcesPage() {
         setResourceLocation={setLocation}
         resourceIsActive={isActive}
         setResourceIsActive={setIsActive}
+        fieldErrors={fieldErrors}
+        formError={formError}
         isSavingResource={saveResource.isPending}
         onSubmit={(event) => void handleSave(event)}
         onCancelEdit={resetForm}

@@ -33,18 +33,6 @@
   box-sizing: border-box;
 }
 
-.auth-panel {
-  width: min(100%, 960px);
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
 .home-panel {
   width: min(100%, 1040px);
   display: grid;
@@ -52,53 +40,6 @@
   text-align: left;
 }
 
-.auth-brand {
-  display: grid;
-  align-content: space-between;
-  gap: 32px;
-  min-height: 520px;
-  padding: 36px;
-  color: #f8fafc;
-  background:
-    linear-gradient(135deg, rgb(17 24 39 / 96%), rgb(13 148 136 / 88%)),
-    #111827;
-}
-
-.app-mark {
-  width: 54px;
-  height: 54px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 24%);
-  border-radius: 8px;
-  color: #f8fafc;
-  background: rgb(255 255 255 / 12%);
-  font-weight: 800;
-}
-
-.auth-copy {
-  display: grid;
-  gap: 12px;
-}
-
-.auth-copy h1,
-.auth-copy p {
-  color: inherit;
-}
-
-.auth-copy p:not(.eyebrow) {
-  max-width: 430px;
-  color: rgb(248 250 252 / 78%);
-  font-size: 18px;
-}
-
-.auth-highlights {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.auth-highlights span,
 .count-badge,
 .role-badge,
 .status-pill {
@@ -112,22 +53,9 @@
   white-space: nowrap;
 }
 
-.auth-highlights span {
-  padding: 8px 10px;
-  color: #f8fafc;
-  background: rgb(255 255 255 / 14%);
-}
-
-.auth-form,
 .resource-form {
   display: grid;
   gap: 14px;
-}
-
-.auth-form {
-  align-content: center;
-  padding: 36px;
-  background: var(--panel);
 }
 
 .panel-section,
@@ -173,7 +101,6 @@
   text-transform: uppercase;
 }
 
-.mode-switch,
 .role-tabs {
   display: grid;
   gap: 6px;
@@ -183,15 +110,10 @@
   background: var(--muted-bg);
 }
 
-.mode-switch {
-  grid-template-columns: 1fr 1fr;
-}
-
 .role-tabs {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
-.mode-switch button,
 .role-tabs a {
   min-height: 40px;
   border-color: transparent;
@@ -220,7 +142,6 @@
   outline-offset: 2px;
 }
 
-.mode-switch button.active,
 .role-tabs a.active {
   color: var(--text-h);
   background: var(--panel);
@@ -586,16 +507,6 @@ select:focus-visible {
     padding: 22px 14px;
   }
 
-  .auth-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .auth-brand {
-    min-height: auto;
-    padding: 26px;
-  }
-
-  .auth-form,
   .panel-section,
   .home-header {
     padding: 16px;

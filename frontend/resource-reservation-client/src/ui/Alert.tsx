@@ -3,6 +3,12 @@ import './Alert.css'
 
 export type AlertTone = 'info' | 'success' | 'warning' | 'danger'
 
+// A message for an Alert, kept in state by the page that shows it.
+export interface Notice {
+  tone: AlertTone
+  text: string
+}
+
 interface AlertProps {
   tone?: AlertTone
   title?: ReactNode
@@ -10,15 +16,18 @@ interface AlertProps {
 }
 
 // A message about the page or the last action. Errors are announced straight
-// away (role="alert"); other messages wait until the screen reader is idle
-// (role="status").
+// away (role="alert"), starting with "Error:" for screen readers; other
+// messages wait until the screen reader is idle (role="status").
 export function Alert({ tone = 'info', title, children }: AlertProps) {
   return (
     <div className={`alert alert-${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
       <AlertIcon tone={tone} />
       <div className="alert-body">
         {title && <p className="alert-title">{title}</p>}
-        <div>{children}</div>
+        <div>
+          {tone === 'danger' && !title && <span className="visually-hidden">Error: </span>}
+          {children}
+        </div>
       </div>
     </div>
   )

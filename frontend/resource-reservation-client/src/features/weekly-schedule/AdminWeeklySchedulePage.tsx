@@ -4,14 +4,22 @@ import { AvailabilityRuleFormSection } from '../../components/AvailabilityRuleFo
 import { AvailabilityRulesSection } from '../../components/AvailabilityRulesSection'
 import { useConfirm } from '../../components/confirmContext'
 import { toTimeOfDay } from '../../lib/dates'
-import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
-import { validateAvailabilityRuleForm } from '../../lib/validation'
+import {
+  getErrorMessage,
+  getFormErrors,
+  getQueryErrorMessage,
+  hasFieldErrors,
+  type FieldErrors,
+} from '../../lib/errors'
+import { validateAvailabilityRuleForm, type AvailabilityRuleField } from '../../lib/validation'
 import { useResources } from '../resources/resourceQueries'
 import {
   useAvailabilityRules,
   useDeleteAvailabilityRule,
   useSaveAvailabilityRule,
 } from './availabilityRuleQueries'
+
+const ruleFields: readonly AvailabilityRuleField[] = ['resourceId', 'dayOfWeek', 'startTime', 'endTime']
 
 // /admin/weekly-schedule: weekly availability rules.
 export function AdminWeeklySchedulePage() {
@@ -21,7 +29,8 @@ export function AdminWeeklySchedulePage() {
   const deleteRule = useDeleteAvailabilityRule()
   const confirm = useConfirm()
   const [message, setMessage] = useState('')
-  const [validationMessage, setValidationMessage] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<AvailabilityRuleField>>({})
+  const [formError, setFormError] = useState('')
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
   const [resourceId, setResourceId] = useState('')
   const [dayOfWeek, setDayOfWeek] = useState('')
@@ -53,18 +62,19 @@ export function AdminWeeklySchedulePage() {
     setDayOfWeek('')
     setStartTime('')
     setEndTime('')
-    setValidationMessage('')
+    setFieldErrors({})
+    setFormError('')
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setMessage('')
-    setValidationMessage('')
+    setFormError('')
 
-    const validationError = validateAvailabilityRuleForm(resourceId, dayOfWeek, startTime, endTime)
+    const validationErrors = validateAvailabilityRuleForm(resourceId, dayOfWeek, startTime, endTime)
+    setFieldErrors(validationErrors)
 
-    if (validationError) {
-      setValidationMessage(validationError)
+    if (hasFieldErrors(validationErrors)) {
       return
     }
 
@@ -81,7 +91,9 @@ export function AdminWeeklySchedulePage() {
       resetForm()
       setMessage(editingRuleId ? 'Weekly schedule updated.' : 'Weekly schedule created.')
     } catch (error) {
-      setMessage(getErrorMessage(error))
+      const formErrors = getFormErrors(error, ruleFields)
+      setFieldErrors(formErrors.fieldErrors)
+      setFormError(formErrors.message)
     }
   }
 
@@ -92,7 +104,8 @@ export function AdminWeeklySchedulePage() {
     setStartTime(toTimeOfDay(rule.startTime))
     setEndTime(toTimeOfDay(rule.endTime))
     setMessage('')
-    setValidationMessage('')
+    setFieldErrors({})
+    setFormError('')
   }
 
   function handleDelete(rule: AvailabilityRuleResponse) {
@@ -131,7 +144,8 @@ export function AdminWeeklySchedulePage() {
         setAvailabilityRuleStartTime={setStartTime}
         availabilityRuleEndTime={endTime}
         setAvailabilityRuleEndTime={setEndTime}
-        validationMessage={validationMessage}
+        fieldErrors={fieldErrors}
+        formError={formError}
         isSavingAvailabilityRule={saveRule.isPending}
         onSubmit={(event) => void handleSave(event)}
         onCancelEdit={resetForm}

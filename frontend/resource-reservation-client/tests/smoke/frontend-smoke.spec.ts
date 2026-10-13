@@ -133,7 +133,7 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(page.getByText('Availability updated.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
-  await page.getByRole('button', { name: 'Register' }).click()
+  await page.getByRole('link', { name: 'Register' }).click()
   await page.getByLabel('Name').fill('Smoke Test User')
   await page.getByLabel('Email').fill('smoke.user@example.com')
   await page.getByLabel('Password').fill('Password123')
@@ -247,15 +247,19 @@ test('validation errors from the API are shown per field', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
 
   await page.goto('/')
-  await page.getByRole('button', { name: 'Register', exact: true }).click()
+  await page.getByRole('link', { name: 'Register', exact: true }).click()
   await page.getByLabel('Name').fill('Validation User')
   await page.getByLabel('Email').fill('taken@example.com')
   await page.getByLabel('Password').fill('Password')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await expect(
-    page.getByText('Error: Email is already registered. Password must contain a number.'),
-  ).toBeVisible()
+  // Each message is shown beside its field, and read with it.
+  await expect(page.getByLabel('Email')).toHaveAccessibleDescription('Email is already registered.')
+  await expect(page.getByLabel('Password')).toHaveAccessibleDescription(
+    'At least 8 characters, including a number. Password must contain a number.',
+  )
+  await expect(page.getByLabel('Email')).toBeFocused()
+  await expect(page.getByRole('alert')).toHaveText('Error: Check the highlighted fields.')
 })
 
 test('too many login attempts shows the rate limit message', async ({ page }) => {
@@ -597,10 +601,9 @@ function problemResponse(
   }
 }
 
+// Page sections are regions named by their heading.
 function sectionByHeading(page: Page, heading: string) {
-  return page.locator('section.panel-section').filter({
-    has: page.getByRole('heading', { name: heading, exact: true }),
-  }).first()
+  return page.getByRole('region', { name: heading, exact: true })
 }
 
 async function selectRoleTab(page: Page, tabName: string) {
