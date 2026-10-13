@@ -46,6 +46,46 @@ namespace ResourceReservation.Api.Migrations
                     b.ToTable("Availabilities");
                 });
 
+            modelBuilder.Entity("ResourceReservation.Api.Models.AvailabilityException", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("ResourceId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ResourceId", "StartTime", "EndTime");
+
+                    b.ToTable("AvailabilityExceptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_AvailabilityExceptions_EndAfterStart", "[EndTime] > [StartTime]");
+                        });
+                });
+
             modelBuilder.Entity("ResourceReservation.Api.Models.AvailabilityRule", b =>
                 {
                     b.Property<int>("Id")
@@ -216,6 +256,24 @@ namespace ResourceReservation.Api.Migrations
                         .HasForeignKey("ResourceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Resource");
+                });
+
+            modelBuilder.Entity("ResourceReservation.Api.Models.AvailabilityException", b =>
+                {
+                    b.HasOne("ResourceReservation.Api.Models.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ResourceReservation.Api.Models.Resource", "Resource")
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
 
                     b.Navigation("Resource");
                 });

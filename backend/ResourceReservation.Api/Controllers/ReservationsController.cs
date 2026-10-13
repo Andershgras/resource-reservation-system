@@ -100,9 +100,12 @@ public class ReservationsController : ControllerBase
 
     [HttpGet("resource/{resourceId}")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<IEnumerable<ReservationResponseDto>>> GetReservationsByResource(int resourceId)
+    public async Task<ActionResult<IEnumerable<ReservationResponseDto>>> GetReservationsByResource(
+        int resourceId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
     {
-        var result = await _reservationService.GetForResourceAsync(resourceId);
+        var result = await _reservationService.GetForResourceAsync(resourceId, from, to);
 
         return result.IsSuccess ? result.Value : this.ToErrorResult(result.Error);
     }

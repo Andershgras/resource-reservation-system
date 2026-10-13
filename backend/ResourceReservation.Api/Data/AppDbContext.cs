@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Resource> Resources { get; set; }
     public DbSet<Availability> Availabilities { get; set; }
     public DbSet<AvailabilityRule> AvailabilityRules { get; set; }
+    public DbSet<AvailabilityException> AvailabilityExceptions { get; set; }
     public DbSet<Reservation> Reservations { get; set; }
     public DbSet<User> Users { get; set; }
 
@@ -41,6 +42,27 @@ public class AppDbContext : DbContext
                 "([MaxAdvanceDays] IS NULL OR [MaxAdvanceDays] > 0) AND " +
                 "([MinDurationMinutes] IS NULL OR [MaxDurationMinutes] IS NULL OR " +
                 "[MinDurationMinutes] <= [MaxDurationMinutes])"));
+        });
+
+        modelBuilder.Entity<AvailabilityException>(closure =>
+        {
+            closure.Property(c => c.Reason).HasMaxLength(200);
+            closure.ToTable(table => table.HasCheckConstraint(
+                "CK_AvailabilityExceptions_EndAfterStart",
+                "[EndTime] > [StartTime]"));
+
+            // Supports loading a resource's closures for a date range.
+            closure.HasIndex(c => new { c.ResourceId, c.StartTime, c.EndTime });
+
+            // A closure means nothing without its resource, like availability windows.
+            closure.HasOne(c => c.Resource)
+                .WithMany()
+                .HasForeignKey(c => c.ResourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            closure.HasOne(c => c.CreatedBy)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Reservation>(reservation =>

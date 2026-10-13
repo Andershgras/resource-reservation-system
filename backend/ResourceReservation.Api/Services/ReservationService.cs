@@ -45,14 +45,53 @@ public class ReservationService
         return QueryReservations(reservation => reservation.UserId == userId).ToListAsync();
     }
 
-    public async Task<ServiceResult<List<ReservationResponseDto>>> GetForResourceAsync(int resourceId)
+    // Active reservations on a resource that overlap a period, such as a closure.
+    public async Task<List<ReservationResponseDto>> GetActiveOverlappingAsync(
+        int resourceId,
+        DateTime startTime,
+        DateTime endTime)
+    {
+        var reservations = await QueryReservations(reservation =>
+                reservation.ResourceId == resourceId &&
+                reservation.Status == ReservationStatuses.Active &&
+                reservation.StartTime < endTime &&
+                reservation.EndTime > startTime)
+            .ToListAsync();
+
+        return reservations.OrderBy(reservation => reservation.StartTime).ToList();
+    }
+
+    // With from and to, only reservations that overlap those dates, such as the
+    // week an admin calendar shows.
+    public async Task<ServiceResult<List<ReservationResponseDto>>> GetForResourceAsync(
+        int resourceId,
+        DateOnly? from = null,
+        DateOnly? to = null)
     {
         if (!await _context.Resources.AnyAsync(resource => resource.Id == resourceId))
         {
             return ServiceError.NotFound("Resource does not exist.");
         }
 
-        return await QueryReservations(reservation => reservation.ResourceId == resourceId).ToListAsync();
+        if (from is null || to is null)
+        {
+            return await QueryReservations(reservation => reservation.ResourceId == resourceId).ToListAsync();
+        }
+
+        if (to < from || to.Value.DayNumber - from.Value.DayNumber + 1 > AvailabilityService.MaxScheduleDays)
+        {
+            return ServiceError.Validation(
+                $"Choose a date range of at most {AvailabilityService.MaxScheduleDays} days, ending on or after it starts.");
+        }
+
+        var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue);
+        var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
+
+        return await QueryReservations(reservation =>
+                reservation.ResourceId == resourceId &&
+                reservation.StartTime < rangeEnd &&
+                reservation.EndTime > rangeStart)
+            .ToListAsync();
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> GetAsync(int id, CurrentUser currentUser)
