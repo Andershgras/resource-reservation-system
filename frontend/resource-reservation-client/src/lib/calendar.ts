@@ -1,4 +1,9 @@
-import type { BookableSlotResponse, BookingPolicyResponse, ResourceScheduleResponse } from '../api/types'
+import type {
+  BookableSlotResponse,
+  BookingPolicyResponse,
+  ReservationResponse,
+  ResourceScheduleResponse,
+} from '../api/types'
 import { addDaysToDateKey, formatDateHeading, formatTime, getDateKey } from './dates'
 
 // The weekly booking calendar's model. Times are the API's wall-clock times
@@ -55,11 +60,13 @@ export interface CalendarSegment {
   interval: BookableSlotResponse
   // Why a closed period is closed.
   reasons?: string[]
+  // The booking behind a reserved period, in the admin calendar only.
+  reservation?: ReservationResponse
 }
 
 // Tells segments apart, such as the one being booked.
 export function segmentKey(segment: CalendarSegment) {
-  return `${segment.kind}-${segment.start}-${segment.end}`
+  return `${segment.kind}-${segment.start}-${segment.end}-${segment.reservation?.id ?? ''}`
 }
 
 export type CalendarDayStatus = 'open' | 'fullyBooked' | 'closed' | 'past'
@@ -112,16 +119,25 @@ function splitByDay(
 // closure takes them, and a day before today is past, because the schedule
 // leaves out time that has gone. Periods that can't be read, or that end
 // before they start, are left out.
+//
+// For admins, `reservations` replaces the schedule's anonymous reserved time
+// with the active bookings themselves, so each period knows who booked it.
 export function buildCalendarWeek(
   schedule: ResourceScheduleResponse | null,
   weekStart: string,
   today: string,
+  reservations?: ReservationResponse[],
 ): CalendarDay[] {
   const segmentsByDate = new Map<string, CalendarSegment[]>()
+  const reservedSegments = reservations
+    ? reservations
+        .filter((reservation) => reservation.status === 'Active')
+        .flatMap((reservation) => splitByDay('reserved', reservation, { reservation }))
+    : schedule?.reservedSlots.flatMap((slot) => splitByDay('reserved', slot)) ?? []
   const segments = schedule
     ? [
         ...schedule.bookableSlots.flatMap((slot) => splitByDay('available', slot)),
-        ...schedule.reservedSlots.flatMap((slot) => splitByDay('reserved', slot)),
+        ...reservedSegments,
         ...schedule.closedSlots.flatMap((slot) =>
           splitByDay('closed', slot, { reasons: slot.reasons })),
       ]

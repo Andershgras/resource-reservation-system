@@ -40,6 +40,7 @@ export const appRoutes = createRoutesFromElements(
       <Route path="resources" element={<AdminResourcesPage />} />
       <Route path="availability" element={<AdminAvailabilityPage />} />
       <Route path="weekly-schedule" element={<AdminWeeklySchedulePage />} />
+      <Route path="calendar" element={<BookingPage variant="admin" />} />
       <Route path="closures" element={<AdminClosuresPage />} />
       <Route path="reservations" element={<AdminReservationsPage />} />
     </Route>

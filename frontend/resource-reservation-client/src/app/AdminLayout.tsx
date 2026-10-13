@@ -8,6 +8,7 @@ import { WorkspaceLayout } from './WorkspaceLayout'
 
 const adminTabs: NavTab[] = [
   { path: '/admin/resources', label: 'Resources' },
+  { path: '/admin/calendar', label: 'Calendar' },
   { path: '/admin/availability', label: 'Availability' },
   { path: '/admin/weekly-schedule', label: 'Weekly schedule' },
   { path: '/admin/closures', label: 'Closures' },

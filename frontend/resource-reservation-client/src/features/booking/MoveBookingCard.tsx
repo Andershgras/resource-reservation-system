@@ -13,11 +13,15 @@ interface MoveBookingCardProps {
   error: unknown
   // Why the booking can't be moved, or null when it can.
   problem: string | null
+  // Where to go instead of moving it.
+  back: { to: string; label: string }
+  // Admins move other people's bookings, so they see whose it is.
+  showOwner?: boolean
 }
 
 // Shown instead of the resource list while a booking is being moved. A
 // booking stays on its resource, so there is nothing else to choose.
-export function MoveBookingCard({ reservation, isLoading, error, problem }: MoveBookingCardProps) {
+export function MoveBookingCard({ reservation, isLoading, error, problem, back, showOwner = false }: MoveBookingCardProps) {
   return (
     <Card title="Move a booking" description="Choose a new time in the calendar.">
       {isLoading && <LoadingState>Loading the booking...</LoadingState>}
@@ -28,6 +32,12 @@ export function MoveBookingCard({ reservation, isLoading, error, problem }: Move
             <dt>Resource</dt>
             <dd>{reservation.resourceName}</dd>
           </div>
+          {showOwner && (
+            <div>
+              <dt>Booked by</dt>
+              <dd>{reservation.userName} ({reservation.userEmail})</dd>
+            </div>
+          )}
           <div>
             <dt>Current time</dt>
             <dd>{formatDateTimeRange(reservation.startTime, reservation.endTime)}</dd>
@@ -35,8 +45,8 @@ export function MoveBookingCard({ reservation, isLoading, error, problem }: Move
         </dl>
       )}
       {problem && <Alert tone="info">{problem}</Alert>}
-      <ButtonLink to="/my-reservations" size="sm">
-        Back to my reservations
+      <ButtonLink to={back.to} size="sm">
+        {back.label}
       </ButtonLink>
     </Card>
   )

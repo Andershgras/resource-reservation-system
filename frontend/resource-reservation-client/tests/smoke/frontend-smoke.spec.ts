@@ -688,6 +688,32 @@ test('an admin closes a resource, sees the booking inside first, and users see i
   await expect(tuesday.getByText('Closed', { exact: true }).first()).toBeVisible()
 })
 
+test('an admin moves a booking from the admin calendar', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/resources')
+  await selectRoleTab(page, 'Calendar')
+  await page.getByRole('button', { name: 'View availability for Reserved Test Room' }).click()
+  await page.getByLabel('Go to date').fill('2030-01-15')
+
+  const schedule = sectionByHeading(page, 'Resource schedule')
+  const booking = schedule.getByRole('button', { name: /^Reserved Tue 15 Jan 2030, 09:00–11:00 by Smoke Test User/ })
+  await expect(booking).toBeVisible()
+  await expectNoAccessibilityViolations(page, 'the admin calendar')
+  await booking.click()
+
+  await expect(page.getByRole('heading', { name: 'Move a booking' })).toBeVisible()
+  await expect(page.getByText('Smoke Test User (smoke.user@example.com)')).toBeVisible()
+  await schedule.getByRole('button', { name: /^Available Wed 16 Jan 2030/ }).click()
+  await schedule.getByLabel('Start', { exact: true }).selectOption({ label: '09:00' })
+  await schedule.getByLabel('End', { exact: true }).selectOption({ label: '10:00' })
+  await schedule.getByRole('button', { name: 'Move booking' }).click()
+
+  await expect(page.getByText('Booking moved to Wed 16 Jan 2030, 09:00–10:00.')).toBeVisible()
+  await expect(schedule.getByRole('button', { name: /^Reserved Wed 16 Jan 2030, 09:00–10:00 by Smoke Test User/ })).toBeVisible()
+})
+
 // In a real browser, making the page inert takes focus away from the button
 // that opened the dialog, so the dialog must record it beforehand.
 test('the confirmation dialog works with the keyboard alone', async ({ page }) => {
@@ -1336,6 +1362,16 @@ async function mockApi(
       nextReservationId += 1
       reservations = [...reservations, reservation]
       await route.fulfill({ status: 200, json: reservation })
+      return
+    }
+
+    const resourceReservationsMatch = path.match(/^\/reservations\/resource\/(\d+)$/)
+    if (resourceReservationsMatch && request.method() === 'GET') {
+      const resourceId = Number(resourceReservationsMatch[1])
+      await route.fulfill({
+        status: 200,
+        json: reservations.filter((reservation) => reservation.resourceId === resourceId),
+      })
       return
     }
 

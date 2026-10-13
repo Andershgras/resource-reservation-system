@@ -180,6 +180,10 @@ button.calendar-segment-body:hover {
   box-shadow: inset 0 0 0 1px var(--color-success-soft-text);
 }
 
+.calendar-segment-reserved button.calendar-segment-body:hover {
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}
+
 button.calendar-segment-body:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -204,6 +208,10 @@ button.calendar-segment-body[aria-pressed='true'] {
 
 .calendar-segment-reason {
   font-style: italic;
+}
+
+.calendar-segment-owner {
+  font-weight: var(--weight-semibold);
 }
 
 /* Phones and narrow windows: a list of days, each with its periods. */

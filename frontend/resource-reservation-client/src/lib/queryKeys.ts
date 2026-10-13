@@ -8,6 +8,8 @@ export const queryKeys = {
   allReservations: ['reservations', 'all'] as const,
   myReservations: ['reservations', 'mine'] as const,
   reservation: (id: number) => ['reservations', 'detail', id] as const,
+  resourceReservations: (resourceId: number, fromDate: string, toDate: string) =>
+    ['reservations', 'resource', resourceId, fromDate, toDate] as const,
   bookingPolicy: ['booking-policy'] as const,
   closures: ['closures'] as const,
   schedules: ['schedules'] as const,

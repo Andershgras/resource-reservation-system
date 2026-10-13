@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../../api/client'
-import type { ReservationResponse } from '../../api/types'
 import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import {
   buildCalendarWeek,
@@ -17,9 +16,7 @@ import {
 import { describeBookingRules } from '../../lib/bookingRules'
 import {
   addDaysToDateKey,
-  formatDate,
   formatDateTimeRange,
-  nowInSchedulingZone,
   todayInSchedulingZone,
 } from '../../lib/dates'
 import { getErrorMessage, getFormErrors, type FieldErrors } from '../../lib/errors'
@@ -27,13 +24,13 @@ import { Alert, type Notice } from '../../ui/Alert'
 import { Badge } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
-import { Field, Input } from '../../ui/Field'
 import { EmptyState, LoadingState } from '../../ui/States'
 import { useMediaQuery } from '../../ui/useMediaQuery'
 import {
   useCreateReservation,
   useRescheduleReservation,
   useReservation,
+  useResourceReservations,
 } from '../reservations/reservationQueries'
 import { useResources } from '../resources/resourceQueries'
 import { BookingCalendar } from './BookingCalendar'
@@ -41,6 +38,8 @@ import { BookingPanel, type BookingField } from './BookingPanel'
 import { useResourceSchedule } from './bookingQueries'
 import { bookingSelectionFor, toBookingSearch, type BookingSelection } from './bookingSearch'
 import { MoveBookingCard } from './MoveBookingCard'
+import { describeMoveProblem } from './moveRules'
+import { WeekBar } from './WeekBar'
 import '../../components/lists.css'
 import './BookingPage.css'
 
@@ -66,7 +65,13 @@ interface ShownNotice {
 // /book: choose a resource, then a free time in its weekly calendar.
 // /book?…&move=42 moves an existing booking: the same calendar, with that
 // booking's own time shown as free.
-export function BookingPage() {
+//
+// /admin/calendar is the admin variant. Reserved periods show who booked
+// them, from the admin-only reservations endpoint; the schedule itself stays
+// anonymous. Choosing a booking moves it, through the same move mode. Admins
+// don't book here, so free time can only be chosen while moving.
+export function BookingPage({ variant = 'user' }: { variant?: 'user' | 'admin' }) {
+  const isAdmin = variant === 'admin'
   const { search } = useLocation()
   const navigate = useNavigate()
   const resourcesQuery = useResources()
@@ -76,6 +81,17 @@ export function BookingPage() {
   const createReservation = useCreateReservation()
   const rescheduleReservation = useRescheduleReservation()
   const isMoving = selection.moveReservationId !== null
+  const resourceReservationsQuery = useResourceReservations(
+    isAdmin ? selection.resourceId : null,
+    selection.weekStart,
+  )
+  // The booking being moved shows as free, as in the schedule.
+  const adminReservations = useMemo(
+    () => isAdmin
+      ? (resourceReservationsQuery.data ?? []).filter((reservation) => reservation.id !== selection.moveReservationId)
+      : undefined,
+    [isAdmin, resourceReservationsQuery.data, selection.moveReservationId],
+  )
   const reservationQuery = useReservation(selection.moveReservationId)
   const movingReservation = isMoving ? reservationQuery.data : undefined
   // Judged once the resources are known, since the selection needs them.
@@ -89,8 +105,8 @@ export function BookingPage() {
   const schedule = selection.resourceId === null ? null : scheduleQuery.data ?? null
   const selectedResource = activeResources.find((resource) => resource.id === selection.resourceId)
   const days = useMemo(
-    () => buildCalendarWeek(schedule, selection.weekStart, today),
-    [schedule, selection.weekStart, today],
+    () => buildCalendarWeek(schedule, selection.weekStart, today, adminReservations),
+    [schedule, selection.weekStart, today, adminReservations],
   )
   const { firstHour, lastHour } = visibleHours(days)
   const limits = durationLimitsFor(schedule?.policy)
@@ -258,7 +274,6 @@ export function BookingPage() {
       onCancel={closeDraft}
     />
   )
-  const weekEnd = addDaysToDateKey(selection.weekStart, 6)
   const hasFreeTime = days.some((day) => day.status === 'open')
 
   return (
@@ -269,11 +284,17 @@ export function BookingPage() {
           isLoading={reservationQuery.isPending}
           error={reservationQuery.error}
           problem={moveProblem}
+          showOwner={isAdmin}
+          back={isAdmin
+            ? { to: `/admin/calendar${toBookingSearch({ ...selection, moveReservationId: null })}`, label: 'Stop moving' }
+            : { to: '/my-reservations', label: 'Back to my reservations' }}
         />
       ) : (
         <Card
-          title="Book a resource"
-          description="Choose what you want to book."
+          title={isAdmin ? 'Calendar' : 'Book a resource'}
+          description={isAdmin
+            ? 'Choose a resource to see its bookings. Choose a booking to move it.'
+            : 'Choose what you want to book.'}
           actions={<Badge label={`${activeResources.length} resources`}>{activeResources.length}</Badge>}
         >
           {resourcesQuery.isPending && <LoadingState>Loading resources...</LoadingState>}
@@ -323,47 +344,15 @@ export function BookingPage() {
           ? `${selectedResource.name}. Times are Copenhagen time.`
           : 'Times are Copenhagen time.'}
       >
-        <div className="booking-week-bar">
-          <p className="booking-week-label" aria-live="polite">
-            <span className="visually-hidden">Showing the week </span>
-            {formatDate(selection.weekStart)} – {formatDate(weekEnd)}
-          </p>
-          <div className="booking-week-actions" role="group" aria-label="Choose week">
-            <Button
-              size="sm"
-              disabled={selection.weekStart <= thisWeek}
-              onClick={() => changeSelection((current) => ({
-                ...current,
-                weekStart: addDaysToDateKey(current.weekStart, -7),
-              }))}
-            >
-              Previous week
-            </Button>
-            <Button size="sm" disabled={selection.weekStart === thisWeek} onClick={() => showWeek(thisWeek)}>
-              This week
-            </Button>
-            <Button size="sm" onClick={() => changeSelection((current) => ({
-                ...current,
-                weekStart: addDaysToDateKey(current.weekStart, 7),
-              }))}>
-              Next week
-            </Button>
-          </div>
-          <Field label="Go to date" className="booking-week-date">
-            {(props) => (
-              <Input
-                {...props}
-                type="date"
-                value={selection.weekStart}
-                onChange={(event) => {
-                  if (event.target.value) {
-                    showWeek(startOfWeek(event.target.value))
-                  }
-                }}
-              />
-            )}
-          </Field>
-        </div>
+        <WeekBar
+          weekStart={selection.weekStart}
+          thisWeek={thisWeek}
+          onStep={(weeks) => changeSelection((current) => ({
+            ...current,
+            weekStart: addDaysToDateKey(current.weekStart, weeks * 7),
+          }))}
+          onShowWeek={showWeek}
+        />
 
         <div ref={noticeRef} tabIndex={-1} className="booking-notice">
           {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
@@ -394,7 +383,10 @@ export function BookingPage() {
               firstHour={firstHour}
               lastHour={lastHour}
               selectedSegment={draft?.segment ?? null}
-              onSelectSegment={handleSelectSegment}
+              onSelectSegment={!isAdmin || isMoving ? handleSelectSegment : undefined}
+              onSelectReservation={isAdmin && !isMoving
+                ? (reservation) => changeSelection((current) => ({ ...current, moveReservationId: reservation.id }))
+                : undefined}
               panelInDay={isSmallScreen ? bookingPanel : undefined}
             />
             {!isSmallScreen && bookingPanel}
@@ -403,26 +395,4 @@ export function BookingPage() {
       </Card>
     </div>
   )
-}
-
-// Why a booking can't be moved from this page, or null when it can. The API
-// checks the same rules.
-function describeMoveProblem(reservation: ReservationResponse, selectedResourceId: number | null) {
-  if (reservation.status === 'Cancelled') {
-    return "This booking is cancelled, so it can't be moved."
-  }
-
-  if (reservation.startTime <= nowInSchedulingZone()) {
-    return "This booking has started, so it can't be moved."
-  }
-
-  if (selectedResourceId === null) {
-    return "This booking's resource isn't open for booking, so the booking can't be moved."
-  }
-
-  if (reservation.resourceId !== selectedResourceId) {
-    return 'Bookings can only be moved to another time on the same resource.'
-  }
-
-  return null
 }
