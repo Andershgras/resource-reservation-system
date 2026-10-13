@@ -201,7 +201,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
-| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 of 4 awaiting review |
+| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58)), PR 2 awaiting review |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
 
 ### M1: Booking Correctness And Data Integrity
@@ -407,13 +407,31 @@ Follow-ups noticed during PR 1:
 - Admins can move any booking through the API, but not yet in the browser, because `/book` is for users. The admin calendar in PR 2 adds it.
 - Changing a default in configuration can make an existing resource override contradict it, such as a minimum longer than a lowered maximum. Such a resource offers no time and says why when booked, until an admin fixes the override ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
 
-PR 2: availability exceptions and the admin calendar
+PR 2: availability exceptions and the admin calendar ([ADR 0009](adr/0009-availability-exceptions.md))
 
-- [ ] Closures for holidays and maintenance, taken out of the shared availability calculation so the calendar and booking checks can't disagree
-- [ ] Before a closure is confirmed, admins see which existing reservations it affects. Reservations are never cancelled automatically.
-- [ ] A weekly calendar for admins, built on the booking calendar, showing bookings with user names, including moving a booking
-- [ ] Calendars refresh when the window regains focus, and every 60 seconds while visible
-- [ ] Light/Dark/System theme switch, saved in the browser, keeping system theme support
+- [x] Closures for holidays and maintenance, taken out of the shared availability calculation so the calendar and booking checks can't disagree. Overlapping closures are combined but kept as separate records with their reasons. There are no recurring closures yet.
+- [x] Before a closure is confirmed, admins see which existing reservations it affects. Creation takes the resource's booking lock, and bookings check availability under it, so the final list is complete. Reservations are never cancelled automatically.
+- [x] A weekly calendar for admins, built on the booking calendar, showing bookings with user names, including moving a booking
+- [x] Calendars refresh when the window regains focus, and every 60 seconds while visible
+- [x] Light/Dark/System theme switch, saved in the browser, keeping system theme support, with no flash on load
+- [x] Tests:
+  - closure boundaries and both daylight-saving changes
+  - concurrency between closures and bookings, shown to fail without the lock
+  - the admin-only owner details
+  - the freshness, theme, screen and smoke tests, with axe
+- [x] Docs: ADR 0009, updates to ADRs 0002, 0006 and 0007, README, architecture, security and testing
+
+Changes in behaviour in PR 2:
+- New: `/admin/closures`, `/admin/calendar` and the `availabilityexceptions` endpoints. The schedule gains `closedSlots`.
+- New: a Theme menu in the header.
+- Changed: booking and moving check availability after taking the booking lock.
+- Changed: calendars reload on focus and every minute while visible.
+- Changed: the section tabs always have their own header row, so all six admin tabs fit.
+- Changed: `GET /api/reservations/resource/{id}` accepts optional `from` and `to` dates.
+
+Follow-ups noticed during PR 2:
+- Editing one-off windows and weekly rules still doesn't report affected bookings, unlike closures ([ADR 0009](adr/0009-availability-exceptions.md)).
+- `index.html` has a small inline script for the theme, which a strict Content-Security-Policy in M7 must allow by hash.
 
 PR 3: user management and account security
 
@@ -436,13 +454,13 @@ PR 4: email flows
 Tracked so far:
 
 - [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie, or document why not ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
-- [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them
+- [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them. Allow the inline theme script in `index.html` by its hash.
 - [ ] Run the migration bundle as a deployment step, and configure the reverse proxy as trusted
 - [ ] Serve `index.html` for unknown paths (SPA fallback), so frontend routes such as `/admin/reservations` work on refresh
 
 ## Later Ideas
 
-Availability exceptions, email notifications and calendar export are planned in M6 above.
+Availability exceptions are done in M6 PR 2. Email notifications and calendar export are planned in M6 PR 4.
 
 Deferred, with no milestone yet:
 
@@ -450,3 +468,4 @@ Deferred, with no milestone yet:
 - Advanced reservation history filters
 - Full localisation, beyond the fixed `en-GB` format
 - Moving a booking to another resource
+- Recurring closures, such as every 24 December

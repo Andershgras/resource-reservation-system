@@ -20,6 +20,7 @@ The application supports the core flow for a generic resource reservation system
 - Cancelled reservations no longer block new reservations
 - Booking rules: shortest and longest booking, notice needed, how far ahead, and how many upcoming bookings each user can hold, with per-resource overrides
 - Reservations record when they were made, moved and cancelled, and who cancelled them
+- Admins close resources for holidays or maintenance, see the bookings inside first, and move any booking in an admin calendar
 
 The project intentionally stays generic. A resource can represent a meeting room, workspace, vehicle, sports court, equipment item, or another shared asset.
 
@@ -70,6 +71,8 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 - Give a resource its own booking rules, or leave it on the defaults
 - Create, edit, and delete one-off availability windows
 - Create, edit, and delete weekly availability rules
+- Close a resource for a period with a reason, such as a holiday. The bookings inside are shown before saving and are never cancelled automatically; each can be cancelled from the list afterwards. Closures may overlap, and each can be deleted on its own.
+- See a resource's week in a calendar with who made each booking, and move a booking by choosing it
 - View all reservations, with when each was made, moved and cancelled, and by whom
 - Filter reservations by resource and status
 - Cancel any active reservation
@@ -103,7 +106,8 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 
 ### Interface
 
-- A consistent design system with light and dark mode ([ADR 0007](docs/adr/0007-design-system.md))
+- A consistent design system with a Light, Dark or System theme, chosen in the header and remembered in the browser ([ADR 0007](docs/adr/0007-design-system.md))
+- Calendars reload when the window regains focus and every minute while visible, so other people's bookings show up
 - Dates and times in `en-GB` format with a 24-hour clock, always in Copenhagen time
 - Validation errors shown beside the field they belong to
 - A warning before leaving a form with unsaved changes, which never stands in the way of the session ending
@@ -242,6 +246,17 @@ Adding `&excludeReservationId={id}` leaves that reservation out, so its own time
 
 Resources have four optional booking rule overrides: `minDurationMinutes`, `maxDurationMinutes`, `minLeadTimeMinutes` and `maxAdvanceDays`. `null` means the resource uses the default from [configuration](docs/configuration.md#booking-rules).
 
+### Closures
+
+```text
+GET    /api/availabilityexceptions?resourceId=   Admin only
+POST   /api/availabilityexceptions/preview       Admin only: the active reservations inside, nothing saved
+POST   /api/availabilityexceptions               Admin only: the closure, and the reservations inside it
+DELETE /api/availabilityexceptions/{id}          Admin only
+```
+
+A closure (`resourceId`, `startTime`, `endTime`, `reason`) takes time out of a resource's availability, so it can't be booked or moved into. Reservations already inside stay active. The schedule shows closed time as `closedSlots`, with each reason, to everyone. Creating a closure takes the resource's booking lock, so the list of affected reservations it returns is complete ([ADR 0009](docs/adr/0009-availability-exceptions.md)).
+
 ### Availability Windows
 
 ```text
@@ -271,7 +286,7 @@ GET /api/reservations/me                 Logged-in user
 POST /api/reservations                   Logged-in user
 PUT /api/reservations/{id}               Owner or Admin: move to a new time
 PUT /api/reservations/{id}/cancel        Owner or Admin
-GET /api/reservations/resource/{id}      Admin only
+GET /api/reservations/resource/{id}      Admin only, optionally ?from=YYYY-MM-DD&to=YYYY-MM-DD
 GET /api/reservations/user/{id}          Admin only
 ```
 
@@ -412,7 +427,7 @@ npm run build
 npm run test:smoke
 ```
 
-The Playwright smoke tests cover the main browser flow: Admin login, resource management, weekly schedule management, availability management, User registration/login, resource-first booking, moving a booking, reservation cancellation, and overlap error handling.
+The Playwright smoke tests cover the main browser flow: Admin login, resource management, weekly schedule management, availability management, User registration/login, resource-first booking, moving a booking, reservation cancellation, closures, the admin calendar, the theme switch, and overlap error handling.
 
 ## Continuous Integration
 

@@ -33,7 +33,7 @@ Overlaps now return **409 Conflict** instead of 400.
 
 - Bookings for the same resource run one at a time: the second request waits, sees the first booking, and gets a clean 409. Bookings for different resources don't block each other.
 - There's no reliance on deadlocks.
-- **Any new code that creates or moves reservations must take the same lock.** The locks live in a single method, `ReservationService.AcquireBookingLocksAsync` (named `AcquireResourceBookingLockAsync` before Milestone 6).
+- **Any new code that creates or moves reservations must take the same lock.** The locks live in one place, `BookingLocks.AcquireAsync` (before Milestone 6 PR 2, `ReservationService.AcquireBookingLocksAsync`, and originally `AcquireResourceBookingLockAsync`).
 - This ties the project to SQL Server, which was already the only database it targets.
 - The EF InMemory provider used in unit tests has no transactions, so the lock is skipped when the database isn't relational. Concurrency is checked against real SQL Server by the integration tests: 10 parallel identical bookings give one 201 and nine 409s. With the lock disabled, all ten succeed.
 - If the lock can't be acquired in time, the API returns `503 Service Unavailable` with `Retry-After: 5` and a message asking the user to try again. The request didn't conflict with a booking; the system was just busy.
@@ -42,3 +42,4 @@ Overlaps now return **409 Conflict** instead of 400.
 
 - **Milestone 2:** the lock moved from the controller into `ReservationService`. It now reads `sp_getapplock`'s return code through an output parameter instead of raising a SQL error. A timeout (-1) or deadlock victim (-3) becomes a 503 with `Retry-After`, where it used to be an unhandled 500. Any other negative code throws. The timeout became configurable.
 - **Milestone 6:** creating a booking also takes a per-user lock, `reservation:user:{id}`, because the cap on upcoming bookings spans resources. Bookings for different resources don't share a resource lock, so without it parallel bookings could all pass the cap check. The locks are always taken **user first, then resource**, in one transaction, so two requests can't each hold one while waiting for the other. Ten parallel bookings across ten resources give exactly the cap; with the user lock disabled, all ten succeeded. Moving a booking takes only the resource lock, because the number of bookings doesn't change. See [ADR 0008](0008-booking-policies-and-reservation-changes.md).
+- **Milestone 6 PR 2:** the locks moved into a `BookingLocks` service, so creating a closure can take the resource lock too ([ADR 0009](0009-availability-exceptions.md)). Booking and moving now check availability after taking the lock, so a closure saved while they wait is never missed.
