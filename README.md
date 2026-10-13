@@ -84,6 +84,14 @@ The project intentionally stays generic. A resource can represent a meeting room
 - Generated schedules cover at most 62 days per request and never offer time that has already passed
 - All times are wall-clock times in one configured time zone, `Europe/Copenhagen` by default (see [ADR 0001](docs/adr/0001-time-zone-convention.md))
 
+### Interface
+
+- A consistent design system with light and dark mode ([ADR 0007](docs/adr/0007-design-system.md))
+- Dates and times in `en-GB` format with a 24-hour clock, always in Copenhagen time
+- Validation errors shown beside the field they belong to
+- Keyboard accessible, with a skip link, visible focus, and a confirmation dialog that keeps focus inside it
+- Works on desktop and mobile screens
+
 ## Tech Stack
 
 ### Backend
@@ -104,7 +112,9 @@ The project intentionally stays generic. A resource can represent a meeting room
 - React Router (routes per screen, protected routes)
 - TanStack Query (server data and caching)
 - Vitest and React Testing Library unit tests
+- Plain CSS with design tokens, light and dark mode
 - Playwright smoke tests
+- axe-core accessibility checks
 - ESLint
 
 ### Tooling
@@ -135,9 +145,11 @@ frontend/
       api/         typed API calls and the shared client
       app/         routes, layouts, route guards, query client
       auth/        session storage, auth provider, login page
-      components/  shared sections, tabs, confirmation dialog
+      components/  app sections: forms, lists, tabs, confirmation provider
       features/    one folder per feature: pages and query hooks
       lib/         pure helpers and query keys
+      styles/      design tokens and base styles
+      ui/          design-system components with their stylesheets
     tests/
       smoke/
 

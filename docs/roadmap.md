@@ -318,15 +318,25 @@ Agreed decisions:
 
 PR 1: foundation
 
-- [ ] Backend: remove `reservationId` from the schedule, and add `userName` and `userEmail` to reservation responses (audit L1)
-- [ ] Backend: friendly validation messages on the request DTOs (from M2)
-- [ ] Date and time formatting in `en-GB`, 24-hour, independent of the browser's time zone
-- [ ] Design tokens and CSS structure, keeping light and dark mode
-- [ ] Shared UI components, with accessibility tests
-- [ ] API validation errors shown beside their fields
-- [ ] Accessible confirmation dialog, with accessibility and keyboard tests
-- [ ] Screens moved to the shared components and the new layout
-- [ ] Docs
+- [x] Backend: remove `reservationId` from the schedule (audit L10), and add `userName` and `userEmail` to reservation responses (audit L1)
+- [x] Backend: friendly validation messages on the request DTOs (from M2)
+- [x] Date and time formatting in `en-GB`, 24-hour, independent of the browser's time zone
+- [x] Design tokens and CSS structure, keeping light and dark mode
+- [x] Shared UI components, with accessibility tests
+- [x] API validation errors shown beside their fields
+- [x] Accessible confirmation dialog, with accessibility and keyboard tests
+- [x] Screens moved to the shared components and the new layout
+- [x] Docs: [ADR 0007](adr/0007-design-system.md), architecture, testing, security and README
+
+Changes in behaviour in PR 1:
+- Changed: the schedule's reserved slots no longer include `reservationId`. Reservation responses gain `userName` and `userEmail`.
+- Changed: validation messages from the API are written for people, such as "Enter a resource name.", and are shown beside their fields. A field with several messages shows the first.
+- Changed: every form checks all its fields before sending and reports them together, instead of relying on the browser's bubbles.
+- Changed: dates read "Tue 15 Jan 2030, 09:00" everywhere, whatever the browser's language or time zone. The booking screen's default range starts on today's date in Copenhagen.
+- Changed: the confirmation dialog is an alert dialog with focus handling, and stays open with the error if its action fails.
+- Changed: the sign-in page's Login and Register switch is a pair of links, because it changes the address.
+- New: a skip link, a document title per screen, and buttons named after their row, such as "Delete Room A".
+- New: `axe-core` (development only) checks the shared components, the dialog, the layout and the main forms.
 
 PR 2: booking calendar and navigation
 
@@ -338,10 +348,10 @@ PR 2: booking calendar and navigation
 Follow-ups carried over from earlier milestones, and where they are handled:
 
 - **Unsaved form drafts (from M4):** PR 2 warns before leaving a form with unsaved changes. Drafts stay local to their page, with no shared global state.
-- **Friendly validation messages on the request DTOs (from M2):** PR 1.
-- **User names instead of IDs for admins (audit L1):** PR 1.
+- **Friendly validation messages on the request DTOs (from M2):** done in PR 1.
+- **User names instead of IDs for admins (audit L1):** done in PR 1.
 - **Fully booked days in the schedule (audit L3):** PR 2. A unit test pins the current behaviour, so the change is deliberate.
-- **Identical ternary branches in the booking section (audit L4):** PR 2, where the booking section is replaced by the calendar.
+- **Identical ternary branches in the booking section (audit L4):** done in PR 1, while restyling the booking section.
 
 ### M7: Deployment
 

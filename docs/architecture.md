@@ -193,7 +193,9 @@ flowchart TB
 | `src/app/` | The route table, the two layouts, route guards, the not-found page and the query client defaults |
 | `src/auth/` | Session storage, `AuthProvider` and `useAuth`, and the login and registration page |
 | `src/features/` | One folder per feature: `resources`, `availability`, `weekly-schedule`, `reservations`, `booking`. Each has its page components and its query hooks. |
-| `src/components/` | Presentational sections shared by pages, the tabs, and `ConfirmProvider` |
+| `src/components/` | App-specific sections built from `src/ui/`: forms, lists, the tabs, and `ConfirmProvider` |
+| `src/ui/` | The design system's components: `Button`, `Field`, `Card`, `Alert`, `Badge`, `ConfirmDialog` and others, each with its stylesheet |
+| `src/styles/` | Design tokens (`tokens.css`) and element defaults (`base.css`) |
 | `src/lib/` | Pure helpers: dates, validation, schedule grouping, errors, navigation, query keys |
 | `src/api/` | Typed API calls and the shared `client.ts` |
 
@@ -205,6 +207,16 @@ How state is handled:
 - **Form drafts and messages** belong to the page that shows them.
 - **Redirects around login and logout** are made only by the route guards (`RequireAuth`, `RequireLoggedOut`), and `returnTo` must be a path inside the app.
 
+### Design system
+
+Styles are plain CSS. Colours, spacing, type, radii and shadows are custom properties in `styles/tokens.css`, with a dark theme. Each component in `src/ui/` has its own stylesheet and uses only tokens ([ADR 0007](adr/0007-design-system.md)).
+
+- **Forms** use `Field`, which links the label, hint and error to the control. API validation errors are shown beside their fields: `ApiError.fieldErrors` holds the first message for each field, and `getFormErrors` splits them from messages for the whole form. After a failed submit, focus moves to the first invalid field.
+- **Messages** are `Alert`s with a tone. Errors are announced at once (`role="alert"`), other messages politely (`role="status"`).
+- **The confirmation dialog** follows the WAI-ARIA alert dialog pattern, and the page behind it is inert.
+- **The layout** has a skip link to `<main id="main-content">`, one `h1` per page, and a document title for the current screen.
+- **Dates** come from `lib/dates.ts` in `en-GB` with a 24-hour clock, read from the API's wall-clock text rather than through the browser's time zone.
+
 ## Decision records
 
 - [ADR 0001: Store times as wall-clock time in one configured time zone](adr/0001-time-zone-convention.md)
@@ -213,3 +225,4 @@ How state is handled:
 - [ADR 0004: Keep the token in localStorage and handle session expiry in the frontend](adr/0004-token-storage-and-session-expiry.md)
 - [ADR 0005: Database migrations as a separate deployment step](adr/0005-migrations-in-deployment.md)
 - [ADR 0006: Frontend routing and server state](adr/0006-frontend-routing-and-state.md)
+- [ADR 0007: Plain CSS with design tokens and shared components](adr/0007-design-system.md)

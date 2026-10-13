@@ -96,7 +96,8 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 | Token in `localStorage` | Readable by any script that runs on the frontend's origin | Cookie review before public deployment (Milestone 7) |
 | Rate limit counters are per API instance | With several instances, each one counts separately | A shared store such as Redis if the API is scaled out |
 | No password reset or email verification | Users who forget their password need an Admin | Milestone 6 |
-| The anonymous schedule endpoint returns reservation IDs (audit L10) | Minor information leak | Milestone 4 or 5, with the frontend changes it needs |
+
+Fixed in Milestone 5: the anonymous schedule no longer returns reservation IDs (audit L10). It lists reserved times only. Reservation responses include the owner's name and email, and only the owner or an admin can read them.
 
 ### Account enumeration
 

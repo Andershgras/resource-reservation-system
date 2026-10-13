@@ -6,7 +6,7 @@ The project has four automated test suites, and CI runs all of them on every pus
 |---|---|---|---|
 | Backend unit tests | `backend/ResourceReservation.Api.Tests` | Business rules in the services, and the CRUD controllers | .NET SDK |
 | Backend integration tests | `backend/ResourceReservation.Api.IntegrationTests` | The whole API over HTTP against a real SQL Server | .NET SDK and Docker Desktop |
-| Frontend unit tests | `frontend/resource-reservation-client/src/**/*.test.ts(x)` | Helpers, session handling, the API client, query hooks, routing and pages | Node.js |
+| Frontend unit tests | `frontend/resource-reservation-client/src/**/*.test.ts(x)` | Helpers, session handling, the API client, query hooks, routing, pages, and accessibility of the shared components | Node.js |
 | Frontend smoke tests | `frontend/resource-reservation-client/tests/smoke` | The main browser flows in Playwright, with the API mocked | Node.js |
 
 ## Running the tests
@@ -94,7 +94,7 @@ The tests delete all data in this database. To prevent accidents, the harness re
 [Vitest](https://vitest.dev/) runs these in a simulated browser ([jsdom](https://github.com/jsdom/jsdom)), with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for components. They run in a few seconds and need no server.
 
 - **Time zone:** the tests run in `Europe/Copenhagen`, set in `vite.config.ts`, so date handling behaves the same locally and on CI runners that use UTC. The date tests include both summer-time switches.
-- **`src/lib/`:** date conversion, form validation, schedule grouping and error messages.
+- **`src/lib/`:** date formatting and conversion, form validation, schedule grouping and error messages. The date tests cover both summer-time switches and a UTC instant that is already the next day in Copenhagen.
 - **`src/auth/authStorage.ts`:** session expiry, using fake timers. Covered cases:
   - restoring a valid, expired or outdated session
   - ending only the session whose token was rejected
@@ -115,6 +115,22 @@ The tests delete all data in this database. To prevent accidents, the harness re
 - **Pages:**
   - the admin reservation filters in the address (`AdminReservationsPage.test.tsx`)
   - parsing the booking address (`bookingSearch.test.ts`), including impossible dates and reversed ranges
+
+### Accessibility tests
+
+`src/test/axe.ts` runs [axe-core](https://github.com/dequelabs/axe-core) on rendered markup and lists any violations:
+
+```ts
+const { container } = render(<Field label="Name" error="Enter a name.">{(props) => <Input {...props} />}</Field>)
+
+await expectNoAxeViolations(container)
+```
+
+- **Covered:** every shared component and variant in `src/ui/`, the open confirmation dialog, the workspace layout, the sign-in page, and the resource and reservation screens with errors shown.
+- **Keyboard and focus:** tests use `userEvent.tab()` and `userEvent.keyboard()`. For example, they check that the dialog keeps Tab inside, closes on Escape and returns focus, and that a failed submit focuses the first invalid field.
+- **Not covered by axe in jsdom:** colour contrast, because jsdom doesn't render. The token pairs were checked by hand (see `styles/tokens.css`). The `region` rule is also off, because a component rendered alone isn't inside the page's landmarks.
+
+An accessibility test must be able to fail. `src/test/axe.test.tsx` checks that the helper reports an unlabelled input.
 
 TanStack Query notifies components on the next tick after a change. A test that checks rendered data straight after a change should check the cache with `queryClient.getQueryData`, or wait with `waitFor`.
 
