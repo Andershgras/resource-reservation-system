@@ -70,7 +70,7 @@ export function AdminReservationsPage() {
       reservations={filteredReservations}
       isLoading={reservationsQuery.isPending}
       message={message || getQueryErrorMessage(reservationsQuery.error)}
-      showUserId
+      showUser
       filterResources={resourcesQuery.data ?? []}
       selectedResourceId={resourceFilter}
       selectedStatus={statusFilter}

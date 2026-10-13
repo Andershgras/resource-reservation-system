@@ -9,7 +9,7 @@ interface ReservationsSectionProps {
   reservations: ReservationResponse[]
   isLoading: boolean
   message: string
-  showUserId?: boolean
+  showUser?: boolean
   filterResources?: ResourceResponse[]
   selectedResourceId?: string
   selectedStatus?: '' | ReservationStatus
@@ -27,7 +27,7 @@ export function ReservationsSection({
   reservations,
   isLoading,
   message,
-  showUserId = false,
+  showUser = false,
   filterResources,
   selectedResourceId = '',
   selectedStatus = '',
@@ -113,7 +113,7 @@ export function ReservationsSection({
             >
               <div className="item-main">
                 <strong>{reservation.resourceName}</strong>
-                {showUserId && <p>User ID: {reservation.userId}</p>}
+                {showUser && <p>{reservation.userName} ({reservation.userEmail})</p>}
                 <div className="reservation-dates">
                   <p>
                     <span>Start</span>

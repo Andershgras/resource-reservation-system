@@ -21,6 +21,8 @@ const reservation: ReservationResponse = {
   resourceId: 1,
   resourceName: 'Room',
   userId: 2,
+  userName: 'Test User',
+  userEmail: 'user@example.com',
   startTime: '2030-01-15T09:00:00',
   endTime: '2030-01-15T10:00:00',
   status: 'Active',
@@ -74,7 +76,7 @@ describe('useCancelReservation with a schedule on screen', () => {
   // Audit L2: the schedule kept showing a cancelled reservation as reserved.
   it('refreshes the booking schedule as well as the reservation lists', async () => {
     vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(schedule([
-      { reservationId: 7, startTime: reservation.startTime, endTime: reservation.endTime },
+      { startTime: reservation.startTime, endTime: reservation.endTime },
     ]))
     const { wrapper } = createQueryWrapper()
     const { result } = renderHook(() => ({

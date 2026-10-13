@@ -192,7 +192,7 @@ export function ResourceBookingSection({
                   {day.reservedSlots.length > 0 && (
                     <div className="reserved-slots" aria-label="Reserved times">
                       {day.reservedSlots.map((slot) => (
-                        <span key={`${slot.reservationId}-${slot.startTime}`}>
+                        <span key={`${slot.startTime}-${slot.endTime}`}>
                           Reserved {formatClockTime(slot.startTime)}-{formatClockTime(slot.endTime)}
                         </span>
                       ))}

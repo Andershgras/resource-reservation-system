@@ -42,7 +42,6 @@ interface BookableSlotResponse {
 }
 
 interface ReservedSlotResponse {
-  reservationId: number
   startTime: string
   endTime: string
 }
@@ -61,6 +60,8 @@ interface ReservationResponse {
   resourceId: number
   resourceName: string
   userId: number
+  userName: string
+  userEmail: string
   startTime: string
   endTime: string
   status: ReservationStatus
@@ -178,6 +179,7 @@ test('main frontend reservation flow', async ({ page }) => {
     adminReservationsSection
       .locator('li')
       .filter({ hasText: 'Smoke Test Room Updated' })
+      .filter({ hasText: 'Smoke Test User (smoke.user@example.com)' })
       .first(),
   ).toBeVisible()
   await adminReservationsSection.getByRole('button', { name: 'Cancel' }).first().click()
@@ -671,6 +673,8 @@ async function mockApi(
           resourceId: 1,
           resourceName: 'Reserved Test Room',
           userId: options.seededReservationIsOwn ? 2 : 99,
+          userName: options.seededReservationIsOwn ? 'Smoke Test User' : 'Other User',
+          userEmail: options.seededReservationIsOwn ? 'smoke.user@example.com' : 'other@example.com',
           startTime: '2030-01-15T09:00:00',
           endTime: '2030-01-15T11:00:00',
           status: 'Active',
@@ -877,7 +881,7 @@ async function mockApi(
     }
 
     if (request.method() === 'POST' && path === '/reservations') {
-      const body = await request.postDataJSON() as Omit<ReservationResponse, 'id' | 'resourceName' | 'status' | 'userId'>
+      const body = await request.postDataJSON() as Omit<ReservationResponse, 'id' | 'resourceName' | 'status' | 'userId' | 'userName' | 'userEmail'>
       const hasOverlap = reservations.some((reservation) =>
         reservation.resourceId === body.resourceId &&
         reservation.status === 'Active' &&
@@ -900,6 +904,8 @@ async function mockApi(
         resourceId: body.resourceId,
         resourceName: resource?.name ?? '',
         userId: normalUser.id,
+        userName: normalUser.name,
+        userEmail: normalUser.email,
         startTime: body.startTime,
         endTime: body.endTime,
         status: 'Active',
@@ -994,7 +1000,6 @@ function buildResourceSchedule(
       reservation.startTime.slice(0, 10) <= toDate,
     )
     .map((reservation) => ({
-      reservationId: reservation.id,
       startTime: reservation.startTime,
       endTime: reservation.endTime,
     }))

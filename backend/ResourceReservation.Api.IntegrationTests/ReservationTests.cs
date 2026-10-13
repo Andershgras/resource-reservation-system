@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.DTOs;
@@ -39,6 +40,12 @@ public class ReservationTests : ApiTestBase
             .GetFromJsonAsync<List<ReservationResponseDto>>("/api/reservations/me");
         var reservation = Assert.Single(myReservations!);
         Assert.Equal(ReservationStatuses.Active, reservation.Status);
+        Assert.Equal("Integration User", reservation.UserName);
+        Assert.Equal("user@integration.test", reservation.UserEmail);
+
+        var allReservations = await adminClient
+            .GetFromJsonAsync<List<ReservationResponseDto>>("/api/reservations");
+        Assert.Equal("user@integration.test", Assert.Single(allReservations!).UserEmail);
 
         var day = DateOnly.FromDateTime(BookingDay).ToString("yyyy-MM-dd");
         var schedule = await userClient.GetFromJsonAsync<ResourceScheduleResponseDto>(
@@ -49,6 +56,33 @@ public class ReservationTests : ApiTestBase
                 (BookingDay.AddHours(11), BookingDay.AddHours(16))
             ],
             schedule!.BookableSlots.Select(slot => (slot.StartTime, slot.EndTime)));
+    }
+
+    [Fact]
+    public async Task AnonymousSchedule_ShowsReservedTimesWithoutIdentifyingReservations()
+    {
+        var adminClient = await CreateAdminClientAsync();
+        var resourceId = await CreateResourceWithWeeklyRuleAsync(
+            adminClient,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var userClient = await CreateUserClientAsync();
+        var createResponse = await userClient.PostAsJsonAsync("/api/reservations", new CreateReservationDto
+        {
+            ResourceId = resourceId,
+            StartTime = BookingDay.AddHours(10),
+            EndTime = BookingDay.AddHours(11)
+        });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var day = DateOnly.FromDateTime(BookingDay).ToString("yyyy-MM-dd");
+        var schedule = await CreateAnonymousClient().GetFromJsonAsync<JsonElement>(
+            $"/api/resources/{resourceId}/schedule?from={day}&to={day}");
+
+        var reservedSlot = Assert.Single(schedule.GetProperty("reservedSlots").EnumerateArray());
+        Assert.Equal(
+            ["endTime", "startTime"],
+            reservedSlot.EnumerateObject().Select(property => property.Name).Order());
     }
 
     [Fact]

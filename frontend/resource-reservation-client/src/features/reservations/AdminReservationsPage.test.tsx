@@ -19,6 +19,8 @@ function reservation(id: number, resourceId: number, resourceName: string, statu
     resourceId,
     resourceName,
     userId: 2,
+    userName: 'Test User',
+    userEmail: 'user@example.com',
     startTime: '2030-01-15T09:00:00',
     endTime: '2030-01-15T10:00:00',
     status,
@@ -68,6 +70,16 @@ describe('AdminReservationsPage', () => {
     renderPage('/admin/reservations')
 
     expect(await shownReservations()).toEqual(['Room A Active', 'Room B Active', 'Room B Cancelled'])
+  })
+
+  // Audit L1: admins saw only a user ID.
+  it('shows who made each reservation', async () => {
+    renderPage('/admin/reservations')
+
+    const [firstReservation] = within(await screen.findByRole('list')).getAllByRole('listitem')
+
+    expect(firstReservation).toHaveTextContent('Test User (user@example.com)')
+    expect(firstReservation).not.toHaveTextContent('User ID')
   })
 
   it('applies the filters in the address', async () => {

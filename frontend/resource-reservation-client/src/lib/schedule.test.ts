@@ -34,7 +34,7 @@ describe('groupScheduleByDay', () => {
   it('attaches reserved slots to their day', () => {
     const days = groupScheduleByDay(schedule(
       [{ startTime: '2030-01-15T08:00:00', endTime: '2030-01-15T09:00:00' }],
-      [{ reservationId: 7, startTime: '2030-01-15T10:00:00', endTime: '2030-01-15T11:00:00' }],
+      [{ startTime: '2030-01-15T10:00:00', endTime: '2030-01-15T11:00:00' }],
     ))
 
     expect(days[0].reservedSlots).toHaveLength(1)
@@ -44,7 +44,7 @@ describe('groupScheduleByDay', () => {
   it('leaves out days that have only reserved slots', () => {
     const days = groupScheduleByDay(schedule(
       [{ startTime: '2030-01-15T08:00:00', endTime: '2030-01-15T09:00:00' }],
-      [{ reservationId: 7, startTime: '2030-01-16T10:00:00', endTime: '2030-01-16T11:00:00' }],
+      [{ startTime: '2030-01-16T10:00:00', endTime: '2030-01-16T11:00:00' }],
     ))
 
     expect(days.map((day) => day.date)).toEqual(['2030-01-15'])

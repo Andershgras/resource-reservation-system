@@ -205,6 +205,8 @@ PUT    /api/resources/{id}   Admin only
 DELETE /api/resources/{id}   Admin only
 ```
 
+The schedule is public. It lists bookable and reserved times, but nothing that identifies a reservation or who made it.
+
 ### Availability Windows
 
 ```text
@@ -236,6 +238,8 @@ PUT /api/reservations/{id}/cancel        Owner or Admin
 GET /api/reservations/resource/{id}      Admin only
 GET /api/reservations/user/{id}          Admin only
 ```
+
+Reservation responses include the owner's `userName` and `userEmail`. Every reservation endpoint is limited to the owner or an admin.
 
 ### Errors
 

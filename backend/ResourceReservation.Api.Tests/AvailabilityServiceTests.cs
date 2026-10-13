@@ -95,7 +95,7 @@ public class AvailabilityServiceTests
             DayOfWeek.Wednesday,
             new TimeOnly(8, 0),
             new TimeOnly(16, 0));
-        var reservation = await SeedReservationAsync(
+        await SeedReservationAsync(
             context,
             resource.Id,
             ReservationStatuses.Active,
@@ -126,7 +126,6 @@ public class AvailabilityServiceTests
                 Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), second.EndTime);
             });
         var reservedSlot = Assert.Single(response.ReservedSlots);
-        Assert.Equal(reservation.Id, reservedSlot.ReservationId);
         Assert.Equal(new DateTime(2030, 1, 16, 10, 0, 0), reservedSlot.StartTime);
         Assert.Equal(new DateTime(2030, 1, 16, 11, 0, 0), reservedSlot.EndTime);
     }
