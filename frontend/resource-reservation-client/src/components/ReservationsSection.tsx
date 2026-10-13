@@ -3,12 +3,20 @@ import type {
   ReservationStatus,
   ResourceResponse,
 } from '../api/types'
+import { formatDateTimeRange } from '../lib/dates'
+import { Alert, type Notice } from '../ui/Alert'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Field, Select } from '../ui/Field'
+import { EmptyState, LoadingState } from '../ui/States'
+import './lists.css'
 
 interface ReservationsSectionProps {
   title: string
   reservations: ReservationResponse[]
   isLoading: boolean
-  message: string
+  notice: Notice | null
   showUser?: boolean
   filterResources?: ResourceResponse[]
   selectedResourceId?: string
@@ -17,16 +25,16 @@ interface ReservationsSectionProps {
   onSelectedStatusChange?: (status: '' | ReservationStatus) => void
   onClearFilters?: () => void
   emptyMessage?: string
+  emptyDescription?: string
   cancellingReservationId: number | null
   onCancelReservation: (reservation: ReservationResponse) => void
-  formatDateTime: (value: string) => string
 }
 
 export function ReservationsSection({
   title,
   reservations,
   isLoading,
-  message,
+  notice,
   showUser = false,
   filterResources,
   selectedResourceId = '',
@@ -35,11 +43,10 @@ export function ReservationsSection({
   onSelectedStatusChange,
   onClearFilters,
   emptyMessage = 'No reservations found.',
+  emptyDescription,
   cancellingReservationId,
   onCancelReservation,
-  formatDateTime,
 }: ReservationsSectionProps) {
-  const titleId = title.toLowerCase().replaceAll(' ', '-') + '-title'
   const showFilters =
     filterResources &&
     onSelectedResourceIdChange &&
@@ -48,105 +55,97 @@ export function ReservationsSection({
   const hasActiveFilters = selectedResourceId !== '' || selectedStatus !== ''
 
   return (
-    <section className="panel-section" aria-labelledby={titleId}>
-      <div className="section-heading">
-        <h2 id={titleId}>{title}</h2>
-        <span className="count-badge">{reservations.length}</span>
-      </div>
+    <Card
+      title={title}
+      actions={<Badge label={`${reservations.length} reservations`}>{reservations.length}</Badge>}
+    >
       {showFilters && (
-        <div className="reservation-filters" aria-label="Reservation filters">
-          <label>
-            <span className="label-text">Resource</span>
-            <select
-              value={selectedResourceId}
-              onChange={(event) =>
-                onSelectedResourceIdChange(event.target.value)
-              }
-            >
-              <option value="">All resources</option>
-              {filterResources.map((resource) => (
-                <option key={resource.id} value={resource.id}>
-                  {resource.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="label-text">Status</span>
-            <select
-              value={selectedStatus}
-              onChange={(event) =>
-                onSelectedStatusChange(
-                  event.target.value as '' | ReservationStatus,
-                )
-              }
-            >
-              <option value="">All statuses</option>
-              <option value="Active">Active</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            disabled={!hasActiveFilters}
-            onClick={onClearFilters}
-          >
+        <div className="list-filters" role="group" aria-label="Reservation filters">
+          <Field label="Resource">
+            {(props) => (
+              <Select
+                {...props}
+                value={selectedResourceId}
+                onChange={(event) => onSelectedResourceIdChange(event.target.value)}
+              >
+                <option value="">All resources</option>
+                {filterResources.map((resource) => (
+                  <option key={resource.id} value={resource.id}>
+                    {resource.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Status">
+            {(props) => (
+              <Select
+                {...props}
+                value={selectedStatus}
+                onChange={(event) =>
+                  onSelectedStatusChange(event.target.value as '' | ReservationStatus)
+                }
+              >
+                <option value="">All statuses</option>
+                <option value="Active">Active</option>
+                <option value="Cancelled">Cancelled</option>
+              </Select>
+            )}
+          </Field>
+          <Button disabled={!hasActiveFilters} onClick={onClearFilters}>
             Clear filters
-          </button>
+          </Button>
         </div>
       )}
-      {isLoading && (
-        <p className="status-message" role="status">
-          Loading reservations...
-        </p>
-      )}
-      {message && <p className="status-message">{message}</p>}
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+      {isLoading && <LoadingState>Loading reservations...</LoadingState>}
       {!isLoading && reservations.length === 0 && (
-        <p className="status-message">{emptyMessage}</p>
+        <EmptyState title={emptyMessage} description={emptyDescription} />
       )}
       {reservations.length > 0 && (
-        <ul className="resource-list">
-          {reservations.map((reservation) => (
-            <li
-              key={reservation.id}
-              className={`reservation-item reservation-item-${reservation.status.toLowerCase()}`}
-            >
-              <div className="item-main">
-                <strong>{reservation.resourceName}</strong>
-                {showUser && <p>{reservation.userName} ({reservation.userEmail})</p>}
-                <div className="reservation-dates">
-                  <p>
-                    <span>Start</span>
-                    {formatDateTime(reservation.startTime)}
+        <ul className="item-list">
+          {reservations.map((reservation) => {
+            const isActive = reservation.status === 'Active'
+            const period = formatDateTimeRange(reservation.startTime, reservation.endTime)
+
+            return (
+              <li key={reservation.id} className={isActive ? 'item' : 'item item-muted'}>
+                <div className="item-main">
+                  <p className="item-title">
+                    <strong>{reservation.resourceName}</strong>
+                    <Badge tone={isActive ? 'success' : 'neutral'}>{reservation.status}</Badge>
                   </p>
-                  <p>
-                    <span>End</span>
-                    {formatDateTime(reservation.endTime)}
-                  </p>
+                  <dl className="item-meta">
+                    <div>
+                      <dt className="visually-hidden">Time</dt>
+                      <dd>{period}</dd>
+                    </div>
+                    {showUser && (
+                      <div>
+                        <dt>Booked by</dt>
+                        <dd>{reservation.userName} ({reservation.userEmail})</dd>
+                      </div>
+                    )}
+                  </dl>
                 </div>
-              </div>
-              <div className="resource-actions">
-                <span
-                  className={`reservation-status reservation-status-${reservation.status.toLowerCase()}`}
-                >
-                  {reservation.status}
-                </span>
-                {reservation.status === 'Active' && (
-                  <button
-                    type="button"
-                    disabled={cancellingReservationId === reservation.id}
-                    onClick={() => onCancelReservation(reservation)}
-                  >
-                    {cancellingReservationId === reservation.id
-                      ? 'Cancelling...'
-                      : 'Cancel'}
-                  </button>
+                {isActive && (
+                  <div className="item-actions">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Cancel ${reservation.resourceName}, ${period}`}
+                      disabled={cancellingReservationId === reservation.id}
+                      onClick={() => onCancelReservation(reservation)}
+                    >
+                      {cancellingReservationId === reservation.id ? 'Cancelling...' : 'Cancel'}
+                    </Button>
+                  </div>
                 )}
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
-    </section>
+    </Card>
   )
 }

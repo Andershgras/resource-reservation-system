@@ -6,6 +6,13 @@ import type {
 import { formatTimeRange } from '../lib/dates'
 import { getSlotKey, groupScheduleByDay } from '../lib/schedule'
 import { Alert, type Notice } from '../ui/Alert'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Field, Input } from '../ui/Field'
+import { EmptyState, LoadingState } from '../ui/States'
+import './lists.css'
+import './ResourceBookingSection.css'
 
 interface ResourceBookingSectionProps {
   resources: ResourceResponse[]
@@ -68,117 +75,114 @@ export function ResourceBookingSection({
     : []
 
   return (
-    <>
-      <section className="panel-section" aria-labelledby="book-resource-title">
-        <div className="section-heading">
-          <h2 id="book-resource-title">Book a resource</h2>
-          <span className="count-badge">{activeResources.length}</span>
-        </div>
-        {isLoadingResources && (
-          <p className="status-message" role="status">
-            Loading resources...
-          </p>
-        )}
-        {resourceMessage && <p className="status-message">{resourceMessage}</p>}
+    <div className="booking-layout">
+      <Card
+        title="Book a resource"
+        description="Choose what you want to book."
+        actions={<Badge label={`${activeResources.length} resources`}>{activeResources.length}</Badge>}
+      >
+        {isLoadingResources && <LoadingState>Loading resources...</LoadingState>}
+        {resourceMessage && <Alert tone="danger">{resourceMessage}</Alert>}
         {!isLoadingResources && activeResources.length === 0 && (
-          <p className="status-message">No active resources found.</p>
+          <EmptyState title="No active resources found." />
         )}
         {activeResources.length > 0 && (
-          <ul className="resource-list">
-            {activeResources.map((resource) => (
-              <li key={resource.id} className="resource-item">
-                <div className="item-main">
-                  <strong>{resource.name}</strong>
-                  {resource.location && <p>{resource.location}</p>}
-                  {resource.description && <p>{resource.description}</p>}
-                </div>
-                <div className="resource-actions">
-                  <button
-                    type="button"
-                    disabled={
-                      isLoadingResourceSchedule &&
-                      selectedScheduleResourceId === resource.id.toString()
-                    }
-                    onClick={() => onSelectResourceForSchedule(resource)}
-                  >
-                    {selectedScheduleResourceId === resource.id.toString()
-                      ? 'View availability'
-                      : 'View availability'}
-                  </button>
-                </div>
-              </li>
-            ))}
+          <ul className="item-list">
+            {activeResources.map((resource) => {
+              const isSelected = selectedScheduleResourceId === resource.id.toString()
+
+              return (
+                <li
+                  key={resource.id}
+                  className={isSelected ? 'item booking-resource-selected' : 'item'}
+                  aria-current={isSelected || undefined}
+                >
+                  <div className="item-main">
+                    <p className="item-title">
+                      <strong>{resource.name}</strong>
+                      {isSelected && <Badge tone="primary">Selected</Badge>}
+                    </p>
+                    {resource.location && <p className="item-meta">{resource.location}</p>}
+                    {resource.description && <p className="item-meta">{resource.description}</p>}
+                  </div>
+                  <div className="item-actions">
+                    <Button
+                      size="sm"
+                      variant={isSelected ? 'secondary' : 'primary'}
+                      aria-label={`View availability for ${resource.name}`}
+                      disabled={isLoadingResourceSchedule && isSelected}
+                      onClick={() => onSelectResourceForSchedule(resource)}
+                    >
+                      View availability
+                    </Button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="panel-section" aria-labelledby="resource-schedule-title">
-        <div className="section-heading">
-          <h2 id="resource-schedule-title">Resource schedule</h2>
-          {resourceSchedule && (
-            <span className="count-badge">
-              {resourceSchedule.bookableSlots.length}
-            </span>
-          )}
-        </div>
-
-        <div className="schedule-controls" aria-label="Schedule date range">
-          <label>
-            <span className="label-text">From</span>
-            <input
-              type="date"
-              value={scheduleFromDate}
-              onChange={(event) => setScheduleFromDate(event.target.value)}
-            />
-          </label>
-          <label>
-            <span className="label-text">To</span>
-            <input
-              type="date"
-              value={scheduleToDate}
-              onChange={(event) => setScheduleToDate(event.target.value)}
-            />
-          </label>
-          <button
-            type="button"
+      <Card
+        title="Resource schedule"
+        description="Times are Copenhagen time."
+        actions={resourceSchedule && (
+          <Badge label={`${resourceSchedule.bookableSlots.length} bookable times`}>
+            {resourceSchedule.bookableSlots.length}
+          </Badge>
+        )}
+      >
+        <div className="list-filters" role="group" aria-label="Schedule date range">
+          <Field label="From">
+            {(props) => (
+              <Input
+                {...props}
+                type="date"
+                value={scheduleFromDate}
+                onChange={(event) => setScheduleFromDate(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label="To">
+            {(props) => (
+              <Input
+                {...props}
+                type="date"
+                value={scheduleToDate}
+                onChange={(event) => setScheduleToDate(event.target.value)}
+              />
+            )}
+          </Field>
+          <Button
             disabled={!selectedScheduleResourceId || isLoadingResourceSchedule}
             onClick={onLoadResourceSchedule}
           >
             {isLoadingResourceSchedule ? 'Loading...' : 'Update schedule'}
-          </button>
+          </Button>
         </div>
 
-        {resourceScheduleMessage && (
-          <p className="status-message">{resourceScheduleMessage}</p>
-        )}
-        {reservationNotice && (
-          <Alert tone={reservationNotice.tone}>{reservationNotice.text}</Alert>
-        )}
-        {reservationValidationMessage && (
-          <p className="status-message" role="alert">
-            {reservationValidationMessage}
-          </p>
-        )}
+        {resourceScheduleMessage && <Alert tone="danger">{resourceScheduleMessage}</Alert>}
+        {reservationNotice && <Alert tone={reservationNotice.tone}>{reservationNotice.text}</Alert>}
+        {reservationValidationMessage && <Alert tone="danger">{reservationValidationMessage}</Alert>}
         {!selectedScheduleResourceId && (
-          <p className="status-message">Choose a resource to see bookable times.</p>
+          <EmptyState title="Choose a resource to see bookable times." />
         )}
-        {isLoadingResourceSchedule && (
-          <p className="status-message" role="status">
-            Loading resource schedule...
-          </p>
-        )}
+        {isLoadingResourceSchedule && <LoadingState>Loading resource schedule...</LoadingState>}
         {resourceSchedule &&
           !isLoadingResourceSchedule &&
           resourceSchedule.bookableSlots.length === 0 && (
-            <p className="status-message">No bookable times found.</p>
+            <EmptyState
+              title="No bookable times found."
+              description="Try another date range."
+            />
           )}
         {resourceSchedule && resourceSchedule.bookableSlots.length > 0 && (
           <>
-            <div className="selected-resource-heading">
-              <span className="label-text">Selected resource</span>
+            <p className="booking-selected">
+              <span>Selected resource</span>
               <strong>{resourceSchedule.resourceName}</strong>
-            </div>
-            <div className="schedule-day-grid" aria-label="Bookable schedule">
+            </p>
+            <div className="schedule-day-grid" role="group" aria-label="Bookable schedule">
               {scheduleDays.map((day) => (
                 <section
                   key={day.date}
@@ -187,86 +191,78 @@ export function ResourceBookingSection({
                 >
                   <div className="schedule-day-heading">
                     <h3 id={`schedule-day-${day.date}`}>{day.label}</h3>
-                    <span>{day.bookableSlots.length} open</span>
+                    <Badge tone="success">{day.bookableSlots.length} open</Badge>
                   </div>
 
                   {day.reservedSlots.length > 0 && (
-                    <div className="reserved-slots" aria-label="Reserved times">
+                    <ul className="reserved-slots" aria-label="Reserved times">
                       {day.reservedSlots.map((slot) => (
-                        <span key={`${slot.startTime}-${slot.endTime}`}>
+                        <li key={`${slot.startTime}-${slot.endTime}`}>
                           Reserved {formatTimeRange(slot.startTime, slot.endTime)}
-                        </span>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
 
                   <ul className="schedule-slot-list">
                     {day.bookableSlots.map((slot) => {
                       const slotKey = getSlotKey(slot)
                       const isSelectingSlot = selectedScheduleSlotKey === slotKey
+                      const slotTimes = formatTimeRange(slot.startTime, slot.endTime)
 
                       return (
                         <li key={slotKey} className="schedule-slot">
-                          <div className="item-main">
-                            <strong>
-                              {formatTimeRange(slot.startTime, slot.endTime)}
-                            </strong>
-                          </div>
-                          <div className="resource-actions">
-                            {isSelectingSlot ? (
-                              <div className="reservation-time-form">
-                                <label>
-                                  <span className="label-text">Start</span>
-                                  <input
+                          <strong>{slotTimes}</strong>
+                          {isSelectingSlot ? (
+                            <div className="reservation-time-form">
+                              <Field label="Start">
+                                {(props) => (
+                                  <Input
+                                    {...props}
                                     type="datetime-local"
                                     min={formatDateTimeInput(slot.startTime)}
                                     max={formatDateTimeInput(slot.endTime)}
                                     value={reservationStartTime}
-                                    onChange={(event) =>
-                                      setReservationStartTime(event.target.value)
-                                    }
+                                    onChange={(event) => setReservationStartTime(event.target.value)}
                                   />
-                                </label>
-                                <label>
-                                  <span className="label-text">End</span>
-                                  <input
+                                )}
+                              </Field>
+                              <Field label="End">
+                                {(props) => (
+                                  <Input
+                                    {...props}
                                     type="datetime-local"
                                     min={formatDateTimeInput(slot.startTime)}
                                     max={formatDateTimeInput(slot.endTime)}
                                     value={reservationEndTime}
-                                    onChange={(event) =>
-                                      setReservationEndTime(event.target.value)
-                                    }
+                                    onChange={(event) => setReservationEndTime(event.target.value)}
                                   />
-                                </label>
-                                <div className="reservation-time-actions">
-                                  <button
-                                    type="button"
-                                    onClick={onCancelScheduleSlotSelection}
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={reservingScheduleSlotKey === slotKey}
-                                    onClick={() => onReserveScheduleSlot(slot)}
-                                  >
-                                    {reservingScheduleSlotKey === slotKey
-                                      ? 'Reserving...'
-                                      : 'Reserve'}
-                                  </button>
-                                </div>
+                                )}
+                              </Field>
+                              <div className="reservation-time-actions">
+                                <Button size="sm" variant="ghost" onClick={onCancelScheduleSlotSelection}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="primary"
+                                  disabled={reservingScheduleSlotKey === slotKey}
+                                  onClick={() => onReserveScheduleSlot(slot)}
+                                >
+                                  {reservingScheduleSlotKey === slotKey ? 'Reserving...' : 'Reserve'}
+                                </Button>
                               </div>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={reservingScheduleSlotKey === slotKey}
-                                onClick={() => onSelectScheduleSlot(slot)}
-                              >
-                                Choose time
-                              </button>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              aria-label={`Choose time ${day.label} ${slotTimes}`}
+                              disabled={reservingScheduleSlotKey === slotKey}
+                              onClick={() => onSelectScheduleSlot(slot)}
+                            >
+                              Choose time
+                            </Button>
+                          )}
                         </li>
                       )
                     })}
@@ -276,7 +272,7 @@ export function ResourceBookingSection({
             </div>
           </>
         )}
-      </section>
-    </>
+      </Card>
+    </div>
   )
 }

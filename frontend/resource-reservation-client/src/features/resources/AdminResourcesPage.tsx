@@ -4,14 +4,15 @@ import { useConfirm } from '../../components/confirmContext'
 import { ResourceFormSection } from '../../components/ResourceFormSection'
 import { ResourcesSection } from '../../components/ResourcesSection'
 import {
+  errorNotice,
   getErrorMessage,
   getFormErrors,
-  getQueryErrorMessage,
   hasFieldErrors,
   type FieldErrors,
 } from '../../lib/errors'
 import { emptyToNull } from '../../lib/text'
 import { validateResourceForm, type ResourceField } from '../../lib/validation'
+import type { Notice } from '../../ui/Alert'
 import { useDeleteResource, useResources, useSaveResource } from './resourceQueries'
 
 const resourceFields: readonly ResourceField[] = ['name', 'description', 'location']
@@ -22,7 +23,7 @@ export function AdminResourcesPage() {
   const saveResource = useSaveResource()
   const deleteResource = useDeleteResource()
   const confirm = useConfirm()
-  const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [editingResourceId, setEditingResourceId] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -43,7 +44,7 @@ export function AdminResourcesPage() {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setMessage('')
+    setNotice(null)
     setFormError('')
 
     const validationErrors = validateResourceForm(name)
@@ -76,7 +77,7 @@ export function AdminResourcesPage() {
       }
 
       resetForm()
-      setMessage(editingResourceId ? 'Resource updated.' : 'Resource created.')
+      setNotice({ tone: 'success', text: editingResourceId ? 'Resource updated.' : 'Resource created.' })
     } catch (error) {
       const formErrors = getFormErrors(error, resourceFields)
       setFieldErrors(formErrors.fieldErrors)
@@ -90,7 +91,7 @@ export function AdminResourcesPage() {
     setDescription(resource.description ?? '')
     setLocation(resource.location ?? '')
     setIsActive(resource.isActive)
-    setMessage('')
+    setNotice(null)
     setFieldErrors({})
     setFormError('')
   }
@@ -101,7 +102,7 @@ export function AdminResourcesPage() {
       message: `Delete resource "${resource.name}"?`,
       confirmLabel: 'Delete resource',
       onConfirm: async () => {
-        setMessage('')
+        setNotice(null)
 
         try {
           await deleteResource.mutateAsync(resource.id)
@@ -110,9 +111,9 @@ export function AdminResourcesPage() {
             resetForm()
           }
 
-          setMessage('Resource deleted.')
+          setNotice({ tone: 'success', text: 'Resource deleted.' })
         } catch (error) {
-          setMessage(getErrorMessage(error))
+          setNotice({ tone: 'danger', text: getErrorMessage(error) })
         }
       },
     })
@@ -138,10 +139,9 @@ export function AdminResourcesPage() {
       />
 
       <ResourcesSection
-        currentUserRole="Admin"
         resources={resourcesQuery.data ?? []}
         isLoadingResources={resourcesQuery.isPending}
-        resourceMessage={message || getQueryErrorMessage(resourcesQuery.error)}
+        notice={notice ?? errorNotice(resourcesQuery.error)}
         deletingResourceId={deleteResource.isPending ? deleteResource.variables : null}
         onEditResource={handleEdit}
         onDeleteResource={handleDelete}

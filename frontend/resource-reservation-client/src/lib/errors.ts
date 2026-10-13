@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client'
+import type { Notice } from '../ui/Alert'
 
 export function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -48,4 +49,9 @@ export function getFormErrors<Field extends string>(
 
 export function hasFieldErrors(fieldErrors: FieldErrors<string>) {
   return Object.values(fieldErrors).some(Boolean)
+}
+
+// An error as a message for an Alert, or null when there is no error.
+export function errorNotice(error: unknown): Notice | null {
+  return error ? { tone: 'danger', text: getErrorMessage(error) } : null
 }

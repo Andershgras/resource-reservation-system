@@ -8,6 +8,7 @@ import * as resourcesApi from '../../api/resourcesApi'
 import type { ReservationResponse } from '../../api/types'
 import { createQueryClient } from '../../app/queryClient'
 import { ConfirmProvider } from '../../components/ConfirmProvider'
+import { expectNoAxeViolations } from '../../test/axe'
 import { AdminReservationsPage } from './AdminReservationsPage'
 
 vi.mock('../../api/reservationsApi')
@@ -62,7 +63,7 @@ async function shownReservations() {
   const list = await screen.findByRole('list')
 
   return within(list).getAllByRole('listitem').map((item) => within(item).getByRole('strong').textContent
-    + ' ' + item.querySelector('.reservation-status')?.textContent)
+    + ' ' + within(item).getByText(/^(Active|Cancelled)$/).textContent)
 }
 
 describe('AdminReservationsPage', () => {
@@ -80,6 +81,20 @@ describe('AdminReservationsPage', () => {
 
     expect(firstReservation).toHaveTextContent('Test User (user@example.com)')
     expect(firstReservation).not.toHaveTextContent('User ID')
+  })
+
+  it('has no accessibility violations with filters and reservations shown', async () => {
+    renderPage('/admin/reservations')
+    await shownReservations()
+
+    await expectNoAxeViolations(document.body)
+  })
+
+  it('names each cancel button after its reservation', async () => {
+    renderPage('/admin/reservations')
+    await shownReservations()
+
+    expect(screen.getByRole('button', { name: 'Cancel Room A, Tue 15 Jan 2030, 09:00–10:00' })).toBeInTheDocument()
   })
 
   it('applies the filters in the address', async () => {

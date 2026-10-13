@@ -5,13 +5,14 @@ import { AvailabilityRulesSection } from '../../components/AvailabilityRulesSect
 import { useConfirm } from '../../components/confirmContext'
 import { toTimeOfDay } from '../../lib/dates'
 import {
+  errorNotice,
   getErrorMessage,
   getFormErrors,
-  getQueryErrorMessage,
   hasFieldErrors,
   type FieldErrors,
 } from '../../lib/errors'
 import { validateAvailabilityRuleForm, type AvailabilityRuleField } from '../../lib/validation'
+import type { Notice } from '../../ui/Alert'
 import { useResources } from '../resources/resourceQueries'
 import {
   useAvailabilityRules,
@@ -28,7 +29,7 @@ export function AdminWeeklySchedulePage() {
   const saveRule = useSaveAvailabilityRule()
   const deleteRule = useDeleteAvailabilityRule()
   const confirm = useConfirm()
-  const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<AvailabilityRuleField>>({})
   const [formError, setFormError] = useState('')
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
@@ -68,7 +69,7 @@ export function AdminWeeklySchedulePage() {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setMessage('')
+    setNotice(null)
     setFormError('')
 
     const validationErrors = validateAvailabilityRuleForm(resourceId, dayOfWeek, startTime, endTime)
@@ -89,7 +90,10 @@ export function AdminWeeklySchedulePage() {
         },
       })
       resetForm()
-      setMessage(editingRuleId ? 'Weekly schedule updated.' : 'Weekly schedule created.')
+      setNotice({
+        tone: 'success',
+        text: editingRuleId ? 'Weekly schedule updated.' : 'Weekly schedule created.',
+      })
     } catch (error) {
       const formErrors = getFormErrors(error, ruleFields)
       setFieldErrors(formErrors.fieldErrors)
@@ -103,7 +107,7 @@ export function AdminWeeklySchedulePage() {
     setDayOfWeek(rule.dayOfWeek.toString())
     setStartTime(toTimeOfDay(rule.startTime))
     setEndTime(toTimeOfDay(rule.endTime))
-    setMessage('')
+    setNotice(null)
     setFieldErrors({})
     setFormError('')
   }
@@ -114,7 +118,7 @@ export function AdminWeeklySchedulePage() {
       message: `Delete ${rule.dayName} schedule for "${rule.resourceName}"?`,
       confirmLabel: 'Delete weekly schedule',
       onConfirm: async () => {
-        setMessage('')
+        setNotice(null)
 
         try {
           await deleteRule.mutateAsync(rule.id)
@@ -123,9 +127,9 @@ export function AdminWeeklySchedulePage() {
             resetForm()
           }
 
-          setMessage('Weekly schedule deleted.')
+          setNotice({ tone: 'success', text: 'Weekly schedule deleted.' })
         } catch (error) {
-          setMessage(getErrorMessage(error))
+          setNotice({ tone: 'danger', text: getErrorMessage(error) })
         }
       },
     })
@@ -154,7 +158,7 @@ export function AdminWeeklySchedulePage() {
       <AvailabilityRulesSection
         availabilityRules={sortedRules}
         isLoadingAvailabilityRules={rulesQuery.isPending}
-        availabilityRuleMessage={message || getQueryErrorMessage(rulesQuery.error)}
+        notice={notice ?? errorNotice(rulesQuery.error)}
         deletingAvailabilityRuleId={deleteRule.isPending ? deleteRule.variables : null}
         onEditAvailabilityRule={handleEdit}
         onDeleteAvailabilityRule={handleDelete}
