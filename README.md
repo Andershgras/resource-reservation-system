@@ -31,9 +31,19 @@ The project intentionally stays generic. A resource can represent a meeting room
 
 ![Admin weekly schedule](docs/screenshots/admin-weekly-schedule.png)
 
-### User Resource Booking
+### User Booking Calendar
 
-![User resource-first booking flow](docs/screenshots/user-book-resource.png)
+A week of free and reserved time for one resource, with a time being chosen. A fully booked day stays visible.
+
+![Weekly booking calendar](docs/screenshots/user-book-resource.png)
+
+<table>
+<tr>
+<td><img src="docs/screenshots/user-book-resource-dark.png" alt="Booking calendar in dark mode" width="560"></td>
+<td><img src="docs/screenshots/user-book-resource-mobile.png" alt="Booking calendar on a phone, with the booking form inside the chosen day" width="220"></td>
+</tr>
+<tr><td>Dark mode</td><td>On a phone</td></tr>
+</table>
 
 ### User Reservations
 
@@ -65,9 +75,9 @@ The project intentionally stays generic. A resource can represent a meeting room
 
 - View active resources
 - Select a resource before choosing a reservation time
-- Load generated bookable times for a date range
-- View schedule-style availability grouped by day
-- Choose a time inside a bookable slot
+- See a weekly calendar of free and reserved time, Monday to Sunday, including fully booked and closed days
+- Choose a start and end inside a free period, in 15-minute steps
+- Move between weeks, or jump to a date. The address keeps the resource and week, so a link opens the same view.
 - Create reservations
 - View own reservations
 - Cancel own active reservations
@@ -89,6 +99,7 @@ The project intentionally stays generic. A resource can represent a meeting room
 - A consistent design system with light and dark mode ([ADR 0007](docs/adr/0007-design-system.md))
 - Dates and times in `en-GB` format with a 24-hour clock, always in Copenhagen time
 - Validation errors shown beside the field they belong to
+- A warning before leaving a form with unsaved changes, which never stands in the way of the session ending
 - Keyboard accessible, with a skip link, visible focus, and a confirmation dialog that keeps focus inside it
 - Works on desktop and mobile screens
 
