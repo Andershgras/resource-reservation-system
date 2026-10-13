@@ -24,7 +24,7 @@ flowchart LR
 | Layer | Folder | Responsibility |
 |---|---|---|
 | Controllers | `Controllers/` | Routing, `[Authorize]` rules, reading the current user from the token, and turning service results into HTTP responses |
-| Services | `Services/` | Business rules: availability, booking, cancellation, authentication, tokens and scheduling time |
+| Services | `Services/` | Business rules: availability, booking policies, booking, moving and cancellation, authentication, tokens and scheduling time |
 | Data | `Data/`, `Models/`, `Migrations/` | EF Core model, database constraints and migrations |
 | Contracts | `DTOs/` | Request and response shapes, with DataAnnotations validation |
 | Configuration | `Configuration/` | Typed settings, validated when the app starts |
@@ -43,7 +43,7 @@ Services get the caller as a plain `CurrentUser(UserId, IsAdmin)` value, so they
 
 ## Creating a reservation
 
-The most important flow. The per-resource lock is what prevents double-booking ([ADR 0002](adr/0002-reservation-concurrency.md)).
+The most important flow. The per-resource lock is what prevents double-booking, and the per-user lock keeps the cap on upcoming bookings ([ADR 0002](adr/0002-reservation-concurrency.md)). The booking rules come from `BookingPolicy`, which the schedule uses too ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
 
 ```mermaid
 sequenceDiagram
@@ -56,32 +56,45 @@ sequenceDiagram
     User->>C: POST /api/reservations (JWT)
     C->>S: CreateAsync(request, userId)
     S->>DB: user exists? resource exists and active?
-    S->>S: end after start? starts in the future (Copenhagen time)?
+    S->>S: end after start? booking rules: notice, horizon, duration (Copenhagen time)
     S->>A: IsWithinAvailabilityAsync
     A->>DB: one-off windows + weekly rules
     A-->>S: fits inside one merged interval?
-    S->>DB: BEGIN TRAN + sp_getapplock("reservation:resource:{id}")
-    alt lock not granted within timeout
+    S->>DB: BEGIN TRAN + sp_getapplock("reservation:user:{id}"), then ("reservation:resource:{id}")
+    alt a lock not granted within timeout
         S-->>C: Unavailable
         C-->>User: 503 + Retry-After: 5
-    else lock granted
+    else both locks granted
+        S->>DB: user already at the cap of upcoming bookings?
         S->>DB: overlapping active reservation?
-        alt overlap
+        alt at the cap
+            S-->>C: Validation (transaction rolled back)
+            C-->>User: 400 problem details
+        else overlap
             S-->>C: Conflict (transaction rolled back)
             C-->>User: 409 problem details
         else free
-            S->>DB: INSERT reservation, COMMIT (releases lock)
+            S->>DB: INSERT reservation with CreatedAt, COMMIT (releases locks)
             S-->>C: reservation
             C-->>User: 201 Created
         end
     end
 ```
 
+Moving a booking (`PUT /api/reservations/{id}`) follows the same steps, with three differences:
+
+- It first checks the `version` the client sent.
+- It takes only the resource lock.
+- It ignores the booking's own old time when checking for overlaps.
+
+The `UPDATE` includes the `rowversion` read with the booking, so a change saved by someone else in between returns 409 rather than being overwritten. Cancelling works the same way.
+
 ## Data model
 
 ```mermaid
 erDiagram
     USER ||--o{ RESERVATION : makes
+    USER |o--o{ RESERVATION : cancels
     RESOURCE ||--o{ RESERVATION : "is booked by"
     RESOURCE ||--o{ AVAILABILITY : "has one-off windows"
     RESOURCE ||--o{ AVAILABILITY_RULE : "has weekly rules"
@@ -99,6 +112,10 @@ erDiagram
         string Description "max 500"
         string Location "max 200"
         bool IsActive
+        int MinDurationMinutes "null: the default"
+        int MaxDurationMinutes "null: the default"
+        int MinLeadTimeMinutes "null: the default"
+        int MaxAdvanceDays "null: the default"
     }
     AVAILABILITY {
         int Id PK
@@ -120,6 +137,11 @@ erDiagram
         datetime StartTime
         datetime EndTime
         string Status "Active or Cancelled"
+        datetimeoffset CreatedAt "UTC, null before Milestone 6"
+        datetimeoffset UpdatedAt "UTC, when the time last changed"
+        datetimeoffset CancelledAt "UTC"
+        int CancelledByUserId FK
+        rowversion Version "rejects out-of-date changes"
     }
 ```
 
@@ -127,10 +149,11 @@ The database enforces the integrity rules as well:
 
 - a unique, normalised email
 - a check constraint on reservation status
+- a check constraint that keeps resource booking rule overrides in range, with the minimum duration no longer than the maximum
 - an index for the overlap query
 - `RESTRICT` on reservation foreign keys, so deleting a user or resource can never remove booking history
 
-All times are wall-clock times in the configured scheduling time zone, `Europe/Copenhagen` ([ADR 0001](adr/0001-time-zone-convention.md)).
+Booking and availability times are wall-clock times in the configured scheduling time zone, `Europe/Copenhagen` ([ADR 0001](adr/0001-time-zone-convention.md)). Reservation audit times are UTC instants.
 
 ## Cross-cutting concerns
 
@@ -203,7 +226,8 @@ How state is handled:
 
 - **Server data** is cached by query key. Each change invalidates the data it affects and resolves once the data on screen has reloaded. For example, cancelling a reservation refreshes the reservation lists and the booking schedules.
 - **Logging in or out**, or a session expiring, clears the cache.
-- **Filters and the booking selection** live in the address, such as `/book?resource=3&week=2030-01-14`. A reload or a shared link shows the same view, and invalid values are ignored. Links from before the calendar, with `from` and `to`, open the week of their `from` date.
+- **Filters and the booking selection** live in the address, such as `/book?resource=3&week=2030-01-14`. A reload or a shared link shows the same view, and invalid values are ignored. Links from before the calendar, with `from` and `to`, open the week of their `from` date. Moving a booking adds `&move=42`.
+- **Cancelling and moving** send the reservation's `version`, and reload the lists and calendars whether they succeed or not, so a 409 for an out-of-date copy leaves fresh data on screen.
 - **Form drafts and messages** belong to the page that shows them.
 - **Redirects around login and logout** are made only by the route guards (`RequireAuth`, `RequireLoggedOut`), and `returnTo` must be a path inside the app.
 
@@ -222,7 +246,8 @@ Styles are plain CSS. Colours, spacing, type, radii and shadows are custom prope
 `/book` shows a Monday-to-Sunday week for one resource.
 
 - **The model** (`lib/calendar.ts`) is pure and unit tested. It turns the schedule into seven days of free and reserved segments at their exact minutes, split at midnight. Each day is open, fully booked, closed or past: the API leaves out time that has gone but still returns past reservations, so past days are marked rather than shown as fully booked.
-- **Times to choose** come in 15-minute steps, plus the exact edges of the free period, because an existing reservation can end at any minute. All arithmetic is on wall-clock minutes, as in [ADR 0001](adr/0001-time-zone-convention.md).
+- **Times to choose** come in 15-minute steps, plus the exact edges of the free period, because an existing reservation can end at any minute. Only starts and ends within the resource's shortest and longest booking are offered, from the rules the schedule returns. The page describes the rules in a sentence. All arithmetic is on wall-clock minutes, as in [ADR 0001](adr/0001-time-zone-convention.md).
+- **Move mode** (`&move=42`, opened from My reservations) shows the booking instead of the resource list. It loads the schedule without that booking, so its own time shows as free. Afterwards the page returns to ordinary booking in the same week and says where the booking went. A notice belongs to the address it was shown for, which is how "Booking moved" survives that change of address.
 - **The view** (`BookingCalendar`) is one labelled section per day with its periods in order. On wide screens CSS places them on an hour grid; under 760 px it is a list of days, and the booking form opens inside the chosen day.
 - **A clash** (409) with a booking made meanwhile reloads the calendar and says so.
 
@@ -244,3 +269,4 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0005: Database migrations as a separate deployment step](adr/0005-migrations-in-deployment.md)
 - [ADR 0006: Frontend routing and server state](adr/0006-frontend-routing-and-state.md)
 - [ADR 0007: Plain CSS with design tokens and shared components](adr/0007-design-system.md)
+- [ADR 0008: Booking policies, rescheduling and reservation history](adr/0008-booking-policies-and-reservation-changes.md)

@@ -13,7 +13,10 @@ This page describes how the application protects accounts and data, and lists th
 ## Authorization
 
 - Admin-only endpoints use `[Authorize(Roles = "Admin")]`.
-- Users can only see and cancel their own reservations. The service layer checks ownership; Admins can act on any reservation.
+- Users can only see, move and cancel their own reservations. The service layer checks ownership; Admins can act on any reservation.
+- The schedule is anonymous, but leaving out a reservation that is being moved (`excludeReservationId`) needs its owner or an admin. Anyone else gets 401 or 403, as when reading the reservation itself.
+- Moves and cancellations can carry the reservation's `version`. A change based on an out-of-date copy is rejected with 409, so one person can't silently overwrite another's change ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
+- Booking rules apply to admins too. The cap on upcoming bookings limits how much of the calendar one account can hold.
 - Integration tests check that every protected endpoint returns 401 without a token, and every Admin endpoint returns 403 for a User.
 
 ## Sessions in the browser
