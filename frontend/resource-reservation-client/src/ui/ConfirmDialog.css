@@ -1,0 +1,75 @@
+/* Wraps the screens behind the dialog without adding a box of its own. */
+.confirm-scope {
+  display: contents;
+}
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--color-overlay);
+  animation: confirm-fade-in var(--duration-normal) var(--easing);
+}
+
+.confirm-dialog {
+  width: min(100%, 28rem);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  animation: confirm-rise var(--duration-normal) var(--easing);
+}
+
+.confirm-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.confirm-message {
+  color: var(--color-text);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.confirm-actions .button[aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+@keyframes confirm-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+}
+
+@media (max-width: 760px) {
+  .confirm-dialog {
+    padding: var(--space-5);
+  }
+
+  .confirm-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-actions .button {
+    width: 100%;
+  }
+}

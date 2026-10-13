@@ -581,42 +581,6 @@ select:focus-visible {
   color: var(--text-h);
 }
 
-.confirm-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgb(15 23 42 / 54%);
-}
-
-.confirm-dialog {
-  width: min(100%, 380px);
-  display: grid;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.confirm-dialog h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.confirm-dialog p {
-  margin: 0;
-}
-
-.confirm-actions {
-  display: flex;
-  justify-content: end;
-  gap: 8px;
-}
-
 @media (max-width: 760px) {
   .app-shell {
     padding: 22px 14px;
@@ -663,8 +627,7 @@ select:focus-visible {
     flex-direction: column;
   }
 
-  .reservation-time-actions,
-  .confirm-actions {
+  .reservation-time-actions {
     flex-direction: column-reverse;
   }
 }

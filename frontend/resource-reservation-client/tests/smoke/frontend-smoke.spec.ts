@@ -161,7 +161,7 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(sectionByHeading(page, 'My reservations').getByText('Smoke Test Room Updated')).toBeVisible()
 
   await sectionByHeading(page, 'My reservations').getByRole('button', { name: 'Cancel' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
   await selectRoleTab(page, 'Book resource')
@@ -183,24 +183,24 @@ test('main frontend reservation flow', async ({ page }) => {
       .first(),
   ).toBeVisible()
   await adminReservationsSection.getByRole('button', { name: 'Cancel' }).first().click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
   await selectRoleTab(page, 'Availability')
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete availability' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete availability' }).click()
   await expect(page.getByText('Availability deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Availability').getByText('No availability found.')).toBeVisible()
 
   await selectRoleTab(page, 'Weekly schedule')
   await sectionByHeading(page, 'Weekly schedule').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete weekly schedule' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete weekly schedule' }).click()
   await expect(page.getByText('Weekly schedule deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Weekly schedule').getByText('No weekly schedule found.')).toBeVisible()
 
   await selectRoleTab(page, 'Resources')
   await sectionByHeading(page, 'Resources').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete resource' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete resource' }).click()
   await expect(page.getByText('Resource deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Resources').getByText('No resources found.')).toBeVisible()
 })
@@ -526,7 +526,7 @@ test('cancelling a reservation frees its time in the booking schedule', async ({
 
   await selectRoleTab(page, 'My reservations')
   await sectionByHeading(page, 'My reservations').getByRole('button', { name: 'Cancel' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
   await selectRoleTab(page, 'Book resource')
 
