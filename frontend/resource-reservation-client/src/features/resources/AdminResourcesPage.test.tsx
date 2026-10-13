@@ -1,12 +1,10 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import * as resourcesApi from '../../api/resourcesApi'
-import { createQueryClient } from '../../app/queryClient'
-import { ConfirmProvider } from '../../components/ConfirmProvider'
 import { expectNoAxeViolations } from '../../test/axe'
+import { renderScreen } from '../../test/renderScreen'
 import { AdminResourcesPage } from './AdminResourcesPage'
 
 vi.mock('../../api/resourcesApi')
@@ -16,13 +14,7 @@ beforeEach(() => {
 })
 
 function renderPage() {
-  return render(
-    <QueryClientProvider client={createQueryClient()}>
-      <ConfirmProvider>
-        <AdminResourcesPage />
-      </ConfirmProvider>
-    </QueryClientProvider>,
-  )
+  return renderScreen(<AdminResourcesPage />)
 }
 
 function nameInput() {
@@ -77,5 +69,38 @@ describe('AdminResourcesPage form', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create resource' }))
 
     await expectNoAxeViolations(container)
+  })
+})
+
+describe('AdminResourcesPage unsaved changes', () => {
+  it('asks before leaving a half-filled form, and not after saving it', async () => {
+    vi.mocked(resourcesApi.createResource).mockResolvedValue(
+      { id: 5, name: 'Room A', description: null, location: null, isActive: true },
+    )
+    renderPage()
+    await userEvent.type(nameInput(), 'Room A')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Go elsewhere' }))
+    expect(screen.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Stay on page' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create resource' }))
+    expect(await screen.findByText('Resource created.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'Go elsewhere' }))
+
+    expect(screen.getByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
+  })
+
+  it('treats an edit form as unchanged until a value differs from the resource', async () => {
+    vi.mocked(resourcesApi.getResources).mockResolvedValue([
+      { id: 1, name: 'Room A', description: 'Big', location: null, isActive: true },
+    ])
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Room A' }))
+
+    await userEvent.click(screen.getByRole('link', { name: 'Go elsewhere' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
   })
 })
