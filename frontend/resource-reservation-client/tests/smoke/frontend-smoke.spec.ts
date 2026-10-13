@@ -85,6 +85,7 @@ interface ResourceScheduleResponse {
   policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
+  closedSlots: { startTime: string; endTime: string; reasons: string[] }[]
 }
 
 interface ReservationResponse {
@@ -1394,6 +1395,7 @@ function buildResourceSchedule(
             ),
         ),
     reservedSlots,
+    closedSlots: [],
   }
 }
 

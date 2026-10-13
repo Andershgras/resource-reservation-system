@@ -49,6 +49,14 @@
     var(--color-surface-muted);
 }
 
+/* Closed time has a dashed border as well as its colour. */
+.calendar-swatch-closed,
+.calendar-segment-closed .calendar-segment-body {
+  border-color: var(--color-warning-border);
+  border-style: dashed;
+  background: var(--color-warning-soft);
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr));
@@ -188,6 +196,14 @@ button.calendar-segment-body[aria-pressed='true'] {
 
 .calendar-segment-reserved .calendar-segment-body {
   color: var(--color-text);
+}
+
+.calendar-segment-closed .calendar-segment-body {
+  color: var(--color-warning-soft-text);
+}
+
+.calendar-segment-reason {
+  font-style: italic;
 }
 
 /* Phones and narrow windows: a list of days, each with its periods. */

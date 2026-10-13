@@ -43,7 +43,7 @@ export function weekDates(weekStart: string) {
 }
 
 export interface CalendarSegment {
-  kind: 'available' | 'reserved'
+  kind: 'available' | 'reserved' | 'closed'
   // The part of the period on this day.
   start: string
   end: string
@@ -53,6 +53,8 @@ export interface CalendarSegment {
   // The whole bookable period, which may continue into the next day. A
   // booking can be made anywhere inside it.
   interval: BookableSlotResponse
+  // Why a closed period is closed.
+  reasons?: string[]
 }
 
 // Tells segments apart, such as the one being booked.
@@ -70,7 +72,11 @@ export interface CalendarDay {
 }
 
 // Splits a period at midnight into one piece per day it touches.
-function splitByDay(kind: CalendarSegment['kind'], interval: BookableSlotResponse): CalendarSegment[] {
+function splitByDay(
+  kind: CalendarSegment['kind'],
+  interval: BookableSlotResponse,
+  details: Partial<CalendarSegment> = {},
+): CalendarSegment[] {
   const start = toWallClockMinutes(interval.startTime)
   const end = toWallClockMinutes(interval.endTime)
 
@@ -92,6 +98,7 @@ function splitByDay(kind: CalendarSegment['kind'], interval: BookableSlotRespons
         startMinute: pieceStart - dayStart,
         endMinute: pieceEnd - dayStart,
         interval,
+        ...details,
       })
     }
   }
@@ -99,11 +106,12 @@ function splitByDay(kind: CalendarSegment['kind'], interval: BookableSlotRespons
   return segments
 }
 
-// The seven days of a week, each with its free and reserved time in order.
-// Every day is shown: a day with only reservations is fully booked, a day with
-// neither has no opening hours, and a day before today is past, because the
-// schedule leaves out time that has gone. Periods that can't be read, or that
-// end before they start, are left out.
+// The seven days of a week, each with its free, reserved and closed time in
+// order. Every day is shown: a day with reservations but no free time is fully
+// booked, a day with neither is closed, whether it has no opening hours or a
+// closure takes them, and a day before today is past, because the schedule
+// leaves out time that has gone. Periods that can't be read, or that end
+// before they start, are left out.
 export function buildCalendarWeek(
   schedule: ResourceScheduleResponse | null,
   weekStart: string,
@@ -114,6 +122,8 @@ export function buildCalendarWeek(
     ? [
         ...schedule.bookableSlots.flatMap((slot) => splitByDay('available', slot)),
         ...schedule.reservedSlots.flatMap((slot) => splitByDay('reserved', slot)),
+        ...schedule.closedSlots.flatMap((slot) =>
+          splitByDay('closed', slot, { reasons: slot.reasons })),
       ]
     : []
 
@@ -127,11 +137,12 @@ export function buildCalendarWeek(
       (first, second) => first.startMinute - second.startMinute || first.endMinute - second.endMinute,
     )
     const hasAvailable = daySegments.some((segment) => segment.kind === 'available')
+    const hasReserved = daySegments.some((segment) => segment.kind === 'reserved')
     const status: CalendarDayStatus = hasAvailable
       ? 'open'
       : date < today
         ? 'past'
-        : daySegments.length > 0
+        : hasReserved
           ? 'fullyBooked'
           : 'closed'
 

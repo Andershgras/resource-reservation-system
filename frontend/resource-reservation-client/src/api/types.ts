@@ -75,6 +75,14 @@ export interface ReservedSlotResponse {
   endTime: string
 }
 
+// Opening hours a closure takes away, with the reason of each closure that
+// covers them.
+export interface ClosedSlotResponse {
+  startTime: string
+  endTime: string
+  reasons: string[]
+}
+
 export interface ResourceScheduleResponse {
   resourceId: number
   resourceName: string
@@ -83,6 +91,7 @@ export interface ResourceScheduleResponse {
   policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
+  closedSlots: ClosedSlotResponse[]
 }
 
 export interface AvailabilityResponse {

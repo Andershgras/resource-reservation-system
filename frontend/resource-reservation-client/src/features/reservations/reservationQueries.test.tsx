@@ -39,6 +39,7 @@ function schedule(reservedSlots: ResourceScheduleResponse['reservedSlots']): Res
     policy: testPolicy,
     bookableSlots: [],
     reservedSlots,
+    closedSlots: [],
   }
 }
 

@@ -72,7 +72,7 @@ export function BookingPage() {
   const resourcesQuery = useResources()
   const activeResources = (resourcesQuery.data ?? []).filter((resource) => resource.isActive)
   const selection = bookingSelectionFor(search, resourcesQuery.data)
-  const scheduleQuery = useResourceSchedule(selection)
+  const scheduleQuery = useResourceSchedule(selection, { live: true })
   const createReservation = useCreateReservation()
   const rescheduleReservation = useRescheduleReservation()
   const isMoving = selection.moveReservationId !== null

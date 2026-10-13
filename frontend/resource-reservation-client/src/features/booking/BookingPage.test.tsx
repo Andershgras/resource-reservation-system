@@ -1,6 +1,7 @@
+import { focusManager } from '@tanstack/react-query'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import * as reservationsApi from '../../api/reservationsApi'
 import * as resourcesApi from '../../api/resourcesApi'
@@ -31,6 +32,7 @@ function weekSchedule(overrides: Partial<ResourceScheduleResponse> = {}): Resour
       { startTime: '2030-01-15T10:07:00', endTime: '2030-01-15T11:23:00' },
       { startTime: '2030-01-16T08:00:00', endTime: '2030-01-16T16:00:00' },
     ],
+    closedSlots: [],
     ...overrides,
   }
 }
@@ -345,5 +347,57 @@ describe('BookingPage moving a booking', () => {
     await chooseTuesdayMorning()
 
     await expectNoAxeViolations(container)
+  })
+})
+
+describe('BookingPage closures and freshness', () => {
+  it('shows closed time with its reasons', async () => {
+    vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(weekSchedule({
+      closedSlots: [{ startTime: '2030-01-17T10:00:00', endTime: '2030-01-17T12:00:00', reasons: ['Repairs', 'Cleaning'] }],
+    }))
+    renderBooking()
+
+    const thursday = await screen.findByRole('region', { name: 'Thu 17 Jan' })
+
+    expect(within(thursday).getByRole('listitem')).toHaveTextContent('Closed 10:00–12:00 Repairs; Cleaning')
+    expect(within(thursday).getByText('Closed', { selector: '.calendar-day-status' })).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Legend' })).getByText('Closed')).toBeInTheDocument()
+  })
+
+  describe('refreshing', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      focusManager.setFocused(undefined)
+    })
+
+    it('reloads every minute while the page is visible, keeping the week and the time being chosen', async () => {
+      const { router } = renderBooking()
+      await chooseTuesdayMorning()
+      vi.mocked(resourcesApi.getResourceSchedule).mockClear()
+
+      await act(() => vi.advanceTimersByTimeAsync(60_000))
+
+      await waitFor(() => expect(resourcesApi.getResourceSchedule)
+        .toHaveBeenCalledWith(1, '2030-01-14', '2030-01-20', undefined))
+      expect(router.state.location.search).toBe('?resource=1&week=2030-01-14')
+      expect(screen.getByRole('combobox', { name: 'Start' })).toBeInTheDocument()
+    })
+
+    it('waits while the window is in the background, and reloads when it comes back', async () => {
+      renderBooking()
+      await screen.findByRole('region', { name: 'Tue 15 Jan' })
+      vi.mocked(resourcesApi.getResourceSchedule).mockClear()
+
+      act(() => focusManager.setFocused(false))
+      await act(() => vi.advanceTimersByTimeAsync(180_000))
+      expect(resourcesApi.getResourceSchedule).not.toHaveBeenCalled()
+
+      act(() => focusManager.setFocused(true))
+      await waitFor(() => expect(resourcesApi.getResourceSchedule).toHaveBeenCalledTimes(1))
+    })
   })
 })

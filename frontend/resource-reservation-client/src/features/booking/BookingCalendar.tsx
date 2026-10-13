@@ -22,7 +22,7 @@ const statusLabels: Record<CalendarDayStatus, string> = {
   past: 'Past',
 }
 
-// A week of free and reserved time. Each day is a section with its periods in
+// A week of free, reserved and closed time. Each day is a section with its periods in
 // time order, so it reads in order without styles and on small screens. On
 // wide screens each period is placed on an hour grid by its exact minutes.
 export function BookingCalendar({
@@ -41,6 +41,7 @@ export function BookingCalendar({
       <ul className="calendar-legend" aria-label="Legend">
         <li><span className="calendar-swatch calendar-swatch-available" aria-hidden="true" />Available</li>
         <li><span className="calendar-swatch calendar-swatch-reserved" aria-hidden="true" />Reserved</li>
+        <li><span className="calendar-swatch calendar-swatch-closed" aria-hidden="true" />Closed</li>
       </ul>
 
       <div className="calendar-grid">
@@ -109,6 +110,18 @@ function SegmentContent({ segment, isSelected, onSelect }: {
   onSelect: (segment: CalendarSegment) => void
 }) {
   const times = formatTimeRange(segment.start, segment.end)
+
+  if (segment.kind === 'closed') {
+    return (
+      <p className="calendar-segment-body">
+        <span className="calendar-segment-kind">Closed</span>{' '}
+        <span className="calendar-segment-times">{times}</span>
+        {segment.reasons && segment.reasons.length > 0 && (
+          <>{' '}<span className="calendar-segment-reason">{segment.reasons.join('; ')}</span></>
+        )}
+      </p>
+    )
+  }
 
   if (segment.kind === 'reserved') {
     return (
