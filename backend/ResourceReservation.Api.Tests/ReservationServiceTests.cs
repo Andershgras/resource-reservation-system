@@ -522,6 +522,70 @@ public class ReservationServiceTests
         Assert.True(result.IsSuccess);
     }
 
+    [Fact]
+    public async Task CreateReservation_WhenUserHasTheMostUpcomingBookings_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 9, 30, 0),
+            ReservationStatuses.Active);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 30, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context, configurePolicy: policy => policy.MaxActiveReservationsPerUser = 2);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 11, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
+        }, user.Id);
+
+        AssertError(
+            result,
+            ServiceErrorKind.Validation,
+            "You already have 2 upcoming bookings, the most allowed. Cancel one before booking another.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_DoesNotCountCancelledOrFinishedBookingsTowardsTheCap()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var otherUser = await SeedUserAsync(context);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Cancelled);
+        // Ended before the test clock's "now" of 15 January 2030, 10:00.
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 14, 9, 0, 0), new DateTime(2030, 1, 14, 10, 0, 0),
+            ReservationStatuses.Active);
+        await SeedReservationAsync(
+            context, resource.Id, otherUser.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0), new DateTime(2030, 1, 15, 10, 30, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 15, 10, 0, 0),
+            configurePolicy: policy => policy.MaxActiveReservationsPerUser = 1);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 11, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
+        }, user.Id);
+
+        Assert.True(result.IsSuccess);
+    }
+
     private static async Task<Resource> SeedResourceAsync(AppDbContext context)
     {
         var resource = new Resource
