@@ -27,7 +27,8 @@ public class AvailabilityService
 
     // Bookable time for a resource: its merged availability minus active
     // reservations, limited to the time its booking policy allows. Periods
-    // shorter than the minimum booking are left out, since nothing fits.
+    // shorter than the minimum booking are left out, since nothing fits, and
+    // so is everything when the policy can't be met.
     // A reservation being moved can be left out, so its own time shows as free.
     public async Task<ServiceResult<ResourceScheduleResponseDto>> GetScheduleAsync(
         int resourceId,
@@ -77,7 +78,9 @@ public class AvailabilityService
                         reservedSlots),
                     GetNextWholeMinute(policy.GetEarliestStart(localNow))),
                 policy.GetLatestEnd(localNow))
-            .Where(slot => (slot.EndTime - slot.StartTime).TotalMinutes >= policy.MinDurationMinutes)
+            .Where(slot =>
+                policy.CanBeMet &&
+                (slot.EndTime - slot.StartTime).TotalMinutes >= policy.MinDurationMinutes)
             .ToList();
 
         return new ResourceScheduleResponseDto

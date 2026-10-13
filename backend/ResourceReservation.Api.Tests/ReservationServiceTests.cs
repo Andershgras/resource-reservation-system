@@ -755,6 +755,93 @@ public class ReservationServiceTests
         Assert.Equal(ReservationStatuses.Active, (await context.Reservations.FindAsync(reservation.Id))!.Status);
     }
 
+    [Fact]
+    public async Task CreateAndReschedule_WhenTheResourcesRulesCantBeMet_ExplainWhy()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        // Longer than the default maximum of 8 hours, as after a default was lowered.
+        resource.MinDurationMinutes = 600;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var createResult = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        }, user.Id);
+        var rescheduleResult = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(createResult, ServiceErrorKind.Validation, BookingPolicy.CantBeMetMessage);
+        AssertError(rescheduleResult, ServiceErrorKind.Validation, BookingPolicy.CantBeMetMessage);
+    }
+
+    [Theory]
+    [InlineData(10, 0, 11, 0, "Bookings must be made at least 2 hours in advance.")]
+    [InlineData(11, 0, 11, 10, "Bookings must be at least 15 minutes long.")]
+    [InlineData(12, 0, 13, 0, "Resource is not available in this time period.")]
+    public async Task RescheduleReservation_FollowsNoticeDurationAndAvailability(
+        int startHour,
+        int startMinute,
+        int endHour,
+        int endMinute,
+        string expectedMessage)
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        resource.MinLeadTimeMinutes = 120;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0),
+            ReservationStatuses.Active);
+        // 08:30, so a booking at 10:00 is inside the two-hour notice period.
+        var service = CreateService(context, localNow: new DateTime(2030, 1, 15, 8, 30, 0));
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(
+                reservation,
+                new DateTime(2030, 1, 15, startHour, startMinute, 0),
+                new DateTime(2030, 1, 15, endHour, endMinute, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Validation, expectedMessage);
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_BeyondTheBookingHorizon_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 1, 12, 0, 0),
+            configurePolicy: policy => policy.MaxAdvanceDays = 13);
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 10, 0, 0), new DateTime(2030, 1, 15, 11, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be made up to 13 days ahead.");
+    }
+
     private static RescheduleReservationDto Move(Reservation reservation, DateTime startTime, DateTime endTime)
     {
         return new RescheduleReservationDto

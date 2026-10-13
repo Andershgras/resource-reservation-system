@@ -107,7 +107,7 @@ public class ResourcesController : ControllerBase
             MaxAdvanceDays = createResourceDto.MaxAdvanceDays
         };
 
-        if (!HasValidDurationRange(resource))
+        if (!HasRulesThatCanBeMet(resource))
         {
             return ValidationProblem();
         }
@@ -146,7 +146,7 @@ public class ResourcesController : ControllerBase
         resource.MinLeadTimeMinutes = updateResourceDto.MinLeadTimeMinutes;
         resource.MaxAdvanceDays = updateResourceDto.MaxAdvanceDays;
 
-        if (!HasValidDurationRange(resource))
+        if (!HasRulesThatCanBeMet(resource))
         {
             return ValidationProblem();
         }
@@ -198,14 +198,28 @@ public class ResourcesController : ControllerBase
         };
     }
 
-    // Compares the durations in force, so an override can't contradict a default.
-    private bool HasValidDurationRange(Resource resource)
+    // Checks the rules in force, so an override can't contradict a default or
+    // leave a resource that nothing could ever be booked on.
+    private bool HasRulesThatCanBeMet(Resource resource)
     {
         var policy = BookingPolicy.For(resource, _bookingPolicyOptions);
 
-        if (policy.MinDurationMinutes <= policy.MaxDurationMinutes)
+        if (policy.CanBeMet)
         {
             return true;
+        }
+
+        if (policy.MinDurationMinutes <= policy.MaxDurationMinutes)
+        {
+            // The notice and the shortest booking don't fit within the days ahead.
+            var field = resource.MaxAdvanceDays is not null
+                ? nameof(Resource.MaxAdvanceDays)
+                : resource.MinLeadTimeMinutes is not null
+                    ? nameof(Resource.MinLeadTimeMinutes)
+                    : nameof(Resource.MinDurationMinutes);
+            ModelState.AddModelError(field, "Allow more days ahead, or less notice, so the shortest booking fits.");
+
+            return false;
         }
 
         var message = resource.MaxDurationMinutes is null

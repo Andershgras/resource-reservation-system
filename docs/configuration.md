@@ -49,7 +49,7 @@ ReverseProxy__KnownProxies__0=10.0.0.5
 
 ### Booking rules
 
-The defaults for every resource. An admin can override the first four for a single resource, and a resource without its own value follows the default, so changing a default here changes every such resource. The rules apply to every role, and only when a booking is made or moved. Existing bookings aren't re-checked. See [ADR 0008](adr/0008-booking-policies-and-reservation-changes.md).
+The defaults for every resource. The notice plus the shortest booking must fit within the days ahead, or the API won't start. An admin can override the first four for a single resource, and a resource without its own value follows the default, so changing a default here changes every such resource. The rules apply to every role, and only when a booking is made or moved. Existing bookings aren't re-checked. See [ADR 0008](adr/0008-booking-policies-and-reservation-changes.md).
 
 | Setting | Required | Default | Notes |
 |---|---|---|---|

@@ -341,6 +341,32 @@ public class AvailabilityServiceTests
                 result.Value.Policy.MinLeadTimeMinutes, result.Value.Policy.MaxActiveReservationsPerUser));
     }
 
+    // A default changed after the override was saved, so the rules contradict
+    // each other. Nothing can be booked, and the schedule must not offer time.
+    [Fact]
+    public async Task GetResourceSchedule_WhenTheRulesCantBeMet_OffersNoTime()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        resource.MinDurationMinutes = 600;
+        await context.SaveChangesAsync();
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(0, 0),
+            new TimeOnly(23, 0));
+        var service = CreateService(context);
+
+        var result = await service.GetScheduleAsync(
+            resource.Id,
+            new DateOnly(2030, 1, 16),
+            new DateOnly(2030, 1, 16));
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.BookableSlots);
+    }
+
     [Fact]
     public void RemoveTimeAfter_TrimsAndDropsIntervalsPastTheCutoff()
     {

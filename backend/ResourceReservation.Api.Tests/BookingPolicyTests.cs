@@ -92,6 +92,35 @@ public class BookingPolicyTests
     }
 
     [Theory]
+    [InlineData(15, 480, 0, 90, true)]
+    [InlineData(600, 480, 0, 90, false)]
+    // Two days' notice plus the shortest booking can't fit in one day ahead.
+    [InlineData(15, 480, 2880, 1, false)]
+    // One day ahead always includes the whole of tomorrow, whatever the time now.
+    [InlineData(15, 480, 1425, 1, true)]
+    [InlineData(15, 480, 1426, 1, false)]
+    public void CanBeMet_IsFalseForRulesNoBookingCouldFollow(
+        int minDuration,
+        int maxDuration,
+        int leadTime,
+        int advanceDays,
+        bool expected)
+    {
+        Assert.Equal(expected, new BookingPolicy(minDuration, maxDuration, leadTime, advanceDays).CanBeMet);
+    }
+
+    [Fact]
+    public void Options_WhenNoticeAndShortestBookingDontFitInTheHorizon_AreInvalid()
+    {
+        var options = new BookingPolicyOptions { MinLeadTimeMinutes = 2880, MaxAdvanceDays = 1 };
+
+        var result = Assert.Single(Validate(options));
+        Assert.Equal(
+            "BookingPolicy:MinLeadTimeMinutes plus BookingPolicy:MinDurationMinutes must fit within BookingPolicy:MaxAdvanceDays.",
+            result.ErrorMessage);
+    }
+
+    [Theory]
     [InlineData(0, "0 minutes")]
     [InlineData(1, "1 minute")]
     [InlineData(15, "15 minutes")]

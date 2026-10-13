@@ -117,6 +117,28 @@ public class BookingPolicyTests : ApiTestBase
     }
 
     [Fact]
+    public async Task ResourceOverrides_ThatNoBookingCouldMeet_AreRejected()
+    {
+        var adminClient = await CreateAdminClientAsync();
+
+        // Two days' notice, but only one day ahead.
+        var response = await adminClient.PostAsJsonAsync("/api/resources", new CreateResourceDto
+        {
+            Name = "Room",
+            MinLeadTimeMinutes = 2880,
+            MaxAdvanceDays = 1
+        });
+
+        var problem = await ProblemAssert.IsProblemAsync<ValidationProblemDetails>(
+            response,
+            HttpStatusCode.BadRequest);
+        Assert.Equal(
+            "Allow more days ahead, or less notice, so the shortest booking fits.",
+            problem.Errors["MaxAdvanceDays"][0]);
+        Assert.Empty((await adminClient.GetFromJsonAsync<List<ResourceResponseDto>>("/api/resources"))!);
+    }
+
+    [Fact]
     public async Task DefaultHorizon_AllowsBookingsUpTo90DaysAhead()
     {
         // The shared test API allows years ahead, so this uses the real default.

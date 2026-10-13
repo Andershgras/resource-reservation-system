@@ -39,5 +39,12 @@ public class BookingPolicyOptions : IValidatableObject
                 "BookingPolicy:MinDurationMinutes cannot be greater than BookingPolicy:MaxDurationMinutes.",
                 [nameof(MinDurationMinutes), nameof(MaxDurationMinutes)]);
         }
+
+        if ((long)MinLeadTimeMinutes + MinDurationMinutes > (long)MaxAdvanceDays * 24 * 60)
+        {
+            yield return new ValidationResult(
+                "BookingPolicy:MinLeadTimeMinutes plus BookingPolicy:MinDurationMinutes must fit within BookingPolicy:MaxAdvanceDays.",
+                [nameof(MinLeadTimeMinutes), nameof(MaxAdvanceDays)]);
+        }
     }
 }

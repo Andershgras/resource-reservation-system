@@ -13,6 +13,17 @@ public sealed record BookingPolicy(
 {
     public const string StartInFutureMessage = "Reservations must start in the future.";
 
+    public const string CantBeMetMessage =
+        "This resource's booking rules can't be met, so it can't be booked. Ask an administrator to check them.";
+
+    // False when the rules contradict each other, such as a minimum longer than
+    // the maximum, or more notice than the days ahead allow. The notice and the
+    // shortest booking must fit within the horizon at any time of day: the last
+    // bookable moment is always at least MaxAdvanceDays whole days away.
+    public bool CanBeMet =>
+        MinDurationMinutes <= MaxDurationMinutes &&
+        (long)MinLeadTimeMinutes + MinDurationMinutes <= (long)MaxAdvanceDays * 24 * 60;
+
     public static BookingPolicy For(Resource resource, BookingPolicyOptions defaults)
     {
         return new BookingPolicy(
@@ -39,6 +50,11 @@ public sealed record BookingPolicy(
     // overlaps are checked separately.
     public ServiceError? Check(DateTime startTime, DateTime endTime, DateTime localNow)
     {
+        if (!CanBeMet)
+        {
+            return ServiceError.Validation(CantBeMetMessage);
+        }
+
         if (startTime < GetEarliestStart(localNow))
         {
             return ServiceError.Validation(MinLeadTimeMinutes == 0

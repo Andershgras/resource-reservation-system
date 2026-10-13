@@ -405,7 +405,7 @@ Changes in behaviour in PR 1:
 
 Follow-ups noticed during PR 1:
 - Admins can move any booking through the API, but not yet in the browser, because `/book` is for users. The admin calendar in PR 2 adds it.
-- Changing a default in configuration can make an existing resource override contradict it, such as a minimum longer than a lowered maximum. Overrides are checked when saved, not when configuration changes ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
+- Changing a default in configuration can make an existing resource override contradict it, such as a minimum longer than a lowered maximum. Such a resource offers no time and says why when booked, until an admin fixes the override ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
 
 PR 2: availability exceptions and the admin calendar
 

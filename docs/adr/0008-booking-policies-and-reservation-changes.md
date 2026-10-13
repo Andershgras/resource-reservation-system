@@ -30,7 +30,7 @@ Milestone 6 adds the rules a real booking system needs. PR 1 covers booking poli
 - **"Upcoming" bookings** for the cap are active and haven't ended yet. Cancelled and finished bookings don't count.
 - **One calculation:** `BookingPolicy.For(resource, defaults)` gives the rules in force. Booking validation and the schedule both use it, as with availability ([ADR 0002](0002-reservation-concurrency.md), audit H2). The schedule only offers time inside the notice period and the horizon, and leaves out free periods shorter than the minimum. It also returns the rules, so the calendar offers only allowed start and end times.
 - **Existing reservations are never re-checked.** A booking made before a rule existed stays active and can still be cancelled. Rules apply when a booking is made or moved.
-- **Startup validation:** the defaults must be in range, and the minimum duration can't exceed the maximum. Resource overrides are validated in the API against the rules in force, and a check constraint keeps stored overrides in range.
+- **Rules must be possible to meet** (`BookingPolicy.CanBeMet`). The minimum duration can't exceed the maximum, and the notice plus the shortest booking must fit within the days ahead, at any time of day. The last bookable moment is always at least `MaxAdvanceDays` whole days away, so that is the bound. The defaults are checked at startup. Resource overrides are checked against the rules in force when they are saved, and a check constraint keeps stored overrides in range.
 
 ### Moving a booking
 
@@ -59,4 +59,4 @@ Milestone 6 adds the rules a real booking system needs. PR 1 covers booking poli
 - The integration tests run with a 3650-day horizon, because their bookings are dated 2030. One test checks the real 90-day default with dates relative to today.
 - The cap needs its own lock: see the update to [ADR 0002](0002-reservation-concurrency.md).
 - Admins can move any booking through the API. Their screens get a calendar in Milestone 6 PR 2. Until then, moving in the browser is for users moving their own bookings.
-- Changing a default changes every resource without its own value. That's intended, but it means a configuration change can make a resource's override contradict the new default, such as a minimum longer than a lowered maximum. No booking fits then, and the admin has to fix the override. The API rejects such overrides when they are saved, but not when the configuration changes later.
+- Changing a default changes every resource without its own value. That's intended, but it means a configuration change can make a resource's override contradict the new default, such as a minimum longer than a lowered maximum. Overrides can't be re-checked when configuration changes, so the rules are also checked at run time. Such a resource offers no time in the schedule, and booking or moving returns "This resource's booking rules can't be met…" until an admin fixes the override.

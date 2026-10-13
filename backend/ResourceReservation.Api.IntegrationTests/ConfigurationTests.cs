@@ -44,6 +44,24 @@ public class ConfigurationTests : ApiTestBase
     }
 
     [Fact]
+    public void Startup_WithBookingRulesNoBookingCouldMeet_Fails()
+    {
+        using var factory = new ApiFactory(
+            Fixture.ConnectionString,
+            new Dictionary<string, string>
+            {
+                ["BookingPolicy:MinLeadTimeMinutes"] = "2880",
+                ["BookingPolicy:MaxAdvanceDays"] = "1"
+            });
+
+        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+
+        Assert.Contains(
+            "BookingPolicy:MinLeadTimeMinutes plus BookingPolicy:MinDurationMinutes must fit within BookingPolicy:MaxAdvanceDays.",
+            exception.ToString());
+    }
+
+    [Fact]
     public async Task Startup_WithValidSettings_ServesRequests()
     {
         var response = await CreateAnonymousClient().GetAsync("/api/resources");
