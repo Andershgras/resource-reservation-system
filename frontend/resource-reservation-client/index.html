@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Resource Reservation System</title>
+    <script>
+      // Applies the saved theme before the page draws, so it doesn't flash
+      // the other one. Keep in step with src/app/theme.ts.
+      try {
+        var theme = localStorage.getItem('rr-theme')
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', theme)
+        }
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

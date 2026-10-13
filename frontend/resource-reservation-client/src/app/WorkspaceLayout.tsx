@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { Outlet, useLocation } from 'react-router'
 import { useAuth, useCurrentUser } from '../auth/authContext'
 import { NavTabs, type NavTab } from '../components/NavTabs'
+import { ThemeSwitcher } from '../components/ThemeSwitcher'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { mainContentId } from '../ui/ConfirmDialog'
@@ -67,6 +68,7 @@ export function WorkspaceLayout({
               <span className="workspace-user-email">{currentUser.email}</span>
             </div>
             <Badge tone="primary">{currentUser.role}</Badge>
+            <ThemeSwitcher />
             <Button size="sm" onClick={logOut}>
               Logout
             </Button>

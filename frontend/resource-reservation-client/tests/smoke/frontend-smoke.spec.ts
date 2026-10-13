@@ -674,6 +674,39 @@ test('the confirmation dialog works with the keyboard alone', async ({ page }) =
   await expect(page.getByRole('main')).toBeFocused()
 })
 
+test('a saved theme applies before the app runs, so it never flashes', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.addInitScript(() => localStorage.setItem('rr-theme', 'dark'))
+  // Without the app's JavaScript, only index.html's own script can set the
+  // theme. The stylesheet's dark tokens key off this attribute.
+  await page.route('**/src/main.tsx', (route) => route.abort())
+
+  await page.goto('/login')
+
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})
+
+test('the theme switch overrides the device and is remembered', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/my-reservations')
+  const theme = page.getByRole('combobox', { name: 'Theme' })
+  await expect(theme).toHaveValue('system')
+
+  await theme.selectOption({ label: 'Dark' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(11, 17, 32)')
+  await expectNoAccessibilityViolations(page, 'my reservations in a chosen dark theme on a light device')
+  // Saved for the next visit, which index.html applies before the app runs.
+  expect(await page.evaluate(() => localStorage.getItem('rr-theme'))).toBe('dark')
+
+  await theme.selectOption({ label: 'System' })
+
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme')
+  expect(await page.evaluate(() => localStorage.getItem('rr-theme'))).toBeNull()
+})
+
 // Accessibility in a real browser. Unlike the unit tests in jsdom, Chromium
 // renders the page, so axe also checks colour contrast, in both themes.
 const axePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
