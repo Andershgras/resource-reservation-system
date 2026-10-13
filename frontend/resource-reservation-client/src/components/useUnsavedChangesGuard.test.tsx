@@ -96,6 +96,22 @@ describe('useUnsavedChangesGuard', () => {
     expect(router.state.location.pathname).toBe('/screen')
   })
 
+  // Stay and a new navigation before React renders again: the blocker goes
+  // from blocked to unblocked and back, and must still ask the second time.
+  it('asks again when leaving straight after choosing to stay', async () => {
+    const { router } = renderScreen(<DraftScreen />)
+    await typeDraft()
+    await userEvent.click(leaveLink())
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Stay on page' }).click()
+      void router.navigate('/elsewhere')
+    })
+
+    expect(screen.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/screen')
+  })
+
   it('does not block changes within the same screen', async () => {
     const { router } = renderScreen(<DraftScreen />)
     await typeDraft()

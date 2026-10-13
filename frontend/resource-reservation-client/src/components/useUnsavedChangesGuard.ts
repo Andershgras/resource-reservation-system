@@ -22,8 +22,13 @@ export function useUnsavedChangesGuard(hasUnsavedChanges: boolean) {
     blockerRef.current = blocker
   })
 
+  // Keyed on the blocked location, which is new for every blocked navigation.
+  // The state alone could go from blocked to unblocked and back between two
+  // renders, after a quick Stay and Back, and the second time wouldn't ask.
+  const blockedLocation = blocker.state === 'blocked' ? blocker.location : null
+
   useEffect(() => {
-    if (blocker.state !== 'blocked') {
+    if (!blockedLocation) {
       return
     }
 
@@ -36,7 +41,7 @@ export function useUnsavedChangesGuard(hasUnsavedChanges: boolean) {
       onConfirm: () => blockerRef.current.proceed?.(),
       onCancel: () => blockerRef.current.reset?.(),
     })
-  }, [blocker.state, confirm])
+  }, [blockedLocation, confirm])
 
   useEffect(() => {
     if (!isGuarding) {

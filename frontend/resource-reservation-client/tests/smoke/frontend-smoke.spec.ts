@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import path from 'node:path'
 
 type UserRole = 'Admin' | 'User'
 type ReservationStatus = 'Active' | 'Cancelled'
@@ -593,6 +594,140 @@ test('the confirmation dialog works with the keyboard alone', async ({ page }) =
   await expect(page.getByRole('main')).toBeFocused()
 })
 
+// Accessibility in a real browser. Unlike the unit tests in jsdom, Chromium
+// renders the page, so axe also checks colour contrast, in both themes.
+const axePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
+
+async function expectNoAccessibilityViolations(page: Page, screen: string) {
+  await page.addScriptTag({ path: axePath })
+  const violations = await page.evaluate(async () => {
+    const axe = (window as unknown as { axe: { run: (context: Document) => Promise<{
+      violations: { id: string; help: string; nodes: { target: string[] }[] }[]
+    }> } }).axe
+    const results = await axe.run(document)
+
+    return results.violations.map((violation) =>
+      `${violation.id}: ${violation.help} (${violation.nodes.map((node) => node.target.join(' ')).join(', ')})`)
+  })
+
+  expect(violations, `Accessibility violations on ${screen}`).toEqual([])
+}
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the main screens have no accessibility violations in ${colorScheme} mode`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' })
+    await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
+
+    // A new browser context starts logged out.
+    await page.goto('/register')
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await expect(page.getByLabel('Name')).toBeFocused()
+    await expectNoAccessibilityViolations(page, 'registration with errors')
+
+    await page.getByRole('link', { name: 'Login', exact: true }).click()
+    await login(page, 'smoke.user@example.com', 'Password123')
+    await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
+    await page.goto('/book?resource=1&week=2030-01-14')
+    const scheduleSection = sectionByHeading(page, 'Resource schedule')
+    await scheduleSection.getByRole('button', { name: /^Available Wed 16 Jan 2030/ }).click()
+    await expect(scheduleSection.getByLabel('Start', { exact: true })).toBeFocused()
+    await expectNoAccessibilityViolations(page, 'the booking calendar with a time being chosen')
+
+    // The suggested times weren't changed, so leaving doesn't ask.
+    await selectRoleTab(page, 'My reservations')
+    await expect(sectionByHeading(page, 'My reservations').getByRole('listitem')).toHaveCount(1)
+    await expectNoAccessibilityViolations(page, 'my reservations')
+
+    await page.getByRole('button', { name: 'Logout' }).click()
+    await login(page, 'admin@example.com', 'Admin1234')
+    await expect(page.getByRole('heading', { name: 'Booking operations' })).toBeVisible()
+    await page.getByRole('button', { name: 'Create resource' }).click()
+    await expectNoAccessibilityViolations(page, 'admin resources with errors')
+
+    await sectionByHeading(page, 'Resources').getByRole('button', { name: /^Delete/ }).click()
+    await expect(page.getByRole('alertdialog')).toBeVisible()
+    await expectNoAccessibilityViolations(page, 'the confirmation dialog')
+    await page.keyboard.press('Escape')
+
+    await selectRoleTab(page, 'Weekly schedule')
+    await expect(sectionByHeading(page, 'Weekly schedule').getByRole('listitem')).toHaveCount(1)
+    await expectNoAccessibilityViolations(page, 'the weekly schedule')
+
+    await selectRoleTab(page, 'Reservations')
+    await expect(sectionByHeading(page, 'Reservations').getByRole('listitem')).toHaveCount(1)
+    await expectNoAccessibilityViolations(page, 'admin reservations')
+  })
+}
+
+test('a time can be booked from the calendar with the keyboard alone', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true, seedFreeTime: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/book?resource=1&week=2030-01-14')
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  const free = scheduleSection.getByRole('button', { name: 'Available Wed 16 Jan 2030, 08:00–12:00. Choose a time' })
+  await expect(free).toBeVisible()
+
+  // Tab through the page until the free period has focus.
+  for (let presses = 0; presses < 40 && !(await free.evaluate((element) => element === document.activeElement)); presses++) {
+    await page.keyboard.press('Tab')
+  }
+  await expect(free).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(free).toHaveAttribute('aria-pressed', 'true')
+
+  const start = scheduleSection.getByLabel('Start', { exact: true })
+  await expect(start).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(start).toHaveValue('2030-01-16T08:15:00')
+  // The suggested end, 09:00, is still after the start, so it stays.
+  await expect(scheduleSection.getByLabel('End', { exact: true })).toHaveValue('2030-01-16T09:00:00')
+  await page.keyboard.press('Tab')
+  await expect(scheduleSection.getByLabel('End', { exact: true })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(scheduleSection.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(scheduleSection.getByRole('button', { name: 'Reserve' })).toBeFocused()
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByText('Reservation created: Wed 16 Jan 2030, 08:15–09:00.')).toBeVisible()
+  // Focus moves to the result, so a screen reader reads it and Tab continues from there.
+  await expect(page.locator('.booking-notice')).toBeFocused()
+})
+
+test('leaving a form with unsaved changes asks first', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  // History inside the app, so the back button stays in it.
+  await page.goto('/admin/reservations')
+  await selectRoleTab(page, 'Resources')
+  await sectionByHeading(page, 'Create resource').getByLabel('Name').fill('Half-filled room')
+
+  await selectRoleTab(page, 'Weekly schedule')
+  const dialog = page.getByRole('alertdialog', { name: 'Discard unsaved changes?' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Stay on page' })).toBeFocused()
+  await page.keyboard.press('Escape')
+
+  await expect(page).toHaveURL('/admin/resources')
+  await expect(sectionByHeading(page, 'Create resource').getByLabel('Name')).toHaveValue('Half-filled room')
+
+  await page.goBack()
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Discard changes' }).click()
+  await expect(page).toHaveURL('/admin/reservations')
+})
+
+test('a session that expires with unsaved changes still ends', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true })
+  await storeSession(page, Date.now() + 3_000, 'Admin')
+  await page.goto('/admin/resources')
+  await sectionByHeading(page, 'Create resource').getByLabel('Name').fill('Half-filled room')
+
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+})
+
 test('an unknown address shows a not-found page', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
 
@@ -678,11 +813,13 @@ async function mockApi(
     // The seeded reservation belongs to the smoke test user instead of someone else.
     seededReservationIsOwn?: boolean
     showReservedSlotAsBookable?: boolean
+    // With the seeded room: a weekly rule that opens it on Wednesdays, 08:00–12:00.
+    seedFreeTime?: boolean
   } = {},
 ) {
   let nextResourceId = options.seedOverlapReservation ? 2 : 1
   let nextAvailabilityId = options.seedOverlapReservation ? 2 : 1
-  let nextAvailabilityRuleId = 1
+  let nextAvailabilityRuleId = options.seedFreeTime ? 2 : 1
   let nextReservationId = options.seedOverlapReservation ? 2 : 1
 
   const adminUser: UserResponse = {
@@ -721,7 +858,19 @@ async function mockApi(
         },
       ]
     : []
-  let availabilityRules: AvailabilityRuleResponse[] = []
+  let availabilityRules: AvailabilityRuleResponse[] = options.seedFreeTime
+    ? [
+        {
+          id: 1,
+          resourceId: 1,
+          resourceName: 'Reserved Test Room',
+          dayOfWeek: 3,
+          dayName: 'Wednesday',
+          startTime: '08:00',
+          endTime: '12:00',
+        },
+      ]
+    : []
   let reservations: ReservationResponse[] = options.seedOverlapReservation
     ? [
         {
