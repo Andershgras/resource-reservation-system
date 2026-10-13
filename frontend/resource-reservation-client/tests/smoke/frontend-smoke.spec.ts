@@ -611,6 +611,35 @@ test('cancelling a reservation frees its time in the booking schedule', async ({
   await expect(tuesday.getByText('Fully booked')).toHaveCount(0)
 })
 
+test('a booking can be moved to a new time in the calendar', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/my-reservations')
+
+  await sectionByHeading(page, 'My reservations').getByRole('link', { name: /^Move Reserved Test Room/ }).click()
+
+  await expect(page).toHaveURL('/book?resource=1&week=2030-01-14&move=1')
+  await expect(page.getByRole('heading', { name: 'Move a booking' })).toBeVisible()
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  // The booking's own time shows as free while it is being moved.
+  const tuesday = scheduleSection.getByRole('region', { name: 'Tue 15 Jan' })
+  await expect(tuesday.getByRole('button', { name: /^Available Tue 15 Jan 2030, 09:00–11:00/ })).toBeVisible()
+  await expectNoAccessibilityViolations(page, 'moving a booking')
+
+  await scheduleSection.getByRole('button', { name: /^Available Wed 16 Jan 2030/ }).click()
+  await scheduleSection.getByLabel('Start', { exact: true }).selectOption({ label: '10:00' })
+  await scheduleSection.getByLabel('End', { exact: true }).selectOption({ label: '11:00' })
+  await scheduleSection.getByRole('button', { name: 'Move booking' }).click()
+
+  await expect(page.getByText('Booking moved to Wed 16 Jan 2030, 10:00–11:00.')).toBeVisible()
+  await expect(page).toHaveURL('/book?resource=1&week=2030-01-14')
+  await expect(scheduleSection.getByRole('region', { name: 'Wed 16 Jan' }).getByText('Reserved')).toBeVisible()
+  await expect(tuesday.getByText('Reserved')).toHaveCount(0)
+
+  await selectRoleTab(page, 'My reservations')
+  await expect(sectionByHeading(page, 'My reservations').getByText('Moved')).toBeVisible()
+})
+
 // In a real browser, making the page inert takes focus away from the button
 // that opened the dialog, so the dialog must record it beforehand.
 test('the confirmation dialog works with the keyboard alone', async ({ page }) => {
@@ -971,6 +1000,7 @@ async function mockApi(
       const resourceId = Number(resourceScheduleMatch[1])
       const fromDate = url.searchParams.get('from') ?? ''
       const toDate = url.searchParams.get('to') ?? ''
+      const excludedId = Number(url.searchParams.get('excludeReservationId') ?? 0)
 
       await route.fulfill({
         status: 200,
@@ -981,7 +1011,7 @@ async function mockApi(
           resources,
           availabilities,
           availabilityRules,
-          reservations,
+          reservations.filter((reservation) => reservation.id !== excludedId),
           options.showReservedSlotAsBookable ?? false,
         ),
       })
@@ -1176,6 +1206,42 @@ async function mockApi(
       nextReservationId += 1
       reservations = [...reservations, reservation]
       await route.fulfill({ status: 200, json: reservation })
+      return
+    }
+
+    const reservationMatch = path.match(/^\/reservations\/(\d+)$/)
+    if (reservationMatch && request.method() === 'GET') {
+      const reservation = reservations.find((item) => item.id === Number(reservationMatch[1]))
+
+      await route.fulfill(reservation
+        ? { status: 200, json: reservation }
+        : problemResponse(404, 'Not Found', 'Reservation not found.'))
+      return
+    }
+
+    if (reservationMatch && request.method() === 'PUT') {
+      const reservationId = Number(reservationMatch[1])
+      const body = await request.postDataJSON() as { startTime: string; endTime: string; version: string }
+      const current = reservations.find((item) => item.id === reservationId)
+
+      if (!current || current.version !== body.version) {
+        await route.fulfill(problemResponse(
+          409,
+          'Conflict',
+          'This reservation was changed by someone else. Reload it and try again.',
+        ))
+        return
+      }
+
+      const moved: ReservationResponse = {
+        ...current,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        updatedAt: '2030-01-11T08:00:00+00:00',
+        version: `v${nextVersion++}`,
+      }
+      reservations = reservations.map((item) => (item.id === reservationId ? moved : item))
+      await route.fulfill({ status: 200, json: moved })
       return
     }
 

@@ -256,3 +256,94 @@ describe('BookingPage calendar', () => {
     await expectNoAxeViolations(container)
   })
 })
+
+describe('BookingPage moving a booking', () => {
+  const booking = {
+    id: 42,
+    resourceId: 1,
+    resourceName: 'Room A',
+    userId: 2,
+    userName: 'User',
+    userEmail: 'user@example.com',
+    startTime: '2030-01-17T09:00:00',
+    endTime: '2030-01-17T10:00:00',
+    status: 'Active' as const,
+    ...newReservationFields,
+  }
+
+  beforeEach(() => {
+    vi.mocked(reservationsApi.getReservation).mockResolvedValue(booking)
+  })
+
+  function renderMove() {
+    return renderBooking('/book?resource=1&week=2030-01-14&move=42')
+  }
+
+  it('shows the booking and a calendar without it', async () => {
+    renderMove()
+
+    expect(await screen.findByText('Thu 17 Jan 2030, 09:00–10:00')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Move a booking' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View availability for Room A' })).not.toBeInTheDocument()
+    await waitFor(() => expect(resourcesApi.getResourceSchedule)
+      .toHaveBeenCalledWith(1, '2030-01-14', '2030-01-20', 42))
+  })
+
+  it('moves the booking with its version and returns to booking in the same week', async () => {
+    vi.mocked(reservationsApi.rescheduleReservation).mockResolvedValue({
+      ...booking,
+      startTime: '2030-01-15T08:30:00',
+      endTime: '2030-01-15T09:30:00',
+    })
+    const { router } = renderMove()
+    await screen.findByText('Thu 17 Jan 2030, 09:00–10:00')
+    await chooseTuesdayMorning()
+
+    expect(screen.getByRole('group', { name: 'Move to Room A Free Tue 15 Jan 2030, 08:00–10:07' })).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Start' }), '08:30')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'End' }), '09:30')
+    await userEvent.click(screen.getByRole('button', { name: 'Move booking' }))
+
+    expect(reservationsApi.rescheduleReservation).toHaveBeenCalledWith(42, {
+      startTime: '2030-01-15T08:30:00',
+      endTime: '2030-01-15T09:30:00',
+      version: booking.version,
+    })
+    await waitFor(() => expect(router.state.location.search).toBe('?resource=1&week=2030-01-14'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Booking moved to Tue 15 Jan 2030, 08:30–09:30.')
+    expect(screen.getByRole('button', { name: 'View availability for Room A' })).toBeInTheDocument()
+  })
+
+  it('reloads when the booking was changed meanwhile', async () => {
+    vi.mocked(reservationsApi.rescheduleReservation).mockRejectedValue(
+      new ApiError('This reservation was changed by someone else. Reload it and try again.', 409),
+    )
+    renderMove()
+    await screen.findByText('Thu 17 Jan 2030, 09:00–10:00')
+    await chooseTuesdayMorning()
+    vi.mocked(reservationsApi.getReservation).mockClear()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move booking' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This reservation was changed by someone else. Reload it and try again. The calendar has been updated.',
+    )
+    await waitFor(() => expect(reservationsApi.getReservation).toHaveBeenCalledWith(42))
+  })
+
+  it('explains when a booking cannot be moved, without a calendar to choose from', async () => {
+    vi.mocked(reservationsApi.getReservation).mockResolvedValue({ ...booking, status: 'Cancelled' })
+    renderMove()
+
+    expect(await screen.findByText("This booking is cancelled, so it can't be moved.")).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Tue 15 Jan' })).not.toBeInTheDocument()
+  })
+
+  it('has no accessibility violations while moving', async () => {
+    const { container } = renderMove()
+    await screen.findByText('Thu 17 Jan 2030, 09:00–10:00')
+    await chooseTuesdayMorning()
+
+    await expectNoAxeViolations(container)
+  })
+})

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../../api/client'
+import type { ReservationResponse } from '../../api/types'
 import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import {
   buildCalendarWeek,
@@ -14,7 +15,13 @@ import {
   type CalendarSegment,
 } from '../../lib/calendar'
 import { describeBookingRules } from '../../lib/bookingRules'
-import { addDaysToDateKey, formatDate, formatDateTimeRange, todayInSchedulingZone } from '../../lib/dates'
+import {
+  addDaysToDateKey,
+  formatDate,
+  formatDateTimeRange,
+  nowInSchedulingZone,
+  todayInSchedulingZone,
+} from '../../lib/dates'
 import { getErrorMessage, getFormErrors, type FieldErrors } from '../../lib/errors'
 import { Alert, type Notice } from '../../ui/Alert'
 import { Badge } from '../../ui/Badge'
@@ -23,12 +30,17 @@ import { Card } from '../../ui/Card'
 import { Field, Input } from '../../ui/Field'
 import { EmptyState, LoadingState } from '../../ui/States'
 import { useMediaQuery } from '../../ui/useMediaQuery'
-import { useCreateReservation } from '../reservations/reservationQueries'
+import {
+  useCreateReservation,
+  useRescheduleReservation,
+  useReservation,
+} from '../reservations/reservationQueries'
 import { useResources } from '../resources/resourceQueries'
 import { BookingCalendar } from './BookingCalendar'
 import { BookingPanel, type BookingField } from './BookingPanel'
 import { useResourceSchedule } from './bookingQueries'
 import { bookingSelectionFor, toBookingSearch, type BookingSelection } from './bookingSearch'
+import { MoveBookingCard } from './MoveBookingCard'
 import '../../components/lists.css'
 import './BookingPage.css'
 
@@ -43,7 +55,17 @@ interface Draft {
   suggestedEndTime: string
 }
 
+// A notice and the address it belongs to. It disappears when the address
+// changes, except that a booking that was moved can announce it at the
+// address the page goes to afterwards.
+interface ShownNotice {
+  selectionKey: string
+  notice: Notice
+}
+
 // /book: choose a resource, then a free time in its weekly calendar.
+// /book?…&move=42 moves an existing booking: the same calendar, with that
+// booking's own time shown as free.
 export function BookingPage() {
   const { search } = useLocation()
   const navigate = useNavigate()
@@ -52,6 +74,16 @@ export function BookingPage() {
   const selection = bookingSelectionFor(search, resourcesQuery.data)
   const scheduleQuery = useResourceSchedule(selection)
   const createReservation = useCreateReservation()
+  const rescheduleReservation = useRescheduleReservation()
+  const isMoving = selection.moveReservationId !== null
+  const reservationQuery = useReservation(selection.moveReservationId)
+  const movingReservation = isMoving ? reservationQuery.data : undefined
+  // Judged once the resources are known, since the selection needs them.
+  const moveProblem = movingReservation && resourcesQuery.data
+    ? describeMoveProblem(movingReservation, selection.resourceId)
+    : null
+  // While moving, the calendar waits until the booking is known to be movable.
+  const canChoose = !isMoving || (movingReservation !== undefined && moveProblem === null)
   const today = todayInSchedulingZone()
   const thisWeek = startOfWeek(today)
   const schedule = selection.resourceId === null ? null : scheduleQuery.data ?? null
@@ -68,9 +100,19 @@ export function BookingPage() {
   // Set when a booking finishes, so focus moves to its result once it shows.
   const focusNoticeRef = useRef(false)
   const [draft, setDraft] = useState<Draft | null>(null)
-  const [notice, setNotice] = useState<Notice | null>(null)
+  const [shownNotice, setShownNotice] = useState<ShownNotice | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<BookingField>>({})
   const [formError, setFormError] = useState('')
+
+  // When the address changes, including through the back button, a time
+  // being chosen for another week or resource is dropped.
+  const selectionKey = toBookingSearch(selection)
+  const [shownSelectionKey, setShownSelectionKey] = useState(selectionKey)
+  const notice = shownNotice?.selectionKey === selectionKey ? shownNotice.notice : null
+
+  function showNotice(next: Notice, forSelectionKey = selectionKey) {
+    setShownNotice({ selectionKey: forSelectionKey, notice: next })
+  }
 
   useEffect(() => {
     if (notice && focusNoticeRef.current) {
@@ -90,15 +132,9 @@ export function BookingPage() {
     setFormError('')
   }
 
-  // When the address changes, including through the back button, a time
-  // being chosen for another week or resource is dropped.
-  const selectionKey = toBookingSearch(selection)
-  const [shownSelectionKey, setShownSelectionKey] = useState(selectionKey)
-
   if (shownSelectionKey !== selectionKey) {
     setShownSelectionKey(selectionKey)
     closeDraft()
-    setNotice(null)
   }
 
   // The selection last navigated to, until the address change renders. Two
@@ -127,7 +163,7 @@ export function BookingPage() {
     const startTime = starts.find((option) => option.value >= segment.start)?.value ?? starts[0]?.value ?? ''
     const endTime = defaultEndTime(segment.interval, startTime, limits)
 
-    setNotice(null)
+    setShownNotice(null)
     setFieldErrors({})
     setFormError('')
     setDraft({ segment, startTime, endTime, suggestedStartTime: startTime, suggestedEndTime: endTime })
@@ -161,8 +197,25 @@ export function BookingPage() {
       return
     }
 
+    const period = formatDateTimeRange(draft.startTime, draft.endTime)
+
     try {
-      // Resolves once the reservation lists and the calendar have reloaded.
+      // Each resolves once the reservation lists and the calendar have reloaded.
+      if (movingReservation) {
+        await rescheduleReservation.mutateAsync({
+          id: movingReservation.id,
+          request: { startTime: draft.startTime, endTime: draft.endTime, version: movingReservation.version },
+        })
+        // Back to ordinary booking, in the same week, with the moved booking
+        // now shown as reserved. The path stays the same, so nothing blocks it.
+        const afterMove = toBookingSearch({ ...selection, moveReservationId: null })
+        closeDraft()
+        focusNoticeRef.current = true
+        showNotice({ tone: 'success', text: `Booking moved to ${period}.` }, afterMove)
+        navigate({ search: afterMove })
+        return
+      }
+
       await createReservation.mutateAsync({
         resourceId: selection.resourceId,
         startTime: draft.startTime,
@@ -170,16 +223,14 @@ export function BookingPage() {
       })
       closeDraft()
       focusNoticeRef.current = true
-      setNotice({
-        tone: 'success',
-        text: `Reservation created: ${formatDateTimeRange(draft.startTime, draft.endTime)}.`,
-      })
+      showNotice({ tone: 'success', text: `Reservation created: ${period}.` })
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        // Someone else booked it first: show the calendar as it is now.
+        // Someone else booked the time first, or changed the booking being
+        // moved: show the calendar and the booking as they are now.
         closeDraft()
         focusNoticeRef.current = true
-        setNotice({ tone: 'danger', text: `${error.message} The calendar has been updated.` })
+        showNotice({ tone: 'danger', text: `${error.message} The calendar has been updated.` })
         void scheduleQuery.refetch()
         return
       }
@@ -193,6 +244,7 @@ export function BookingPage() {
   const bookingPanel = draft && selectedResource && (
     <BookingPanel
       resourceName={selectedResource.name}
+      mode={isMoving ? 'move' : 'book'}
       interval={draft.segment.interval}
       limits={limits}
       startTime={draft.startTime}
@@ -201,7 +253,7 @@ export function BookingPage() {
       onEndTimeChange={(endTime) => setDraft((current) => current && { ...current, endTime })}
       fieldErrors={fieldErrors}
       formError={formError}
-      isReserving={createReservation.isPending}
+      isReserving={createReservation.isPending || rescheduleReservation.isPending}
       onReserve={() => void handleReserve()}
       onCancel={closeDraft}
     />
@@ -211,50 +263,59 @@ export function BookingPage() {
 
   return (
     <div className="booking-layout">
-      <Card
-        title="Book a resource"
-        description="Choose what you want to book."
-        actions={<Badge label={`${activeResources.length} resources`}>{activeResources.length}</Badge>}
-      >
-        {resourcesQuery.isPending && <LoadingState>Loading resources...</LoadingState>}
-        {resourcesQuery.error && <Alert tone="danger">{getErrorMessage(resourcesQuery.error)}</Alert>}
-        {!resourcesQuery.isPending && activeResources.length === 0 && (
-          <EmptyState title="No active resources found." />
-        )}
-        {activeResources.length > 0 && (
-          <ul className="item-list booking-resources">
-            {activeResources.map((resource) => {
-              const isSelected = resource.id === selection.resourceId
+      {isMoving ? (
+        <MoveBookingCard
+          reservation={reservationQuery.data}
+          isLoading={reservationQuery.isPending}
+          error={reservationQuery.error}
+          problem={moveProblem}
+        />
+      ) : (
+        <Card
+          title="Book a resource"
+          description="Choose what you want to book."
+          actions={<Badge label={`${activeResources.length} resources`}>{activeResources.length}</Badge>}
+        >
+          {resourcesQuery.isPending && <LoadingState>Loading resources...</LoadingState>}
+          {resourcesQuery.error && <Alert tone="danger">{getErrorMessage(resourcesQuery.error)}</Alert>}
+          {!resourcesQuery.isPending && activeResources.length === 0 && (
+            <EmptyState title="No active resources found." />
+          )}
+          {activeResources.length > 0 && (
+            <ul className="item-list booking-resources">
+              {activeResources.map((resource) => {
+                const isSelected = resource.id === selection.resourceId
 
-              return (
-                <li
-                  key={resource.id}
-                  className={isSelected ? 'item booking-resource-selected' : 'item'}
-                  aria-current={isSelected || undefined}
-                >
-                  <div className="item-main">
-                    <p className="item-title">
-                      <strong>{resource.name}</strong>
-                      {isSelected && <Badge tone="primary">Selected</Badge>}
-                    </p>
-                    {resource.location && <p className="item-meta">{resource.location}</p>}
-                  </div>
-                  <div className="item-actions">
-                    <Button
-                      size="sm"
-                      variant={isSelected ? 'secondary' : 'primary'}
-                      aria-label={`View availability for ${resource.name}`}
-                      onClick={() => changeSelection((current) => ({ ...current, resourceId: resource.id }))}
-                    >
-                      View availability
-                    </Button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
+                return (
+                  <li
+                    key={resource.id}
+                    className={isSelected ? 'item booking-resource-selected' : 'item'}
+                    aria-current={isSelected || undefined}
+                  >
+                    <div className="item-main">
+                      <p className="item-title">
+                        <strong>{resource.name}</strong>
+                        {isSelected && <Badge tone="primary">Selected</Badge>}
+                      </p>
+                      {resource.location && <p className="item-meta">{resource.location}</p>}
+                    </div>
+                    <div className="item-actions">
+                      <Button
+                        size="sm"
+                        variant={isSelected ? 'secondary' : 'primary'}
+                        aria-label={`View availability for ${resource.name}`}
+                        onClick={() => changeSelection((current) => ({ ...current, resourceId: resource.id }))}
+                      >
+                        View availability
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <Card
         title="Resource schedule"
@@ -308,7 +369,7 @@ export function BookingPage() {
           {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
         </div>
 
-        {selection.resourceId === null && (
+        {selection.resourceId === null && !isMoving && (
           <EmptyState title="Choose a resource to see bookable times." />
         )}
         {selection.resourceId !== null && scheduleQuery.error && (
@@ -320,7 +381,7 @@ export function BookingPage() {
         {selection.resourceId !== null && scheduleQuery.isPending && (
           <LoadingState>Loading resource schedule...</LoadingState>
         )}
-        {schedule && (
+        {schedule && canChoose && (
           <>
             <p className="booking-rules">{describeBookingRules(schedule.policy)}</p>
             {!hasFreeTime && (
@@ -342,4 +403,26 @@ export function BookingPage() {
       </Card>
     </div>
   )
+}
+
+// Why a booking can't be moved from this page, or null when it can. The API
+// checks the same rules.
+function describeMoveProblem(reservation: ReservationResponse, selectedResourceId: number | null) {
+  if (reservation.status === 'Cancelled') {
+    return "This booking is cancelled, so it can't be moved."
+  }
+
+  if (reservation.startTime <= nowInSchedulingZone()) {
+    return "This booking has started, so it can't be moved."
+  }
+
+  if (selectedResourceId === null) {
+    return "This booking's resource isn't open for booking, so the booking can't be moved."
+  }
+
+  if (reservation.resourceId !== selectedResourceId) {
+    return 'Bookings can only be moved to another time on the same resource.'
+  }
+
+  return null
 }

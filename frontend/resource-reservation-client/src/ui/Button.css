@@ -71,3 +71,20 @@
 .button-danger:hover:not(:disabled) {
   background: var(--color-danger-hover);
 }
+
+/* A link that looks like a button keeps the button's colours, not a link's. */
+a.button {
+  text-decoration: none;
+}
+
+a.button-primary:hover {
+  color: var(--color-on-primary);
+}
+
+a.button-secondary:hover {
+  color: var(--color-heading);
+}
+
+a.button-danger:hover {
+  color: var(--color-on-danger);
+}

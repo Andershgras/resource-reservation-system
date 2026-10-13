@@ -147,6 +147,12 @@ export function toSchedulingWallClock(instant: Date) {
   return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
 }
 
+// Now as wall-clock time in the scheduling time zone, for comparing with the
+// API's times.
+export function nowInSchedulingZone(now = new Date()) {
+  return toSchedulingWallClock(now)
+}
+
 // Today's date in the scheduling time zone, as "2030-01-15", whatever the
 // browser's own time zone is.
 export function todayInSchedulingZone(now = new Date()) {
