@@ -1,3 +1,10 @@
+import type { BookingPolicyResponse } from '../api/types'
+import {
+  bookingRuleFields,
+  emptyBookingRules,
+  type BookingRuleField,
+  type BookingRulesDraft,
+} from './bookingRules'
 import type { FieldErrors } from './errors'
 
 // Client-side checks that run before a form is sent. Each returns the errors
@@ -34,10 +41,53 @@ export function validateAuthForm(
   return errors
 }
 
-export type ResourceField = 'name' | 'description' | 'location'
+export type ResourceField = 'name' | 'description' | 'location' | BookingRuleField
 
-export function validateResourceForm(name: string): FieldErrors<ResourceField> {
-  return name.trim() ? {} : { name: 'Enter a resource name.' }
+// The limits the API accepts for each booking rule, with its message.
+const bookingRuleLimits: Record<BookingRuleField, { min: number; max: number; message: string }> = {
+  minDurationMinutes: { min: 1, max: 10080, message: 'Enter a minimum duration between 1 and 10080 minutes.' },
+  maxDurationMinutes: { min: 1, max: 10080, message: 'Enter a maximum duration between 1 and 10080 minutes.' },
+  minLeadTimeMinutes: { min: 0, max: 43200, message: 'Enter a notice period between 0 and 43200 minutes.' },
+  maxAdvanceDays: { min: 1, max: 3650, message: 'Enter a number of days between 1 and 3650.' },
+}
+
+// Booking rules are optional. The minimum duration is compared with the
+// maximum in force, which is the default when the field is empty, as the API
+// does. Without the defaults, that comparison is left to the API.
+export function validateResourceForm(
+  name: string,
+  rules: BookingRulesDraft = emptyBookingRules,
+  defaults?: BookingPolicyResponse,
+): FieldErrors<ResourceField> {
+  const errors: FieldErrors<ResourceField> = {}
+
+  if (!name.trim()) {
+    errors.name = 'Enter a resource name.'
+  }
+
+  for (const field of bookingRuleFields) {
+    const text = rules[field].trim()
+    const { min, max, message } = bookingRuleLimits[field]
+
+    if (text !== '' && (!/^\d+$/.test(text) || Number(text) < min || Number(text) > max)) {
+      errors[field] = message
+    }
+  }
+
+  if (!errors.minDurationMinutes && !errors.maxDurationMinutes && rules.minDurationMinutes.trim() !== '') {
+    const minimum = Number(rules.minDurationMinutes)
+
+    if (rules.maxDurationMinutes.trim() !== '') {
+      if (minimum > Number(rules.maxDurationMinutes)) {
+        errors.maxDurationMinutes = "The maximum duration can't be shorter than the minimum duration."
+      }
+    } else if (defaults && minimum > defaults.maxDurationMinutes) {
+      errors.minDurationMinutes =
+        `The minimum duration can't be longer than the default maximum of ${defaults.maxDurationMinutes} minutes.`
+    }
+  }
+
+  return errors
 }
 
 export type AvailabilityField = 'resourceId' | 'startTime' | 'endTime'

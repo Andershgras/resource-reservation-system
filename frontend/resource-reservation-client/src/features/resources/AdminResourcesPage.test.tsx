@@ -6,12 +6,13 @@ import * as resourcesApi from '../../api/resourcesApi'
 import { expectNoAxeViolations } from '../../test/axe'
 import { renderScreen } from '../../test/renderScreen'
 import { AdminResourcesPage } from './AdminResourcesPage'
-import { noRuleOverrides } from '../../test/fixtures'
+import { noRuleOverrides, testPolicy } from '../../test/fixtures'
 
 vi.mock('../../api/resourcesApi')
 
 beforeEach(() => {
   vi.mocked(resourcesApi.getResources).mockResolvedValue([])
+  vi.mocked(resourcesApi.getBookingPolicy).mockResolvedValue(testPolicy)
 })
 
 function renderPage() {
@@ -103,5 +104,79 @@ describe('AdminResourcesPage unsaved changes', () => {
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
+  })
+})
+
+describe('AdminResourcesPage booking rules', () => {
+  function rule(label: string) {
+    return screen.getByRole('spinbutton', { name: `${label} (optional)` })
+  }
+
+  it('shows the defaults and sends only the rules that were set', async () => {
+    vi.mocked(resourcesApi.createResource).mockResolvedValue(
+      { id: 5, name: 'Lab', description: null, location: null, isActive: true, ...noRuleOverrides },
+    )
+    renderPage()
+    expect(await screen.findByText('Default: 8 h')).toBeInTheDocument()
+    expect(screen.getByText('Default: none')).toBeInTheDocument()
+
+    await userEvent.type(nameInput(), 'Lab')
+    await userEvent.type(rule('Longest booking, minutes'), '60')
+    await userEvent.type(rule('Notice needed, minutes'), '0')
+    await userEvent.click(screen.getByRole('button', { name: 'Create resource' }))
+
+    expect(resourcesApi.createResource).toHaveBeenCalledWith({
+      name: 'Lab',
+      description: null,
+      location: null,
+      minDurationMinutes: null,
+      maxDurationMinutes: 60,
+      minLeadTimeMinutes: 0,
+      maxAdvanceDays: null,
+    })
+  })
+
+  it('checks a minimum longer than the default maximum before sending', async () => {
+    renderPage()
+    await screen.findByText('Default: 8 h')
+
+    await userEvent.type(nameInput(), 'Lab')
+    await userEvent.type(rule('Shortest booking, minutes'), '600')
+    await userEvent.click(screen.getByRole('button', { name: 'Create resource' }))
+
+    expect(rule('Shortest booking, minutes')).toHaveAccessibleDescription(
+      "Default: 15 min The minimum duration can't be longer than the default maximum of 480 minutes.",
+    )
+    expect(resourcesApi.createResource).not.toHaveBeenCalled()
+  })
+
+  it('shows API errors beside the rule, and the rules a resource sets in the list', async () => {
+    vi.mocked(resourcesApi.getResources).mockResolvedValue([
+      { id: 1, name: 'Room A', description: null, location: null, isActive: true, ...noRuleOverrides, maxDurationMinutes: 60 },
+    ])
+    vi.mocked(resourcesApi.updateResource).mockRejectedValue(new ApiError(
+      'Enter a number of days between 1 and 3650.',
+      400,
+      { maxAdvanceDays: 'Enter a number of days between 1 and 3650.' },
+    ))
+    renderPage()
+    expect(await screen.findByText('At most 1 h')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Room A' }))
+    expect(rule('Longest booking, minutes')).toHaveValue(60)
+    await userEvent.click(screen.getByRole('button', { name: 'Save resource' }))
+
+    expect(rule('Bookable ahead, days')).toHaveAccessibleDescription(
+      'Default: 90 days Enter a number of days between 1 and 3650.',
+    )
+  })
+
+  it('counts a changed rule as an unsaved change', async () => {
+    renderPage()
+    await userEvent.type(rule('Bookable ahead, days'), '30')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Go elsewhere' }))
+
+    expect(screen.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument()
   })
 })

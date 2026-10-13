@@ -990,6 +990,11 @@ async function mockApi(
       return
     }
 
+    if (request.method() === 'GET' && path === '/bookingpolicy') {
+      await route.fulfill({ status: 200, json: defaultPolicy })
+      return
+    }
+
     if (request.method() === 'GET' && path === '/resources') {
       await route.fulfill({ status: 200, json: resources })
       return
