@@ -3,6 +3,7 @@ import type { ResourceResponse } from '../../api/types'
 import { useConfirm } from '../../components/confirmContext'
 import { ResourceFormSection } from '../../components/ResourceFormSection'
 import { ResourcesSection } from '../../components/ResourcesSection'
+import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import {
   errorNotice,
   getErrorMessage,
@@ -16,6 +17,8 @@ import type { Notice } from '../../ui/Alert'
 import { useDeleteResource, useResources, useSaveResource } from './resourceQueries'
 
 const resourceFields: readonly ResourceField[] = ['name', 'description', 'location']
+
+const emptyResource = { name: '', description: '', location: '', isActive: true }
 
 // /admin/resources: create, edit and delete resources.
 export function AdminResourcesPage() {
@@ -31,6 +34,15 @@ export function AdminResourcesPage() {
   const [isActive, setIsActive] = useState(true)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<ResourceField>>({})
   const [formError, setFormError] = useState('')
+  // The values the form started from, empty or the resource being edited.
+  const [savedValues, setSavedValues] = useState(emptyResource)
+  const hasUnsavedChanges =
+    name !== savedValues.name ||
+    description !== savedValues.description ||
+    location !== savedValues.location ||
+    isActive !== savedValues.isActive
+
+  useUnsavedChangesGuard(hasUnsavedChanges)
 
   function resetForm() {
     setEditingResourceId(null)
@@ -38,6 +50,7 @@ export function AdminResourcesPage() {
     setDescription('')
     setLocation('')
     setIsActive(true)
+    setSavedValues(emptyResource)
     setFieldErrors({})
     setFormError('')
   }
@@ -91,6 +104,12 @@ export function AdminResourcesPage() {
     setDescription(resource.description ?? '')
     setLocation(resource.location ?? '')
     setIsActive(resource.isActive)
+    setSavedValues({
+      name: resource.name,
+      description: resource.description ?? '',
+      location: resource.location ?? '',
+      isActive: resource.isActive,
+    })
     setNotice(null)
     setFieldErrors({})
     setFormError('')

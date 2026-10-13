@@ -167,8 +167,8 @@ The frontend is a Vite-built React and TypeScript app. Routing uses React Router
 flowchart TB
     subgraph Providers["main.tsx"]
         QC[QueryClientProvider]
-        BR[BrowserRouter]
         AP["AuthProvider<br/>user, session expiry, clears the cache"]
+        BR["RouterProvider<br/>data router (createBrowserRouter)"]
     end
     App["app/App.tsx<br/>route table"]
     Login["/login, /register<br/>RequireLoggedOut"]
@@ -179,7 +179,7 @@ flowchart TB
     Hooks["features/*/…Queries.ts<br/>TanStack Query hooks"]
     Api["api/client.ts<br/>bearer token, problem details"]
 
-    QC --> BR --> AP --> App
+    QC --> AP --> BR --> App
     App --> Login
     App --> Admin --> AdminPages
     App --> User --> UserPages
@@ -196,14 +196,14 @@ flowchart TB
 | `src/components/` | App-specific sections built from `src/ui/`: forms, lists, the tabs, and `ConfirmProvider` |
 | `src/ui/` | The design system's components: `Button`, `Field`, `Card`, `Alert`, `Badge`, `ConfirmDialog` and others, each with its stylesheet |
 | `src/styles/` | Design tokens (`tokens.css`) and element defaults (`base.css`) |
-| `src/lib/` | Pure helpers: dates, validation, schedule grouping, errors, navigation, query keys |
+| `src/lib/` | Pure helpers: dates, the calendar model, validation, errors, navigation, query keys |
 | `src/api/` | Typed API calls and the shared `client.ts` |
 
 How state is handled:
 
 - **Server data** is cached by query key. Each change invalidates the data it affects and resolves once the data on screen has reloaded. For example, cancelling a reservation refreshes the reservation lists and the booking schedules.
 - **Logging in or out**, or a session expiring, clears the cache.
-- **Filters and the booking selection** live in the address, such as `/book?resource=3&from=2030-01-14&to=2030-01-20`. A reload or a shared link shows the same view, and invalid values are ignored.
+- **Filters and the booking selection** live in the address, such as `/book?resource=3&week=2030-01-14`. A reload or a shared link shows the same view, and invalid values are ignored. Links from before the calendar, with `from` and `to`, open the week of their `from` date.
 - **Form drafts and messages** belong to the page that shows them.
 - **Redirects around login and logout** are made only by the route guards (`RequireAuth`, `RequireLoggedOut`), and `returnTo` must be a path inside the app.
 
@@ -216,6 +216,24 @@ Styles are plain CSS. Colours, spacing, type, radii and shadows are custom prope
 - **The confirmation dialog** follows the WAI-ARIA alert dialog pattern, and the page behind it is inert.
 - **The layout** has a skip link to `<main id="main-content">`, one `h1` per page, and a document title for the current screen.
 - **Dates** come from `lib/dates.ts` in `en-GB` with a 24-hour clock, read from the API's wall-clock text rather than through the browser's time zone.
+
+### Booking calendar
+
+`/book` shows a Monday-to-Sunday week for one resource.
+
+- **The model** (`lib/calendar.ts`) is pure and unit tested. It turns the schedule into seven days of free and reserved segments at their exact minutes, split at midnight. Each day is open, fully booked, closed or past: the API leaves out time that has gone but still returns past reservations, so past days are marked rather than shown as fully booked.
+- **Times to choose** come in 15-minute steps, plus the exact edges of the free period, because an existing reservation can end at any minute. All arithmetic is on wall-clock minutes, as in [ADR 0001](adr/0001-time-zone-convention.md).
+- **The view** (`BookingCalendar`) is one labelled section per day with its periods in order. On wide screens CSS places them on an hour grid; under 760 px it is a list of days, and the booking form opens inside the chosen day.
+- **A clash** (409) with a booking made meanwhile reloads the calendar and says so.
+
+### Unsaved changes
+
+The routes run in a data router (`createBrowserRouter`), only so that forms can block navigation ([ADR 0006](adr/0006-frontend-routing-and-state.md)). `useUnsavedChangesGuard(hasUnsavedChanges)`:
+
+- asks with the confirmation dialog before moving to another screen, including with the back button, and lets the browser ask before a reload or closing the tab
+- compares each form with the values it started from, empty or the item being edited
+- never blocks the session ending: an expired session or a logout clears the user, which turns the guard off, and `RequireAuth` unmounts the screen before redirecting
+- doesn't block changes within the same screen, such as filters or the week in the address
 
 ## Decision records
 

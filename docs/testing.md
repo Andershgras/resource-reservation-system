@@ -94,7 +94,9 @@ The tests delete all data in this database. To prevent accidents, the harness re
 [Vitest](https://vitest.dev/) runs these in a simulated browser ([jsdom](https://github.com/jsdom/jsdom)), with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for components. They run in a few seconds and need no server.
 
 - **Time zone:** the tests run in `Europe/Copenhagen`, set in `vite.config.ts`, so date handling behaves the same locally and on CI runners that use UTC. The date tests include both summer-time switches.
-- **`src/lib/`:** date formatting and conversion, form validation, schedule grouping and error messages. The date tests cover both summer-time switches and a UTC instant that is already the next day in Copenhagen.
+- **`src/lib/`:** date formatting and conversion, form validation, the calendar model and error messages. The date and calendar tests cover both summer-time switches, a UTC instant that is already the next day in Copenhagen, periods off the 15-minute grid or shorter than 15 minutes, midnight, and malformed periods.
+- **The booking screen** (`BookingPage.test.tsx`): the week loaded, every day shown including fully booked and closed days, choosing and booking a time, a clash with another booking, a schedule that fails to load, and where the booking form opens on small and wide screens.
+- **The unsaved-changes guard** (`useUnsavedChangesGuard.test.tsx`): Stay, Discard, Escape, the back button, a quick Stay followed by another navigation, same-screen changes, reloads, logout and session expiry. `src/test/renderScreen.tsx` renders a screen in a data router with a signed-in user, as the app does.
 - **`src/auth/authStorage.ts`:** session expiry, using fake timers. Covered cases:
   - restoring a valid, expired or outdated session
   - ending only the session whose token was rejected
@@ -131,6 +133,19 @@ await expectNoAxeViolations(container)
 - **Not covered by axe in jsdom:** colour contrast, because jsdom doesn't render. The token pairs were checked by hand (see `styles/tokens.css`). The `region` rule is also off, because a component rendered alone isn't inside the page's landmarks.
 
 An accessibility test must be able to fail. `src/test/axe.test.tsx` checks that the helper reports an unlabelled input.
+
+#### In the browser
+
+The smoke tests run the same axe-core in Chromium, where the page is rendered, so colour contrast is checked too. They cover the main screens in light and dark mode:
+
+- registration with errors
+- the calendar with a time being chosen
+- both reservation lists
+- the admin form with errors
+- the confirmation dialog
+- the weekly schedule
+
+Other smoke tests use the keyboard alone: booking from the calendar, the confirmation dialog, and the unsaved-changes prompt.
 
 TanStack Query notifies components on the next tick after a change. A test that checks rendered data straight after a change should check the cache with `queryClient.getQueryData`, or wait with `waitFor`.
 

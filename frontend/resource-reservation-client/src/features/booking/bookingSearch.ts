@@ -1,37 +1,39 @@
 import type { ResourceResponse } from '../../api/types'
+import { startOfWeek } from '../../lib/calendar'
 import { addDaysToDateKey, todayInSchedulingZone } from '../../lib/dates'
 
 // The booking screen's selection, kept in the address so a reload or a shared
-// link shows the same schedule: /book?resource=3&from=2030-01-14&to=2030-01-20
+// link shows the same week: /book?resource=3&week=2030-01-14
 export interface BookingSelection {
   resourceId: number | null
-  fromDate: string
-  toDate: string
+  // The Monday the shown week starts on.
+  weekStart: string
 }
 
-// Today in the scheduling time zone, and the six days after it.
-export function defaultDateRange(now = new Date()) {
-  const today = todayInSchedulingZone(now)
+// The week that contains today, in the scheduling time zone.
+export function currentWeekStart(now = new Date()) {
+  return startOfWeek(todayInSchedulingZone(now))
+}
 
-  return { fromDate: today, toDate: addDaysToDateKey(today, 6) }
+// The dates the schedule is loaded for: Monday to Sunday.
+export function weekRange(weekStart: string) {
+  return { fromDate: weekStart, toDate: addDaysToDateKey(weekStart, 6) }
 }
 
 // Reads the selection from the address. Anything invalid is ignored rather than
-// breaking the page: a resource that isn't a positive whole number, a date that
-// doesn't exist, or a range that ends before it starts. Ignored dates fall back
-// to the default range.
+// breaking the page: a resource that isn't a positive whole number, or a date
+// that doesn't exist, which falls back to this week. Any date selects the week
+// it is in. Links from before the calendar, with ?from=…&to=…, open the week
+// of their from date.
 export function parseBookingSearch(search: string, now = new Date()): BookingSelection {
   const params = new URLSearchParams(search)
   const resource = params.get('resource')
-  const fromDate = params.get('from')
-  const toDate = params.get('to')
   const resourceId = resource && /^[1-9]\d{0,9}$/.test(resource) ? Number(resource) : null
-  const hasValidRange =
-    fromDate !== null && toDate !== null && isDate(fromDate) && isDate(toDate) && fromDate <= toDate
+  const date = [params.get('week'), params.get('from')].find(
+    (value): value is string => value !== null && isDate(value),
+  )
 
-  return hasValidRange
-    ? { resourceId, fromDate, toDate }
-    : { resourceId, ...defaultDateRange(now) }
+  return { resourceId, weekStart: date ? startOfWeek(date) : currentWeekStart(now) }
 }
 
 export function toBookingSearch(selection: BookingSelection) {
@@ -41,8 +43,7 @@ export function toBookingSearch(selection: BookingSelection) {
     params.set('resource', selection.resourceId.toString())
   }
 
-  params.set('from', selection.fromDate)
-  params.set('to', selection.toDate)
+  params.set('week', selection.weekStart)
 
   return `?${params.toString()}`
 }

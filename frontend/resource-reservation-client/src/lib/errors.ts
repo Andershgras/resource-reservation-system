@@ -9,11 +9,6 @@ export function getErrorMessage(error: unknown) {
   return 'Something went wrong.'
 }
 
-// The message for a failed query, or an empty string while there is no error.
-export function getQueryErrorMessage(error: unknown) {
-  return error ? getErrorMessage(error) : ''
-}
-
 // Error messages for a form, keyed by field. An empty object means no errors.
 export type FieldErrors<Field extends string> = Partial<Record<Field, string>>
 

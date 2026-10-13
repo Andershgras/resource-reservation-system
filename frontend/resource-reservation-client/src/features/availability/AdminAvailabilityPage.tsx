@@ -3,6 +3,7 @@ import type { AvailabilityResponse } from '../../api/types'
 import { AvailabilityFormSection } from '../../components/AvailabilityFormSection'
 import { AvailabilitySection } from '../../components/AvailabilitySection'
 import { useConfirm } from '../../components/confirmContext'
+import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import { toDateTimeLocalValue } from '../../lib/dates'
 import {
   errorNotice,
@@ -18,6 +19,8 @@ import { useAvailabilities, useDeleteAvailability, useSaveAvailability } from '.
 
 const availabilityFields: readonly AvailabilityField[] = ['resourceId', 'startTime', 'endTime']
 
+const emptyAvailability = { resourceId: '', startTime: '', endTime: '' }
+
 // /admin/availability: one-off availability windows.
 export function AdminAvailabilityPage() {
   const resourcesQuery = useResources()
@@ -32,6 +35,14 @@ export function AdminAvailabilityPage() {
   const [resourceId, setResourceId] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
+  // The values the form started from, empty or the window being edited.
+  const [savedValues, setSavedValues] = useState(emptyAvailability)
+  const hasUnsavedChanges =
+    resourceId !== savedValues.resourceId ||
+    startTime !== savedValues.startTime ||
+    endTime !== savedValues.endTime
+
+  useUnsavedChangesGuard(hasUnsavedChanges)
 
   // By resource name, then by start time.
   const sortedAvailabilities = useMemo(
@@ -53,6 +64,7 @@ export function AdminAvailabilityPage() {
     setResourceId('')
     setStartTime('')
     setEndTime('')
+    setSavedValues(emptyAvailability)
     setFieldErrors({})
     setFormError('')
   }
@@ -91,6 +103,11 @@ export function AdminAvailabilityPage() {
     setResourceId(availability.resourceId.toString())
     setStartTime(toDateTimeLocalValue(availability.startTime))
     setEndTime(toDateTimeLocalValue(availability.endTime))
+    setSavedValues({
+      resourceId: availability.resourceId.toString(),
+      startTime: toDateTimeLocalValue(availability.startTime),
+      endTime: toDateTimeLocalValue(availability.endTime),
+    })
     setNotice(null)
     setFieldErrors({})
     setFormError('')

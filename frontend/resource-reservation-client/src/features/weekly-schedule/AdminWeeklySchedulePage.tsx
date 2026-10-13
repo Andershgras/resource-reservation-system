@@ -3,6 +3,7 @@ import type { AvailabilityRuleResponse } from '../../api/types'
 import { AvailabilityRuleFormSection } from '../../components/AvailabilityRuleFormSection'
 import { AvailabilityRulesSection } from '../../components/AvailabilityRulesSection'
 import { useConfirm } from '../../components/confirmContext'
+import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import { toTimeOfDay } from '../../lib/dates'
 import {
   errorNotice,
@@ -22,6 +23,8 @@ import {
 
 const ruleFields: readonly AvailabilityRuleField[] = ['resourceId', 'dayOfWeek', 'startTime', 'endTime']
 
+const emptyRule = { resourceId: '', dayOfWeek: '', startTime: '', endTime: '' }
+
 // /admin/weekly-schedule: weekly availability rules.
 export function AdminWeeklySchedulePage() {
   const resourcesQuery = useResources()
@@ -37,6 +40,15 @@ export function AdminWeeklySchedulePage() {
   const [dayOfWeek, setDayOfWeek] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
+  // The values the form started from, empty or the rule being edited.
+  const [savedValues, setSavedValues] = useState(emptyRule)
+  const hasUnsavedChanges =
+    resourceId !== savedValues.resourceId ||
+    dayOfWeek !== savedValues.dayOfWeek ||
+    startTime !== savedValues.startTime ||
+    endTime !== savedValues.endTime
+
+  useUnsavedChangesGuard(hasUnsavedChanges)
 
   // By resource name, then weekday, then start time.
   const sortedRules = useMemo(
@@ -63,6 +75,7 @@ export function AdminWeeklySchedulePage() {
     setDayOfWeek('')
     setStartTime('')
     setEndTime('')
+    setSavedValues(emptyRule)
     setFieldErrors({})
     setFormError('')
   }
@@ -107,6 +120,12 @@ export function AdminWeeklySchedulePage() {
     setDayOfWeek(rule.dayOfWeek.toString())
     setStartTime(toTimeOfDay(rule.startTime))
     setEndTime(toTimeOfDay(rule.endTime))
+    setSavedValues({
+      resourceId: rule.resourceId.toString(),
+      dayOfWeek: rule.dayOfWeek.toString(),
+      startTime: toTimeOfDay(rule.startTime),
+      endTime: toTimeOfDay(rule.endTime),
+    })
     setNotice(null)
     setFieldErrors({})
     setFormError('')

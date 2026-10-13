@@ -200,7 +200,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
-| M5 | UI/UX modernisation (design system, week calendar, accessibility) | In progress |
+| M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done, awaiting review |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
 
@@ -340,17 +340,26 @@ Changes in behaviour in PR 1:
 
 PR 2: booking calendar and navigation
 
-- [ ] Weekly booking calendar: available and reserved periods, fully booked days still shown (audit L3), start and end chosen inside an available interval, works on desktop and mobile
-- [ ] Unsaved-changes guard on forms, which never blocks automatic session expiry
-- [ ] Remaining accessibility and keyboard tests, including daylight-saving transitions and slot boundaries in the calendar
-- [ ] Screenshots and documentation
+- [x] Data router (`createBrowserRouter`), with ADR 0006 amended
+- [x] Unsaved-changes guard on forms, which never blocks automatic session expiry
+- [x] Weekly booking calendar: available and reserved periods, fully booked days still shown (audit L3), start and end chosen inside an available interval, works on desktop and mobile
+- [x] Remaining accessibility and keyboard tests, including daylight-saving transitions and slot boundaries in the calendar, and axe with colour contrast in the browser
+- [x] Screenshots and documentation
+
+Changes in behaviour in PR 2:
+- New: the booking screen is a weekly calendar. A start and end are chosen in 15-minute steps, plus the free period's exact edges.
+- Changed: fully booked days stay visible (audit L3). Days without opening hours and past days are marked.
+- Changed: the booking address is `/book?resource=3&week=2030-01-14`. Older links with `from` and `to` open the week of their `from` date.
+- New: leaving a form with unsaved changes asks first. Reloading or closing the tab gets the browser's prompt. Logging out and session expiry are never blocked.
+- Changed: a booking that clashes with one made meanwhile reloads the calendar.
+- Changed: the JavaScript bundle grew by about 17 kB gzipped, for the data router.
 
 Follow-ups carried over from earlier milestones, and where they are handled:
 
-- **Unsaved form drafts (from M4):** PR 2 warns before leaving a form with unsaved changes. Drafts stay local to their page, with no shared global state.
+- **Unsaved form drafts (from M4):** done in PR 2. Leaving a form with unsaved changes asks first. Drafts stay local to their page, with no shared global state.
 - **Friendly validation messages on the request DTOs (from M2):** done in PR 1.
 - **User names instead of IDs for admins (audit L1):** done in PR 1.
-- **Fully booked days in the schedule (audit L3):** PR 2. A unit test pins the current behaviour, so the change is deliberate.
+- **Fully booked days in the schedule (audit L3):** done in PR 2.
 - **Identical ternary branches in the booking section (audit L4):** done in PR 1, while restyling the booking section.
 
 ### M7: Deployment

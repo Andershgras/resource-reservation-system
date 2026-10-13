@@ -80,7 +80,7 @@ describe('useCancelReservation with a schedule on screen', () => {
     ]))
     const { wrapper } = createQueryWrapper()
     const { result } = renderHook(() => ({
-      schedule: useResourceSchedule({ resourceId: 1, fromDate: '2030-01-15', toDate: '2030-01-15' }),
+      schedule: useResourceSchedule({ resourceId: 1, weekStart: '2030-01-14' }),
       mine: useMyReservations(),
       cancel: useCancelReservation(),
     }), { wrapper })
