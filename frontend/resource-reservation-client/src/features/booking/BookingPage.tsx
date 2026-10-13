@@ -1,151 +1,318 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
-import type { BookableSlotResponse, ResourceResponse } from '../../api/types'
-import { ResourceBookingSection } from '../../components/ResourceBookingSection'
-import { toDateTimeLocalValue } from '../../lib/dates'
-import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
-import { getSlotKey } from '../../lib/schedule'
-import { validateReservationSlotSelection } from '../../lib/validation'
-import type { Notice } from '../../ui/Alert'
+import { ApiError } from '../../api/client'
+import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
+import {
+  buildCalendarWeek,
+  defaultEndTime,
+  endOptions,
+  isWithinInterval,
+  startOfWeek,
+  startOptions,
+  visibleHours,
+  type CalendarSegment,
+} from '../../lib/calendar'
+import { addDaysToDateKey, formatDate, formatDateTimeRange, todayInSchedulingZone } from '../../lib/dates'
+import { getErrorMessage, getFormErrors, type FieldErrors } from '../../lib/errors'
+import { Alert, type Notice } from '../../ui/Alert'
+import { Badge } from '../../ui/Badge'
+import { Button } from '../../ui/Button'
+import { Card } from '../../ui/Card'
+import { Field, Input } from '../../ui/Field'
+import { EmptyState, LoadingState } from '../../ui/States'
+import { useMediaQuery } from '../../ui/useMediaQuery'
 import { useCreateReservation } from '../reservations/reservationQueries'
 import { useResources } from '../resources/resourceQueries'
+import { BookingCalendar } from './BookingCalendar'
+import { BookingPanel, type BookingField } from './BookingPanel'
 import { useResourceSchedule } from './bookingQueries'
-import { bookingSelectionFor, toBookingSearch, type BookingSelection } from './bookingSearch'
+import { bookingSelectionFor, toBookingSearch } from './bookingSearch'
+import '../../components/lists.css'
+import './BookingPage.css'
 
-// /book: choose a resource and a date range, then book a time from its schedule.
+const bookingFields: readonly BookingField[] = ['startTime', 'endTime']
+
+interface Draft {
+  segment: CalendarSegment
+  startTime: string
+  endTime: string
+  // The times the panel opened with, to tell whether the user changed them.
+  suggestedStartTime: string
+  suggestedEndTime: string
+}
+
+// /book: choose a resource, then a free time in its weekly calendar.
 export function BookingPage() {
   const { search } = useLocation()
   const navigate = useNavigate()
   const resourcesQuery = useResources()
+  const activeResources = (resourcesQuery.data ?? []).filter((resource) => resource.isActive)
   const selection = bookingSelectionFor(search, resourcesQuery.data)
   const scheduleQuery = useResourceSchedule(selection)
   const createReservation = useCreateReservation()
-  const [fromDate, setFromDate] = useState(selection.fromDate)
-  const [toDate, setToDate] = useState(selection.toDate)
-  const [scheduleMessage, setScheduleMessage] = useState('')
-  const [reservationNotice, setReservationNotice] = useState<Notice | null>(null)
-  const [validationMessage, setValidationMessage] = useState('')
-  const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null)
-  const [reservingSlotKey, setReservingSlotKey] = useState<string | null>(null)
-  const [startTime, setStartTime] = useState('')
-  const [endTime, setEndTime] = useState('')
+  const today = todayInSchedulingZone()
+  const thisWeek = startOfWeek(today)
+  const schedule = selection.resourceId === null ? null : scheduleQuery.data ?? null
+  const selectedResource = activeResources.find((resource) => resource.id === selection.resourceId)
+  const days = useMemo(
+    () => buildCalendarWeek(schedule, selection.weekStart, today),
+    [schedule, selection.weekStart, today],
+  )
+  const { firstHour, lastHour } = visibleHours(days)
+  const noticeRef = useRef<HTMLDivElement>(null)
+  // Matches the calendar's switch to a list of days (BookingCalendar.css).
+  const isSmallScreen = useMediaQuery('(max-width: 760px)')
+  // Set when a booking finishes, so focus moves to its result once it shows.
+  const focusNoticeRef = useRef(false)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<BookingField>>({})
+  const [formError, setFormError] = useState('')
 
-  function resetSlotSelection() {
-    setSelectedSlotKey(null)
-    setStartTime('')
-    setEndTime('')
-    setValidationMessage('')
+  useEffect(() => {
+    if (notice && focusNoticeRef.current) {
+      focusNoticeRef.current = false
+      noticeRef.current?.focus()
+    }
+  }, [notice])
+
+  useUnsavedChangesGuard(
+    draft !== null &&
+      (draft.startTime !== draft.suggestedStartTime || draft.endTime !== draft.suggestedEndTime),
+  )
+
+  function closeDraft() {
+    setDraft(null)
+    setFieldErrors({})
+    setFormError('')
   }
 
-  // When the selection in the address changes, including through the back
-  // button, the date fields follow it and any chosen time is dropped.
+  // When the address changes, including through the back button, a time
+  // being chosen for another week or resource is dropped.
   const selectionKey = toBookingSearch(selection)
   const [shownSelectionKey, setShownSelectionKey] = useState(selectionKey)
 
   if (shownSelectionKey !== selectionKey) {
     setShownSelectionKey(selectionKey)
-    setFromDate(selection.fromDate)
-    setToDate(selection.toDate)
-    resetSlotSelection()
+    closeDraft()
+    setNotice(null)
   }
 
-  function showSchedule(resourceId: number | null) {
-    setScheduleMessage('')
-    setReservationNotice(null)
-    setValidationMessage('')
-
-    if (resourceId === null) {
-      setScheduleMessage('Choose a resource before loading its schedule.')
-      return
-    }
-
-    if (!fromDate || !toDate) {
-      setScheduleMessage('Select a from date and to date.')
-      return
-    }
-
-    if (toDate < fromDate) {
-      setScheduleMessage('To date must be on or after from date.')
-      return
-    }
-
-    const nextSelection: BookingSelection = { resourceId, fromDate, toDate }
-
-    if (toBookingSearch(nextSelection) === selectionKey) {
-      // The same schedule again: load the latest version rather than the cache.
-      resetSlotSelection()
-      void scheduleQuery.refetch()
-      return
-    }
-
-    navigate({ search: toBookingSearch(nextSelection) })
+  function showWeek(weekStart: string, resourceId = selection.resourceId) {
+    navigate({ search: toBookingSearch({ resourceId, weekStart }) })
   }
 
-  function handleSelectSlot(slot: BookableSlotResponse) {
-    setSelectedSlotKey(getSlotKey(slot))
-    setStartTime(toDateTimeLocalValue(slot.startTime))
-    setEndTime(toDateTimeLocalValue(slot.endTime))
-    setReservationNotice(null)
-    setValidationMessage('')
+  function handleSelectSegment(segment: CalendarSegment) {
+    const starts = startOptions(segment.interval)
+    // The day the user clicked, for a period that continues past midnight.
+    const startTime = starts.find((option) => option.value >= segment.start)?.value ?? starts[0]?.value ?? ''
+    const endTime = defaultEndTime(segment.interval, startTime)
+
+    setNotice(null)
+    setFieldErrors({})
+    setFormError('')
+    setDraft({ segment, startTime, endTime, suggestedStartTime: startTime, suggestedEndTime: endTime })
   }
 
-  async function handleReserve(slot: BookableSlotResponse) {
-    setReservationNotice(null)
-    setValidationMessage('')
+  function handleStartTimeChange(startTime: string) {
+    setDraft((current) => {
+      if (!current) {
+        return current
+      }
 
-    if (selection.resourceId === null) {
-      setValidationMessage('Choose a resource schedule first.')
+      const ends = endOptions(current.segment.interval, startTime)
+      const endTime = ends.some((option) => option.value === current.endTime)
+        ? current.endTime
+        : defaultEndTime(current.segment.interval, startTime)
+
+      return { ...current, startTime, endTime }
+    })
+  }
+
+  async function handleReserve() {
+    if (!draft || selection.resourceId === null) {
       return
     }
 
-    const validationError = validateReservationSlotSelection(slot, startTime, endTime)
+    setFieldErrors({})
+    setFormError('')
 
-    if (validationError) {
-      setValidationMessage(validationError)
+    if (!isWithinInterval(draft.segment.interval, draft.startTime, draft.endTime)) {
+      setFormError('Choose a start and end inside the free time.')
       return
     }
-
-    setReservingSlotKey(getSlotKey(slot))
 
     try {
-      // Resolves once the reservation lists and the schedule have reloaded.
-      await createReservation.mutateAsync({ resourceId: selection.resourceId, startTime, endTime })
-      resetSlotSelection()
-      setReservationNotice({ tone: 'success', text: 'Reservation created.' })
+      // Resolves once the reservation lists and the calendar have reloaded.
+      await createReservation.mutateAsync({
+        resourceId: selection.resourceId,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+      })
+      closeDraft()
+      focusNoticeRef.current = true
+      setNotice({
+        tone: 'success',
+        text: `Reservation created: ${formatDateTimeRange(draft.startTime, draft.endTime)}.`,
+      })
     } catch (error) {
-      setReservationNotice({ tone: 'danger', text: getErrorMessage(error) })
-    } finally {
-      setReservingSlotKey(null)
+      if (error instanceof ApiError && error.status === 409) {
+        // Someone else booked it first: show the calendar as it is now.
+        closeDraft()
+        focusNoticeRef.current = true
+        setNotice({ tone: 'danger', text: `${error.message} The calendar has been updated.` })
+        void scheduleQuery.refetch()
+        return
+      }
+
+      const formErrors = getFormErrors(error, bookingFields)
+      setFieldErrors(formErrors.fieldErrors)
+      setFormError(formErrors.message)
     }
   }
 
-  return (
-    <ResourceBookingSection
-      resources={resourcesQuery.data ?? []}
-      resourceMessage={getQueryErrorMessage(resourcesQuery.error)}
-      isLoadingResources={resourcesQuery.isPending}
-      selectedScheduleResourceId={selection.resourceId?.toString() ?? ''}
-      scheduleFromDate={fromDate}
-      setScheduleFromDate={setFromDate}
-      scheduleToDate={toDate}
-      setScheduleToDate={setToDate}
-      resourceSchedule={selection.resourceId === null ? null : scheduleQuery.data ?? null}
-      resourceScheduleMessage={scheduleMessage || getQueryErrorMessage(scheduleQuery.error)}
-      reservationNotice={reservationNotice}
-      reservationValidationMessage={validationMessage}
-      isLoadingResourceSchedule={scheduleQuery.isFetching}
-      selectedScheduleSlotKey={selectedSlotKey}
-      reservingScheduleSlotKey={reservingSlotKey}
-      reservationStartTime={startTime}
-      setReservationStartTime={setStartTime}
-      reservationEndTime={endTime}
-      setReservationEndTime={setEndTime}
-      onSelectResourceForSchedule={(resource: ResourceResponse) => showSchedule(resource.id)}
-      onLoadResourceSchedule={() => showSchedule(selection.resourceId)}
-      onSelectScheduleSlot={handleSelectSlot}
-      onCancelScheduleSlotSelection={resetSlotSelection}
-      onReserveScheduleSlot={(slot) => void handleReserve(slot)}
-      formatDateTimeInput={toDateTimeLocalValue}
+  const bookingPanel = draft && selectedResource && (
+    <BookingPanel
+      resourceName={selectedResource.name}
+      interval={draft.segment.interval}
+      startTime={draft.startTime}
+      endTime={draft.endTime}
+      onStartTimeChange={handleStartTimeChange}
+      onEndTimeChange={(endTime) => setDraft((current) => current && { ...current, endTime })}
+      fieldErrors={fieldErrors}
+      formError={formError}
+      isReserving={createReservation.isPending}
+      onReserve={() => void handleReserve()}
+      onCancel={closeDraft}
     />
+  )
+  const weekEnd = addDaysToDateKey(selection.weekStart, 6)
+  const hasFreeTime = days.some((day) => day.status === 'open')
+
+  return (
+    <div className="booking-layout">
+      <Card
+        title="Book a resource"
+        description="Choose what you want to book."
+        actions={<Badge label={`${activeResources.length} resources`}>{activeResources.length}</Badge>}
+      >
+        {resourcesQuery.isPending && <LoadingState>Loading resources...</LoadingState>}
+        {resourcesQuery.error && <Alert tone="danger">{getErrorMessage(resourcesQuery.error)}</Alert>}
+        {!resourcesQuery.isPending && activeResources.length === 0 && (
+          <EmptyState title="No active resources found." />
+        )}
+        {activeResources.length > 0 && (
+          <ul className="item-list booking-resources">
+            {activeResources.map((resource) => {
+              const isSelected = resource.id === selection.resourceId
+
+              return (
+                <li
+                  key={resource.id}
+                  className={isSelected ? 'item booking-resource-selected' : 'item'}
+                  aria-current={isSelected || undefined}
+                >
+                  <div className="item-main">
+                    <p className="item-title">
+                      <strong>{resource.name}</strong>
+                      {isSelected && <Badge tone="primary">Selected</Badge>}
+                    </p>
+                    {resource.location && <p className="item-meta">{resource.location}</p>}
+                  </div>
+                  <div className="item-actions">
+                    <Button
+                      size="sm"
+                      variant={isSelected ? 'secondary' : 'primary'}
+                      aria-label={`View availability for ${resource.name}`}
+                      onClick={() => showWeek(selection.weekStart, resource.id)}
+                    >
+                      View availability
+                    </Button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Card>
+
+      <Card
+        title="Resource schedule"
+        description={selectedResource
+          ? `${selectedResource.name}. Times are Copenhagen time.`
+          : 'Times are Copenhagen time.'}
+      >
+        <div className="booking-week-bar">
+          <p className="booking-week-label" aria-live="polite">
+            <span className="visually-hidden">Showing the week </span>
+            {formatDate(selection.weekStart)} – {formatDate(weekEnd)}
+          </p>
+          <div className="booking-week-actions" role="group" aria-label="Choose week">
+            <Button
+              size="sm"
+              disabled={selection.weekStart <= thisWeek}
+              onClick={() => showWeek(addDaysToDateKey(selection.weekStart, -7))}
+            >
+              Previous week
+            </Button>
+            <Button size="sm" disabled={selection.weekStart === thisWeek} onClick={() => showWeek(thisWeek)}>
+              This week
+            </Button>
+            <Button size="sm" onClick={() => showWeek(addDaysToDateKey(selection.weekStart, 7))}>
+              Next week
+            </Button>
+          </div>
+          <Field label="Go to date" className="booking-week-date">
+            {(props) => (
+              <Input
+                {...props}
+                type="date"
+                value={selection.weekStart}
+                onChange={(event) => {
+                  if (event.target.value) {
+                    showWeek(startOfWeek(event.target.value))
+                  }
+                }}
+              />
+            )}
+          </Field>
+        </div>
+
+        <div ref={noticeRef} tabIndex={-1} className="booking-notice">
+          {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+        </div>
+
+        {selection.resourceId === null && (
+          <EmptyState title="Choose a resource to see bookable times." />
+        )}
+        {selection.resourceId !== null && scheduleQuery.error && (
+          <Alert tone="danger" title="The schedule couldn't be loaded.">
+            <p>{getErrorMessage(scheduleQuery.error)}</p>
+            <Button size="sm" onClick={() => void scheduleQuery.refetch()}>Try again</Button>
+          </Alert>
+        )}
+        {selection.resourceId !== null && scheduleQuery.isPending && (
+          <LoadingState>Loading resource schedule...</LoadingState>
+        )}
+        {schedule && (
+          <>
+            {!hasFreeTime && (
+              <Alert tone="info" title="No bookable times found this week.">
+                Try the next week, or another resource.
+              </Alert>
+            )}
+            <BookingCalendar
+              days={days}
+              firstHour={firstHour}
+              lastHour={lastHour}
+              selectedSegment={draft?.segment ?? null}
+              onSelectSegment={handleSelectSegment}
+              panelInDay={isSmallScreen ? bookingPanel : undefined}
+            />
+            {!isSmallScreen && bookingPanel}
+          </>
+        )}
+      </Card>
+    </div>
   )
 }

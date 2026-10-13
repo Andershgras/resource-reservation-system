@@ -1,4 +1,4 @@
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { useId, type ComponentProps, type ReactNode } from 'react'
 import './Field.css'
 
 // What a Field gives its control, so the label, hint and error are announced
@@ -56,15 +56,15 @@ export function Field({ label, hint, error, optional = false, className, childre
   )
 }
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className, ...props }: ComponentProps<'input'>) {
   return <input className={['input', className].filter(Boolean).join(' ')} {...props} />
 }
 
-export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({ className, ...props }: ComponentProps<'select'>) {
   return <select className={['input', 'select', className].filter(Boolean).join(' ')} {...props} />
 }
 
-interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+interface CheckboxProps extends Omit<ComponentProps<'input'>, 'type'> {
   label: ReactNode
 }
 

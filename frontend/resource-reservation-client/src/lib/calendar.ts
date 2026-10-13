@@ -55,6 +55,11 @@ export interface CalendarSegment {
   interval: BookableSlotResponse
 }
 
+// Tells segments apart, such as the one being booked.
+export function segmentKey(segment: CalendarSegment) {
+  return `${segment.kind}-${segment.start}-${segment.end}`
+}
+
 export type CalendarDayStatus = 'open' | 'fullyBooked' | 'closed' | 'past'
 
 export interface CalendarDay {

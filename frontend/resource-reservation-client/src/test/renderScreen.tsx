@@ -13,13 +13,20 @@ export const testAdmin: UserResponse = { id: 1, name: 'Admin', email: 'admin@exa
 export const testToken = 'test-token'
 
 // Renders one screen the way the app does: a signed-in user, a data router,
+// starting at `url` (the route's `path` by default),
 // the role guard and the confirmation provider, with a link to another screen
 // and a login screen to be sent to. Without the role guard, the screen stays
 // mounted when the session ends.
-export function renderScreen(
-  screen: ReactNode,
-  { path = '/screen', user = testAdmin, withRoleGuard = true } = {},
-) {
+interface RenderScreenOptions {
+  path?: string
+  url?: string
+  user?: UserResponse
+  withRoleGuard?: boolean
+}
+
+export function renderScreen(screen: ReactNode, options: RenderScreenOptions = {}) {
+  const { path = '/screen', user = testAdmin, withRoleGuard = true } = options
+  const url = options.url ?? path
   const content = (
     <ConfirmProvider>
       <nav aria-label="Test navigation">
@@ -48,7 +55,7 @@ export function renderScreen(
       },
       { path: '/login', element: <h1>Login screen</h1> },
     ],
-    { initialEntries: [path] },
+    { initialEntries: [url] },
   )
 
   const result = render(

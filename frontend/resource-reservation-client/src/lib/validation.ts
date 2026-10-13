@@ -1,4 +1,3 @@
-import type { BookableSlotResponse } from '../api/types'
 import type { FieldErrors } from './errors'
 
 // Client-side checks that run before a form is sent. Each returns the errors
@@ -96,37 +95,4 @@ export function validateAvailabilityRuleForm(
   }
 
   return errors
-}
-
-export function validateReservationSlotSelection(
-  slot: BookableSlotResponse,
-  startTime: string,
-  endTime: string,
-) {
-  if (!startTime) {
-    return 'Select a reservation start time.'
-  }
-
-  if (!endTime) {
-    return 'Select a reservation end time.'
-  }
-
-  const selectedStartTime = new Date(startTime).getTime()
-  const selectedEndTime = new Date(endTime).getTime()
-  const slotStartTime = new Date(slot.startTime).getTime()
-  const slotEndTime = new Date(slot.endTime).getTime()
-
-  if (Number.isNaN(selectedStartTime) || Number.isNaN(selectedEndTime)) {
-    return 'Select valid reservation start and end times.'
-  }
-
-  if (selectedEndTime <= selectedStartTime) {
-    return 'Reservation end time must be after start time.'
-  }
-
-  if (selectedStartTime < slotStartTime || selectedEndTime > slotEndTime) {
-    return 'Reservation time must stay inside the selected bookable time.'
-  }
-
-  return ''
 }

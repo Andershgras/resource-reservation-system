@@ -1,0 +1,249 @@
+.calendar {
+  --calendar-hour-height: 3rem;
+  --calendar-header-height: 3.25rem;
+
+  display: grid;
+  gap: var(--space-3);
+}
+
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+.calendar-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.calendar-swatch {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.calendar-swatch-available,
+.calendar-segment-available .calendar-segment-body {
+  border-color: var(--color-success-border);
+  background: var(--color-success-soft);
+}
+
+/* Reserved time is striped as well as grey, so it doesn't rely on colour. */
+.calendar-swatch-reserved,
+.calendar-segment-reserved .calendar-segment-body {
+  border-color: var(--color-border-control);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 6px,
+      color-mix(in srgb, var(--color-border-control) 22%, transparent) 6px 8px
+    ),
+    var(--color-surface-muted);
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr));
+  gap: 0 var(--space-2);
+}
+
+.calendar-hours {
+  position: relative;
+  height: calc(var(--calendar-header-height) + var(--calendar-hours) * var(--calendar-hour-height));
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+
+.calendar-hours li {
+  position: absolute;
+  top: calc(var(--calendar-header-height) + var(--calendar-offset) * var(--calendar-hour-height));
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.calendar-day {
+  min-width: 0;
+}
+
+.calendar-day-header {
+  height: var(--calendar-header-height);
+  display: grid;
+  align-content: center;
+  gap: 0.125rem;
+}
+
+.calendar-day-header h3 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.calendar-day-status {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-fullyBooked .calendar-day-status {
+  color: var(--color-warning-soft-text);
+  font-weight: var(--weight-semibold);
+}
+
+.calendar-track {
+  position: relative;
+  height: calc(var(--calendar-hours) * var(--calendar-hour-height));
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-md);
+  list-style: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      var(--color-border) 0 1px,
+      transparent 1px var(--calendar-hour-height)
+    ),
+    var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+/* A day without periods still shows its empty timeline. */
+.calendar-day:not(:has(.calendar-track))::after {
+  display: block;
+  height: calc(var(--calendar-hours) * var(--calendar-hour-height));
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  content: '';
+}
+
+.calendar-segment {
+  position: absolute;
+  top: calc(var(--calendar-start) * var(--calendar-hour-height));
+  right: 2px;
+  left: 2px;
+  height: calc(var(--calendar-length) * var(--calendar-hour-height));
+  min-height: 1.25rem;
+  padding: 1px 0;
+}
+
+/* Free time can always be chosen, even if a reservation overlaps it on screen. */
+.calendar-segment-available {
+  z-index: 1;
+}
+
+.calendar-segment-body {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  justify-content: start;
+  gap: 0.125rem;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  overflow: hidden;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  color: var(--color-heading);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  text-align: left;
+}
+
+button.calendar-segment-body {
+  cursor: pointer;
+  transition: box-shadow var(--duration-fast) var(--easing);
+}
+
+button.calendar-segment-body:hover {
+  box-shadow: inset 0 0 0 1px var(--color-success-soft-text);
+}
+
+button.calendar-segment-body:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+button.calendar-segment-body[aria-pressed='true'] {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+.calendar-segment-kind {
+  font-weight: var(--weight-semibold);
+}
+
+.calendar-segment-reserved .calendar-segment-body {
+  color: var(--color-text);
+}
+
+/* Phones and narrow windows: a list of days, each with its periods. */
+@media (max-width: 760px) {
+  .calendar-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .calendar-hours {
+    display: none;
+  }
+
+  .calendar-day {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+
+  .calendar-day-header {
+    height: auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .calendar-day:not(:has(.calendar-track))::after {
+    display: none;
+  }
+
+  .calendar-track {
+    height: auto;
+    display: grid;
+    gap: var(--space-2);
+    background: none;
+    box-shadow: none;
+  }
+
+  .calendar-segment {
+    position: static;
+    height: auto;
+    padding: 0;
+  }
+
+  .calendar-day-panel {
+    margin-top: var(--space-1);
+  }
+
+  .calendar-segment-body {
+    min-height: 2.75rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--text-sm);
+  }
+}

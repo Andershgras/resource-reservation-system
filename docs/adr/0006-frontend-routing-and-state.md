@@ -44,7 +44,7 @@ The guards make every redirect around login and logout. Event handlers don't nav
 
 React Router 8 was available, but it needs Node 22.22 or later, and the development machine runs Node 22.19. Version 7 has the same declarative API and still receives fixes.
 
-**Amended in Milestone 5:** the same route table now runs in a data router (`createBrowserRouter`, with `createMemoryRouter` in tests). Only a data router supports `useBlocker`, which the unsaved-changes guard needs. The routes, guards and layouts are unchanged, and there are still no loaders or actions: server data stays in TanStack Query. `AuthProvider` uses no router hooks, so it wraps the `RouterProvider`.
+**Amended in Milestone 5:** the same route table now runs in a data router (`createBrowserRouter`, with `createMemoryRouter` in tests). Only a data router supports `useBlocker`, which the unsaved-changes guard needs. The routes, guards and layouts are unchanged, and there are still no loaders or actions: server data stays in TanStack Query. `AuthProvider` uses no router hooks, so it wraps the `RouterProvider`. The data router adds about 17 kB gzipped to the JavaScript bundle (97 kB to 114 kB), because it includes React Router's navigation state machine. That is the price of navigation blocking; React Router has no lighter way to block navigation.
 
 ### Server data: TanStack Query, one set of hooks per feature
 
