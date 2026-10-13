@@ -5,6 +5,7 @@ import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import {
   buildCalendarWeek,
   defaultEndTime,
+  durationLimitsFor,
   endOptions,
   isWithinInterval,
   startOfWeek,
@@ -12,6 +13,7 @@ import {
   visibleHours,
   type CalendarSegment,
 } from '../../lib/calendar'
+import { describeBookingRules } from '../../lib/bookingRules'
 import { addDaysToDateKey, formatDate, formatDateTimeRange, todayInSchedulingZone } from '../../lib/dates'
 import { getErrorMessage, getFormErrors, type FieldErrors } from '../../lib/errors'
 import { Alert, type Notice } from '../../ui/Alert'
@@ -59,6 +61,7 @@ export function BookingPage() {
     [schedule, selection.weekStart, today],
   )
   const { firstHour, lastHour } = visibleHours(days)
+  const limits = durationLimitsFor(schedule?.policy)
   const noticeRef = useRef<HTMLDivElement>(null)
   // Matches the calendar's switch to a list of days (BookingCalendar.css).
   const isSmallScreen = useMediaQuery('(max-width: 760px)')
@@ -119,10 +122,10 @@ export function BookingPage() {
   }
 
   function handleSelectSegment(segment: CalendarSegment) {
-    const starts = startOptions(segment.interval)
+    const starts = startOptions(segment.interval, limits)
     // The day the user clicked, for a period that continues past midnight.
     const startTime = starts.find((option) => option.value >= segment.start)?.value ?? starts[0]?.value ?? ''
-    const endTime = defaultEndTime(segment.interval, startTime)
+    const endTime = defaultEndTime(segment.interval, startTime, limits)
 
     setNotice(null)
     setFieldErrors({})
@@ -136,10 +139,10 @@ export function BookingPage() {
         return current
       }
 
-      const ends = endOptions(current.segment.interval, startTime)
+      const ends = endOptions(current.segment.interval, startTime, limits)
       const endTime = ends.some((option) => option.value === current.endTime)
         ? current.endTime
-        : defaultEndTime(current.segment.interval, startTime)
+        : defaultEndTime(current.segment.interval, startTime, limits)
 
       return { ...current, startTime, endTime }
     })
@@ -191,6 +194,7 @@ export function BookingPage() {
     <BookingPanel
       resourceName={selectedResource.name}
       interval={draft.segment.interval}
+      limits={limits}
       startTime={draft.startTime}
       endTime={draft.endTime}
       onStartTimeChange={handleStartTimeChange}
@@ -318,6 +322,7 @@ export function BookingPage() {
         )}
         {schedule && (
           <>
+            <p className="booking-rules">{describeBookingRules(schedule.policy)}</p>
             {!hasFreeTime && (
               <Alert tone="info" title="No bookable times found this week.">
                 Try the next week, or another resource.

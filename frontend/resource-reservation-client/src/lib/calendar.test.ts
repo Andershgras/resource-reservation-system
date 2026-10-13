@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ResourceScheduleResponse } from '../api/types'
+import { testPolicy } from '../test/fixtures'
 import {
   buildCalendarWeek,
   defaultEndTime,
+  durationLimitsFor,
   endOptions,
   formatDuration,
+  formatMinutes,
   fromWallClockMinutes,
   isWithinInterval,
   startOfWeek,
@@ -23,6 +26,7 @@ function schedule(
     resourceName: 'Room A',
     fromDate: '2030-01-14',
     toDate: '2030-01-20',
+    policy: testPolicy,
     bookableSlots: bookableSlots.map(([startTime, endTime]) => ({ startTime, endTime })),
     reservedSlots: reservedSlots.map(([startTime, endTime]) => ({ startTime, endTime })),
   }
@@ -243,4 +247,50 @@ describe('formatDuration', () => {
   ])('%s to %s is %j', (start, end, expected) => {
     expect(formatDuration(start, end)).toBe(expected)
   })
+})
+
+describe('time options within duration limits', () => {
+  const interval = { startTime: '2030-01-15T08:00:00', endTime: '2030-01-15T12:10:00' }
+  const limits = { minMinutes: 30, maxMinutes: 90 }
+
+  it('offers ends from the shortest to the longest allowed booking', () => {
+    expect(endOptions(interval, '2030-01-15T08:00:00', limits).map((option) => option.label)).toEqual([
+      '08:30', '08:45', '09:00', '09:15', '09:30',
+    ])
+  })
+
+  it('offers the period end only when it is within the limits', () => {
+    expect(endOptions(interval, '2030-01-15T11:30:00', limits).map((option) => option.label)).toEqual([
+      '12:00', '12:10',
+    ])
+    expect(endOptions(interval, '2030-01-15T11:45:00', limits)).toEqual([])
+  })
+
+  it('leaves out starts too close to the end for the shortest booking', () => {
+    const labels = startOptions(interval, limits).map((option) => option.label)
+
+    expect(labels.at(-1)).toBe('11:30')
+    expect(labels).not.toContain('11:45')
+  })
+
+  it('suggests an hour, or the nearest allowed end', () => {
+    expect(defaultEndTime(interval, '2030-01-15T08:00:00', limits)).toBe('2030-01-15T09:00:00')
+    expect(defaultEndTime(interval, '2030-01-15T08:00:00', { minMinutes: 120, maxMinutes: 480 }))
+      .toBe('2030-01-15T10:00:00')
+    expect(defaultEndTime(interval, '2030-01-15T08:00:00', { minMinutes: 15, maxMinutes: 30 }))
+      .toBe('2030-01-15T08:30:00')
+  })
+
+  it('reads the limits from the booking rules', () => {
+    expect(durationLimitsFor(testPolicy)).toEqual({ minMinutes: 15, maxMinutes: 480 })
+  })
+})
+
+describe('formatMinutes', () => {
+  it.each([[15, '15 min'], [60, '1 h'], [90, '1 h 30 min'], [1440, '24 h'], [0, '']])(
+    '%s minutes is %j',
+    (minutes, expected) => {
+      expect(formatMinutes(minutes)).toBe(expected)
+    },
+  )
 })

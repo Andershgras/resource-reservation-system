@@ -10,6 +10,7 @@ import { createQueryClient } from '../../app/queryClient'
 import { ConfirmProvider } from '../../components/ConfirmProvider'
 import { expectNoAxeViolations } from '../../test/axe'
 import { AdminReservationsPage } from './AdminReservationsPage'
+import { newReservationFields, noRuleOverrides } from '../../test/fixtures'
 
 vi.mock('../../api/reservationsApi')
 vi.mock('../../api/resourcesApi')
@@ -25,13 +26,14 @@ function reservation(id: number, resourceId: number, resourceName: string, statu
     startTime: '2030-01-15T09:00:00',
     endTime: '2030-01-15T10:00:00',
     status,
+    ...newReservationFields,
   }
 }
 
 beforeEach(() => {
   vi.mocked(resourcesApi.getResources).mockResolvedValue([
-    { id: 1, name: 'Room A', description: null, location: null, isActive: true },
-    { id: 2, name: 'Room B', description: null, location: null, isActive: true },
+    { id: 1, name: 'Room A', description: null, location: null, isActive: true, ...noRuleOverrides },
+    { id: 2, name: 'Room B', description: null, location: null, isActive: true, ...noRuleOverrides },
   ])
   vi.mocked(reservationsApi.getReservations).mockResolvedValue([
     reservation(1, 1, 'Room A', 'Active'),

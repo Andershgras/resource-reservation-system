@@ -1,6 +1,6 @@
 import { useEffect, useRef, type FormEvent } from 'react'
 import type { BookableSlotResponse } from '../../api/types'
-import { endOptions, formatDuration, startOptions } from '../../lib/calendar'
+import { endOptions, formatDuration, startOptions, type DurationLimits } from '../../lib/calendar'
 import { formatDateTimeRange } from '../../lib/dates'
 import type { FieldErrors } from '../../lib/errors'
 import { Alert } from '../../ui/Alert'
@@ -13,6 +13,8 @@ export type BookingField = 'startTime' | 'endTime'
 interface BookingPanelProps {
   resourceName: string
   interval: BookableSlotResponse
+  // How long a booking may be, from the resource's booking rules.
+  limits: DurationLimits
   startTime: string
   endTime: string
   onStartTimeChange: (value: string) => void
@@ -29,6 +31,7 @@ interface BookingPanelProps {
 export function BookingPanel({
   resourceName,
   interval,
+  limits,
   startTime,
   endTime,
   onStartTimeChange,
@@ -69,7 +72,7 @@ export function BookingPanel({
                 value={startTime}
                 onChange={(event) => onStartTimeChange(event.target.value)}
               >
-                {startOptions(interval).map((option) => (
+                {startOptions(interval, limits).map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </Select>
@@ -82,7 +85,7 @@ export function BookingPanel({
                 value={endTime}
                 onChange={(event) => onEndTimeChange(event.target.value)}
               >
-                {endOptions(interval, startTime).map((option) => (
+                {endOptions(interval, startTime, limits).map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </Select>

@@ -29,7 +29,15 @@ export interface LoginUserRequest {
   password: string
 }
 
-export interface ResourceResponse {
+// A resource's own booking rules. Null means it uses the default.
+export interface BookingRuleOverrides {
+  minDurationMinutes: number | null
+  maxDurationMinutes: number | null
+  minLeadTimeMinutes: number | null
+  maxAdvanceDays: number | null
+}
+
+export interface ResourceResponse extends BookingRuleOverrides {
   id: number
   name: string
   description: string | null
@@ -37,10 +45,20 @@ export interface ResourceResponse {
   isActive: boolean
 }
 
-export interface CreateResourceRequest {
+export interface CreateResourceRequest extends Partial<BookingRuleOverrides> {
   name: string
   description?: string | null
   location?: string | null
+}
+
+// The booking rules in force: the defaults, or a resource's rules after its
+// overrides.
+export interface BookingPolicyResponse {
+  minDurationMinutes: number
+  maxDurationMinutes: number
+  minLeadTimeMinutes: number
+  maxAdvanceDays: number
+  maxActiveReservationsPerUser: number
 }
 
 export interface UpdateResourceRequest extends CreateResourceRequest {
@@ -62,6 +80,7 @@ export interface ResourceScheduleResponse {
   resourceName: string
   fromDate: string
   toDate: string
+  policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
 }
@@ -111,10 +130,26 @@ export interface ReservationResponse {
   startTime: string
   endTime: string
   status: ReservationStatus
+  // UTC instants with an offset, unlike the wall-clock booking times. Null
+  // for reservations made before they were recorded.
+  createdAt: string | null
+  updatedAt: string | null
+  cancelledAt: string | null
+  cancelledByUserId: number | null
+  cancelledByName: string | null
+  // Opaque. Sent back when moving or cancelling, so a change based on an
+  // out-of-date copy is rejected.
+  version: string
 }
 
 export interface CreateReservationRequest {
   resourceId: number
   startTime: string
   endTime: string
+}
+
+export interface RescheduleReservationRequest {
+  startTime: string
+  endTime: string
+  version: string
 }

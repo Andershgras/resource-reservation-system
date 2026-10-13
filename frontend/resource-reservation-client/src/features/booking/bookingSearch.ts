@@ -3,11 +3,14 @@ import { startOfWeek } from '../../lib/calendar'
 import { addDaysToDateKey, todayInSchedulingZone } from '../../lib/dates'
 
 // The booking screen's selection, kept in the address so a reload or a shared
-// link shows the same week: /book?resource=3&week=2030-01-14
+// link shows the same week: /book?resource=3&week=2030-01-14. Moving a
+// booking adds its ID: /book?resource=3&week=2030-01-14&move=42
 export interface BookingSelection {
   resourceId: number | null
   // The Monday the shown week starts on.
   weekStart: string
+  // The booking being moved to a new time, if any.
+  moveReservationId: number | null
 }
 
 // The week that contains today, in the scheduling time zone.
@@ -27,13 +30,20 @@ export function weekRange(weekStart: string) {
 // of their from date.
 export function parseBookingSearch(search: string, now = new Date()): BookingSelection {
   const params = new URLSearchParams(search)
-  const resource = params.get('resource')
-  const resourceId = resource && /^[1-9]\d{0,9}$/.test(resource) ? Number(resource) : null
   const date = [params.get('week'), params.get('from')].find(
     (value): value is string => value !== null && isDate(value),
   )
 
-  return { resourceId, weekStart: date ? startOfWeek(date) : currentWeekStart(now) }
+  return {
+    resourceId: parseId(params.get('resource')),
+    weekStart: date ? startOfWeek(date) : currentWeekStart(now),
+    moveReservationId: parseId(params.get('move')),
+  }
+}
+
+// A positive whole number, or null.
+function parseId(value: string | null) {
+  return value && /^[1-9]\d{0,9}$/.test(value) ? Number(value) : null
 }
 
 export function toBookingSearch(selection: BookingSelection) {
@@ -44,6 +54,10 @@ export function toBookingSearch(selection: BookingSelection) {
   }
 
   params.set('week', selection.weekStart)
+
+  if (selection.moveReservationId !== null) {
+    params.set('move', selection.moveReservationId.toString())
+  }
 
   return `?${params.toString()}`
 }

@@ -11,12 +11,42 @@ interface UserResponse {
   role: UserRole
 }
 
-interface ResourceResponse {
+interface BookingRuleOverrides {
+  minDurationMinutes: number | null
+  maxDurationMinutes: number | null
+  minLeadTimeMinutes: number | null
+  maxAdvanceDays: number | null
+}
+
+interface ResourceResponse extends BookingRuleOverrides {
   id: number
   name: string
   description: string | null
   location: string | null
   isActive: boolean
+}
+
+interface BookingPolicyResponse {
+  minDurationMinutes: number
+  maxDurationMinutes: number
+  minLeadTimeMinutes: number
+  maxAdvanceDays: number
+  maxActiveReservationsPerUser: number
+}
+
+const defaultPolicy: BookingPolicyResponse = {
+  minDurationMinutes: 15,
+  maxDurationMinutes: 480,
+  minLeadTimeMinutes: 0,
+  maxAdvanceDays: 90,
+  maxActiveReservationsPerUser: 5,
+}
+
+const noRuleOverrides: BookingRuleOverrides = {
+  minDurationMinutes: null,
+  maxDurationMinutes: null,
+  minLeadTimeMinutes: null,
+  maxAdvanceDays: null,
 }
 
 interface AvailabilityResponse {
@@ -52,6 +82,7 @@ interface ResourceScheduleResponse {
   resourceName: string
   fromDate: string
   toDate: string
+  policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
 }
@@ -66,7 +97,27 @@ interface ReservationResponse {
   startTime: string
   endTime: string
   status: ReservationStatus
+  createdAt: string | null
+  updatedAt: string | null
+  cancelledAt: string | null
+  cancelledByUserId: number | null
+  cancelledByName: string | null
+  version: string
 }
+
+// The fields of a reservation that was just made, with a fresh version.
+function newReservationFields(version: number) {
+  return {
+    createdAt: '2030-01-10T08:00:00+00:00',
+    updatedAt: null,
+    cancelledAt: null,
+    cancelledByUserId: null,
+    cancelledByName: null,
+    version: `v${version}`,
+  }
+}
+
+let nextVersion = 100
 
 test('main frontend reservation flow', async ({ page }) => {
   await mockApi(page)
@@ -844,6 +895,7 @@ async function mockApi(
           description: 'Already reserved in the smoke test.',
           location: 'Test floor',
           isActive: true,
+          ...noRuleOverrides,
         },
       ]
     : []
@@ -883,6 +935,7 @@ async function mockApi(
           startTime: '2030-01-15T09:00:00',
           endTime: '2030-01-15T11:00:00',
           status: 'Active',
+          ...newReservationFields(1),
         },
       ]
     : []
@@ -943,6 +996,9 @@ async function mockApi(
         description: body.description,
         location: body.location,
         isActive: true,
+        ...noRuleOverrides,
+        ...body,
+        id: nextResourceId,
       }
 
       nextResourceId += 1
@@ -1114,6 +1170,7 @@ async function mockApi(
         startTime: body.startTime,
         endTime: body.endTime,
         status: 'Active',
+        ...newReservationFields(nextVersion++),
       }
 
       nextReservationId += 1
@@ -1127,7 +1184,14 @@ async function mockApi(
       const reservationId = Number(reservationCancelMatch[1])
       reservations = reservations.map((reservation) =>
         reservation.id === reservationId
-          ? { ...reservation, status: 'Cancelled' }
+          ? {
+              ...reservation,
+              status: 'Cancelled',
+              cancelledAt: '2030-01-11T08:00:00+00:00',
+              cancelledByUserId: currentUser.id,
+              cancelledByName: currentUser.name,
+              version: `v${nextVersion++}`,
+            }
           : reservation,
       )
       await route.fulfill({ status: 204 })
@@ -1214,6 +1278,7 @@ function buildResourceSchedule(
     resourceName: resource?.name ?? '',
     fromDate,
     toDate,
+    policy: { ...defaultPolicy, ...withoutNulls(resource ?? noRuleOverrides) },
     bookableSlots: showReservedSlotAsBookable
       ? [...availabilitySlots, ...ruleSlots]
       : [...availabilitySlots, ...ruleSlots].filter(
@@ -1226,6 +1291,18 @@ function buildResourceSchedule(
         ),
     reservedSlots,
   }
+}
+
+// A resource's own rules, leaving out the ones it takes from the defaults.
+function withoutNulls(overrides: BookingRuleOverrides) {
+  return Object.fromEntries(
+    Object.entries({
+      minDurationMinutes: overrides.minDurationMinutes,
+      maxDurationMinutes: overrides.maxDurationMinutes,
+      minLeadTimeMinutes: overrides.minLeadTimeMinutes,
+      maxAdvanceDays: overrides.maxAdvanceDays,
+    }).filter(([, value]) => value !== null),
+  )
 }
 
 function buildRuleSlots(

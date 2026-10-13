@@ -8,6 +8,7 @@ import type { ResourceScheduleResponse, UserResponse } from '../../api/types'
 import { expectNoAxeViolations } from '../../test/axe'
 import { renderScreen } from '../../test/renderScreen'
 import { BookingPage } from './BookingPage'
+import { newReservationFields, noRuleOverrides, testPolicy } from '../../test/fixtures'
 
 vi.mock('../../api/resourcesApi')
 vi.mock('../../api/reservationsApi')
@@ -21,6 +22,7 @@ function weekSchedule(overrides: Partial<ResourceScheduleResponse> = {}): Resour
     resourceName: 'Room A',
     fromDate: '2030-01-14',
     toDate: '2030-01-20',
+    policy: testPolicy,
     bookableSlots: [
       { startTime: '2030-01-15T08:00:00', endTime: '2030-01-15T10:07:00' },
       { startTime: '2030-01-15T11:23:00', endTime: '2030-01-15T16:00:00' },
@@ -35,7 +37,7 @@ function weekSchedule(overrides: Partial<ResourceScheduleResponse> = {}): Resour
 
 beforeEach(() => {
   vi.mocked(resourcesApi.getResources).mockResolvedValue([
-    { id: 1, name: 'Room A', description: null, location: 'First floor', isActive: true },
+    { id: 1, name: 'Room A', description: null, location: 'First floor', isActive: true, ...noRuleOverrides },
   ])
   vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(weekSchedule())
 })
@@ -59,7 +61,7 @@ describe('BookingPage calendar', () => {
     renderBooking()
 
     expect(await screen.findByText(/Mon 14 Jan 2030 – Sun 20 Jan 2030/)).toBeInTheDocument()
-    await waitFor(() => expect(resourcesApi.getResourceSchedule).toHaveBeenCalledWith(1, '2030-01-14', '2030-01-20'))
+    await waitFor(() => expect(resourcesApi.getResourceSchedule).toHaveBeenCalledWith(1, '2030-01-14', '2030-01-20', undefined))
   })
 
   it('shows free and reserved time in order, including arbitrary minutes', async () => {
@@ -93,6 +95,7 @@ describe('BookingPage calendar', () => {
       startTime: '2030-01-15T08:30:00',
       endTime: '2030-01-15T10:07:00',
       status: 'Active',
+      ...newReservationFields,
     })
     renderBooking()
 
@@ -102,8 +105,9 @@ describe('BookingPage calendar', () => {
 
     expect(start).toHaveFocus()
     expect(screen.getByRole('group', { name: 'Book Room A Free Tue 15 Jan 2030, 08:00–10:07' })).toBeInTheDocument()
+    // 10:00 leaves only 7 minutes, less than the 15-minute minimum.
     expect(within(start).getAllByRole('option').map((option) => option.textContent))
-      .toEqual(['08:00', '08:15', '08:30', '08:45', '09:00', '09:15', '09:30', '09:45', '10:00'])
+      .toEqual(['08:00', '08:15', '08:30', '08:45', '09:00', '09:15', '09:30', '09:45'])
     expect(end).toHaveValue('2030-01-15T09:00:00')
 
     await userEvent.selectOptions(start, '08:30')
@@ -132,6 +136,20 @@ describe('BookingPage calendar', () => {
     expect(screen.getByRole('combobox', { name: 'End' })).toHaveValue('2030-01-15T10:07:00')
     expect(within(screen.getByRole('combobox', { name: 'End' })).getAllByRole('option')
       .map((option) => option.textContent)).toEqual(['10:00', '10:07'])
+  })
+
+  it('follows the booking rules of the resource and describes them', async () => {
+    vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(weekSchedule({
+      policy: { ...testPolicy, minDurationMinutes: 30, maxDurationMinutes: 60 },
+    }))
+    renderBooking()
+    await chooseTuesdayMorning()
+
+    expect(within(screen.getByRole('combobox', { name: 'End' })).getAllByRole('option')
+      .map((option) => option.textContent)).toEqual(['08:30', '08:45', '09:00'])
+    expect(screen.getByText(
+      'Bookings last 30 min to 1 h and can be made up to 90 days ahead. You can have up to 5 upcoming bookings.',
+    )).toBeInTheDocument()
   })
 
   it('reloads the calendar when someone else booked the time first', async () => {
@@ -182,7 +200,7 @@ describe('BookingPage calendar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next week' }))
 
     expect(router.state.location.search).toBe('?resource=1&week=2030-01-21')
-    expect(resourcesApi.getResourceSchedule).toHaveBeenLastCalledWith(1, '2030-01-21', '2030-01-27')
+    expect(resourcesApi.getResourceSchedule).toHaveBeenLastCalledWith(1, '2030-01-21', '2030-01-27', undefined)
   })
 
   // Choosing a resource and then a date before React re-renders must keep

@@ -23,7 +23,7 @@ export function MyReservationsPage() {
 
         try {
           // Also reloads the booking schedule, so the time shows as free again.
-          await cancelReservation.mutateAsync(reservation.id)
+          await cancelReservation.mutateAsync(reservation)
           setNotice({ tone: 'success', text: 'Reservation cancelled.' })
         } catch (error) {
           setNotice({ tone: 'danger', text: getErrorMessage(error) })
@@ -39,7 +39,7 @@ export function MyReservationsPage() {
       isLoading={reservationsQuery.isPending}
       notice={notice ?? errorNotice(reservationsQuery.error)}
       emptyDescription="Book a resource and your reservations show up here."
-      cancellingReservationId={cancelReservation.isPending ? cancelReservation.variables : null}
+      cancellingReservationId={cancelReservation.isPending ? cancelReservation.variables.id : null}
       onCancelReservation={handleCancel}
     />
   )

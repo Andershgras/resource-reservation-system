@@ -10,6 +10,8 @@ import {
   getDateKey,
   toDateTimeLocalValue,
   todayInSchedulingZone,
+  toSchedulingWallClock,
+  formatInstant,
   toTimeOfDay,
 } from './dates'
 
@@ -107,5 +109,23 @@ describe('toTimeOfDay', () => {
 describe('getDateKey', () => {
   it('returns the date part of an API time', () => {
     expect(getDateKey('2030-01-15T09:00:00')).toBe('2030-01-15')
+  })
+})
+
+describe('toSchedulingWallClock', () => {
+  it('gives the Copenhagen wall-clock time, with midnight as 00', () => {
+    expect(toSchedulingWallClock(new Date('2030-01-14T23:00:00Z'))).toBe('2030-01-15T00:00:00')
+    expect(toSchedulingWallClock(new Date('2030-07-15T07:05:09Z'))).toBe('2030-07-15T09:05:09')
+  })
+})
+
+describe('formatInstant', () => {
+  it('shows a recorded UTC moment in Copenhagen time', () => {
+    expect(formatInstant('2030-01-15T09:00:00+00:00')).toBe('Tue 15 Jan 2030, 10:00')
+    expect(formatInstant('2030-07-15T09:00:00.1234567+00:00')).toBe('Mon 15 Jul 2030, 11:00')
+  })
+
+  it('leaves text that is not a time unchanged', () => {
+    expect(formatInstant('soon')).toBe('soon')
   })
 })

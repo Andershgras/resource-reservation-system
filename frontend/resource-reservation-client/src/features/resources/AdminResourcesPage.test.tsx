@@ -6,6 +6,7 @@ import * as resourcesApi from '../../api/resourcesApi'
 import { expectNoAxeViolations } from '../../test/axe'
 import { renderScreen } from '../../test/renderScreen'
 import { AdminResourcesPage } from './AdminResourcesPage'
+import { noRuleOverrides } from '../../test/fixtures'
 
 vi.mock('../../api/resourcesApi')
 
@@ -75,7 +76,7 @@ describe('AdminResourcesPage form', () => {
 describe('AdminResourcesPage unsaved changes', () => {
   it('asks before leaving a half-filled form, and not after saving it', async () => {
     vi.mocked(resourcesApi.createResource).mockResolvedValue(
-      { id: 5, name: 'Room A', description: null, location: null, isActive: true },
+      { id: 5, name: 'Room A', description: null, location: null, isActive: true, ...noRuleOverrides },
     )
     renderPage()
     await userEvent.type(nameInput(), 'Room A')
@@ -93,7 +94,7 @@ describe('AdminResourcesPage unsaved changes', () => {
 
   it('treats an edit form as unchanged until a value differs from the resource', async () => {
     vi.mocked(resourcesApi.getResources).mockResolvedValue([
-      { id: 1, name: 'Room A', description: 'Big', location: null, isActive: true },
+      { id: 1, name: 'Room A', description: 'Big', location: null, isActive: true, ...noRuleOverrides },
     ])
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit Room A' }))
