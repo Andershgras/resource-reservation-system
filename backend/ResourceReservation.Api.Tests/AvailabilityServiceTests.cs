@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -240,9 +241,125 @@ public class AvailabilityServiceTests
         Assert.Equal(new DateTime(2030, 1, 16, 16, 0, 0), bookableSlot.EndTime);
     }
 
-    private static AvailabilityService CreateService(AppDbContext context, DateTime? localNow = null)
+    private static AvailabilityService CreateService(
+        AppDbContext context,
+        DateTime? localNow = null,
+        Action<BookingPolicyOptions>? configurePolicy = null)
     {
-        return new AvailabilityService(context, TestSchedulingClock.Create(localNow));
+        return new AvailabilityService(
+            context,
+            TestSchedulingClock.Create(localNow),
+            TestBookingPolicy.Create(configurePolicy));
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_StartsBookableTimeAfterTheResourcesLeadTime()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        resource.MinLeadTimeMinutes = 120;
+        await context.SaveChangesAsync();
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var service = CreateService(context, localNow: new DateTime(2030, 1, 16, 9, 30, 10));
+
+        var result = await service.GetScheduleAsync(
+            resource.Id,
+            new DateOnly(2030, 1, 16),
+            new DateOnly(2030, 1, 16));
+
+        Assert.True(result.IsSuccess);
+        var bookableSlot = Assert.Single(result.Value.BookableSlots);
+        Assert.Equal(new DateTime(2030, 1, 16, 11, 31, 0), bookableSlot.StartTime);
+        Assert.Equal(120, result.Value.Policy.MinLeadTimeMinutes);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_EndsBookableTimeAtTheBookingHorizon()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        await SeedAvailabilityAsync(
+            context,
+            resource.Id,
+            new DateTime(2030, 1, 3, 20, 0, 0),
+            new DateTime(2030, 1, 4, 4, 0, 0));
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 1, 12, 0, 0),
+            configurePolicy: policy => policy.MaxAdvanceDays = 2);
+
+        var result = await service.GetScheduleAsync(
+            resource.Id,
+            new DateOnly(2030, 1, 3),
+            new DateOnly(2030, 1, 4));
+
+        Assert.True(result.IsSuccess);
+        var bookableSlot = Assert.Single(result.Value.BookableSlots);
+        Assert.Equal(
+            (new DateTime(2030, 1, 3, 20, 0, 0), new DateTime(2030, 1, 4, 0, 0, 0)),
+            (bookableSlot.StartTime, bookableSlot.EndTime));
+        Assert.Equal(2, result.Value.Policy.MaxAdvanceDays);
+    }
+
+    [Fact]
+    public async Task GetResourceSchedule_LeavesOutFreePeriodsShorterThanTheMinimumBooking()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceAsync(context);
+        resource.MinDurationMinutes = 30;
+        await context.SaveChangesAsync();
+        await SeedAvailabilityRuleAsync(
+            context,
+            resource.Id,
+            DayOfWeek.Wednesday,
+            new TimeOnly(8, 0),
+            new TimeOnly(10, 0));
+        await SeedReservationAsync(
+            context,
+            resource.Id,
+            startTime: new DateTime(2030, 1, 16, 8, 20, 0),
+            endTime: new DateTime(2030, 1, 16, 9, 30, 0));
+        var service = CreateService(context);
+
+        var result = await service.GetScheduleAsync(
+            resource.Id,
+            new DateOnly(2030, 1, 16),
+            new DateOnly(2030, 1, 16));
+
+        Assert.True(result.IsSuccess);
+        var bookableSlot = Assert.Single(result.Value.BookableSlots);
+        Assert.Equal(new DateTime(2030, 1, 16, 9, 30, 0), bookableSlot.StartTime);
+        Assert.Single(result.Value.ReservedSlots);
+        Assert.Equal(
+            (30, 480, 0, 5),
+            (result.Value.Policy.MinDurationMinutes, result.Value.Policy.MaxDurationMinutes,
+                result.Value.Policy.MinLeadTimeMinutes, result.Value.Policy.MaxActiveReservationsPerUser));
+    }
+
+    [Fact]
+    public void RemoveTimeAfter_TrimsAndDropsIntervalsPastTheCutoff()
+    {
+        var day = new DateTime(2030, 1, 16);
+
+        var result = AvailabilityService.RemoveTimeAfter(
+            [
+                new TimeRange(day.AddHours(8), day.AddHours(10)),
+                new TimeRange(day.AddHours(11), day.AddHours(13)),
+                new TimeRange(day.AddHours(12), day.AddHours(14))
+            ],
+            day.AddHours(12));
+
+        Assert.Equal(
+            [
+                new TimeRange(day.AddHours(8), day.AddHours(10)),
+                new TimeRange(day.AddHours(11), day.AddHours(12))
+            ],
+            result);
     }
 
     private static AppDbContext CreateContext()

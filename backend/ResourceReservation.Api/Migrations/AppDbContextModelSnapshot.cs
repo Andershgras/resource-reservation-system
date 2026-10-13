@@ -149,6 +149,18 @@ namespace ResourceReservation.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("MaxAdvanceDays")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MaxDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MinDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MinLeadTimeMinutes")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -156,7 +168,10 @@ namespace ResourceReservation.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Resources");
+                    b.ToTable("Resources", t =>
+                        {
+                            t.HasCheckConstraint("CK_Resources_BookingPolicy", "([MinDurationMinutes] IS NULL OR [MinDurationMinutes] > 0) AND ([MaxDurationMinutes] IS NULL OR [MaxDurationMinutes] > 0) AND ([MinLeadTimeMinutes] IS NULL OR [MinLeadTimeMinutes] >= 0) AND ([MaxAdvanceDays] IS NULL OR [MaxAdvanceDays] > 0) AND ([MinDurationMinutes] IS NULL OR [MaxDurationMinutes] IS NULL OR [MinDurationMinutes] <= [MaxDurationMinutes])");
+                        });
                 });
 
             modelBuilder.Entity("ResourceReservation.Api.Models.User", b =>

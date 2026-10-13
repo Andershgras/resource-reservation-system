@@ -167,6 +167,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Scheduling:TimeZoneId", "Europe/Copenhagen");
         // Tests log in many times from one address. RateLimitingTests set a real limit.
         builder.UseSetting("RateLimiting:Auth:PermitLimit", "10000");
+        // Test bookings are dated 2030, beyond the default 90-day booking horizon.
+        // BookingPolicyTests check the horizon with dates relative to today.
+        builder.UseSetting("BookingPolicy:MaxAdvanceDays", "3650");
 
         foreach (var (key, value) in _settingOverrides)
         {

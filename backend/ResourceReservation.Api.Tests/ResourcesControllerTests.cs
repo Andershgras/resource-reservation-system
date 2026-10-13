@@ -104,7 +104,8 @@ public class ResourcesControllerTests
     {
         return new ResourcesController(
             context,
-            new AvailabilityService(context, TestSchedulingClock.Create()))
+            new AvailabilityService(context, TestSchedulingClock.Create(), TestBookingPolicy.Create()),
+            TestBookingPolicy.Create())
             .WithHttpContext();
     }
 

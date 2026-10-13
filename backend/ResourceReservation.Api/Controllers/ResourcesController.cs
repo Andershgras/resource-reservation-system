@@ -3,6 +3,8 @@ using ResourceReservation.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Services;
 
@@ -14,11 +16,16 @@ public class ResourcesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
+    private readonly BookingPolicyOptions _bookingPolicyOptions;
 
-    public ResourcesController(AppDbContext context, AvailabilityService availabilityService)
+    public ResourcesController(
+        AppDbContext context,
+        AvailabilityService availabilityService,
+        IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
+        _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
     [HttpGet]
@@ -67,8 +74,17 @@ public class ResourcesController : ControllerBase
             Name = createResourceDto.Name.Trim(),
             Description = NormalizeOptionalText(createResourceDto.Description),
             Location = NormalizeOptionalText(createResourceDto.Location),
-            IsActive = true
+            IsActive = true,
+            MinDurationMinutes = createResourceDto.MinDurationMinutes,
+            MaxDurationMinutes = createResourceDto.MaxDurationMinutes,
+            MinLeadTimeMinutes = createResourceDto.MinLeadTimeMinutes,
+            MaxAdvanceDays = createResourceDto.MaxAdvanceDays
         };
+
+        if (!HasValidDurationRange(resource))
+        {
+            return ValidationProblem();
+        }
 
         _context.Resources.Add(resource);
         await _context.SaveChangesAsync();
@@ -99,6 +115,15 @@ public class ResourcesController : ControllerBase
         resource.Description = NormalizeOptionalText(updateResourceDto.Description);
         resource.Location = NormalizeOptionalText(updateResourceDto.Location);
         resource.IsActive = updateResourceDto.IsActive;
+        resource.MinDurationMinutes = updateResourceDto.MinDurationMinutes;
+        resource.MaxDurationMinutes = updateResourceDto.MaxDurationMinutes;
+        resource.MinLeadTimeMinutes = updateResourceDto.MinLeadTimeMinutes;
+        resource.MaxAdvanceDays = updateResourceDto.MaxAdvanceDays;
+
+        if (!HasValidDurationRange(resource))
+        {
+            return ValidationProblem();
+        }
 
         await _context.SaveChangesAsync();
 
@@ -139,8 +164,32 @@ public class ResourcesController : ControllerBase
             Name = resource.Name,
             Description = resource.Description,
             Location = resource.Location,
-            IsActive = resource.IsActive
+            IsActive = resource.IsActive,
+            MinDurationMinutes = resource.MinDurationMinutes,
+            MaxDurationMinutes = resource.MaxDurationMinutes,
+            MinLeadTimeMinutes = resource.MinLeadTimeMinutes,
+            MaxAdvanceDays = resource.MaxAdvanceDays
         };
+    }
+
+    // Compares the durations in force, so an override can't contradict a default.
+    private bool HasValidDurationRange(Resource resource)
+    {
+        var policy = BookingPolicy.For(resource, _bookingPolicyOptions);
+
+        if (policy.MinDurationMinutes <= policy.MaxDurationMinutes)
+        {
+            return true;
+        }
+
+        var message = resource.MaxDurationMinutes is null
+            ? $"The minimum duration can't be longer than the default maximum of {policy.MaxDurationMinutes} minutes."
+            : "The maximum duration can't be shorter than the minimum duration.";
+        ModelState.AddModelError(
+            resource.MaxDurationMinutes is null ? nameof(Resource.MinDurationMinutes) : nameof(Resource.MaxDurationMinutes),
+            message);
+
+        return false;
     }
 
     private static string? NormalizeOptionalText(string? value)

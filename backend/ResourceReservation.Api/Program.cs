@@ -67,6 +67,10 @@ builder.Services.AddOptions<SchedulingOptions>()
     .Bind(builder.Configuration.GetSection(SchedulingOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddOptions<BookingPolicyOptions>()
+    .Bind(builder.Configuration.GetSection(BookingPolicyOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddOptions<FrontendCorsOptions>()
     .Bind(builder.Configuration.GetSection(FrontendCorsOptions.SectionName))
     .ValidateDataAnnotations()

@@ -20,7 +20,7 @@ public class MigrationDataTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Milestone6Migrations_KeepExistingReservationsAndLeaveUnknownAuditTimesEmpty()
+    public async Task Milestone6Migrations_KeepExistingDataAndLeaveUnknownValuesEmpty()
     {
         var connectionString = new SqlConnectionStringBuilder(Fixture.ConnectionString)
         {
@@ -70,6 +70,10 @@ public class MigrationDataTests : ApiTestBase
             var resource = await context.Resources.AsNoTracking().SingleAsync();
             Assert.Equal(("Legacy Room", "Kept", "Floor 1", true),
                 (resource.Name, resource.Description, resource.Location, resource.IsActive));
+            // No overrides, so the resource follows the default booking rules.
+            Assert.Equal((null, null, null, null),
+                (resource.MinDurationMinutes, resource.MaxDurationMinutes,
+                    resource.MinLeadTimeMinutes, resource.MaxAdvanceDays));
             Assert.Equal("legacy@example.com", (await context.Users.AsNoTracking().SingleAsync()).Email);
         }
         finally

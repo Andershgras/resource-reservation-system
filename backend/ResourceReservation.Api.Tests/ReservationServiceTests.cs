@@ -457,6 +457,71 @@ public class ReservationServiceTests
         Assert.True(result.IsSuccess);
     }
 
+    [Fact]
+    public async Task CreateReservation_WhenLongerThanTheResourcesMaximum_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        resource.MaxDurationMinutes = 60;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 9, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 10, 30, 0)
+        }, user.Id);
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be at most 1 hour long.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenBeyondTheBookingHorizon_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 1, 12, 0, 0),
+            configurePolicy: policy => policy.MaxAdvanceDays = 13);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        }, user.Id);
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be made up to 13 days ahead.");
+    }
+
+    [Fact]
+    public async Task ExistingReservation_ThatBreaksTodaysPolicies_StaysActiveAndCanBeCancelled()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        // Ten hours, longer than the eight-hour maximum. Made before the rule existed.
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            user.Id,
+            new DateTime(2030, 1, 15, 8, 0, 0),
+            new DateTime(2030, 1, 15, 18, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var listed = Assert.Single(await service.GetForUserAsync(user.Id));
+        Assert.Equal(ReservationStatuses.Active, listed.Status);
+
+        var result = await service.CancelAsync(reservation.Id, new CurrentUser(user.Id, false));
+
+        Assert.True(result.IsSuccess);
+    }
+
     private static async Task<Resource> SeedResourceAsync(AppDbContext context)
     {
         var resource = new Resource
@@ -504,15 +569,20 @@ public class ReservationServiceTests
         return new AppDbContext(options);
     }
 
-    private static ReservationService CreateService(AppDbContext context, DateTime? localNow = null)
+    private static ReservationService CreateService(
+        AppDbContext context,
+        DateTime? localNow = null,
+        Action<BookingPolicyOptions>? configurePolicy = null)
     {
         var clock = TestSchedulingClock.Create(localNow);
+        var bookingPolicy = TestBookingPolicy.Create(configurePolicy);
 
         return new ReservationService(
             context,
-            new AvailabilityService(context, clock),
+            new AvailabilityService(context, clock, bookingPolicy),
             clock,
-            Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }));
+            Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }),
+            bookingPolicy);
     }
 
     private static void AssertError<T>(ServiceResult<T> result, ServiceErrorKind kind, string message)

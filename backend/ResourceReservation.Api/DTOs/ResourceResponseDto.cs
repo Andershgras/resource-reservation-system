@@ -11,4 +11,13 @@ public class ResourceResponseDto
     public string? Location { get; set; }
 
     public bool IsActive { get; set; }
+
+    // Null where the resource uses the default booking rule.
+    public int? MinDurationMinutes { get; set; }
+
+    public int? MaxDurationMinutes { get; set; }
+
+    public int? MinLeadTimeMinutes { get; set; }
+
+    public int? MaxAdvanceDays { get; set; }
 }

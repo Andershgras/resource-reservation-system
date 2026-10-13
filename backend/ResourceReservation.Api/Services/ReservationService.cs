@@ -19,17 +19,20 @@ public class ReservationService
     private readonly AvailabilityService _availabilityService;
     private readonly SchedulingClock _schedulingClock;
     private readonly SchedulingOptions _schedulingOptions;
+    private readonly BookingPolicyOptions _bookingPolicyOptions;
 
     public ReservationService(
         AppDbContext context,
         AvailabilityService availabilityService,
         SchedulingClock schedulingClock,
-        IOptions<SchedulingOptions> schedulingOptions)
+        IOptions<SchedulingOptions> schedulingOptions,
+        IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
         _schedulingClock = schedulingClock;
         _schedulingOptions = schedulingOptions.Value;
+        _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
     public Task<List<ReservationResponseDto>> GetAllAsync()
@@ -102,9 +105,12 @@ public class ReservationService
             return ServiceError.Validation("EndTime must be after StartTime.");
         }
 
-        if (request.StartTime < _schedulingClock.GetLocalNow())
+        var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)
+            .Check(request.StartTime, request.EndTime, _schedulingClock.GetLocalNow());
+
+        if (policyError is not null)
         {
-            return ServiceError.Validation("Reservations must start in the future.");
+            return policyError;
         }
 
         var isWithinAvailability = await _availabilityService.IsWithinAvailabilityAsync(
