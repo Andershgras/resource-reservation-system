@@ -146,3 +146,22 @@ export function validateAvailabilityRuleForm(
 
   return errors
 }
+
+export type ClosureField = 'resourceId' | 'startTime' | 'endTime' | 'reason'
+
+export function validateClosureForm(
+  resourceId: string,
+  startTime: string,
+  endTime: string,
+  reason: string,
+): FieldErrors<ClosureField> {
+  const errors: FieldErrors<ClosureField> = validateAvailabilityForm(resourceId, startTime, endTime)
+
+  if (!reason.trim()) {
+    errors.reason = 'Enter a reason, such as a holiday or maintenance.'
+  } else if (reason.trim().length > 200) {
+    errors.reason = 'Reason must be 200 characters or fewer.'
+  }
+
+  return errors
+}

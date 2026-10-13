@@ -9,6 +9,7 @@ export const queryKeys = {
   myReservations: ['reservations', 'mine'] as const,
   reservation: (id: number) => ['reservations', 'detail', id] as const,
   bookingPolicy: ['booking-policy'] as const,
+  closures: ['closures'] as const,
   schedules: ['schedules'] as const,
   // The schedule as seen while moving a booking leaves that booking out.
   schedule: (resourceId: number, fromDate: string, toDate: string, excludeReservationId: number | null = null) =>

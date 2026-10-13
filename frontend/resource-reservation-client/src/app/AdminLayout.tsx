@@ -10,6 +10,7 @@ const adminTabs: NavTab[] = [
   { path: '/admin/resources', label: 'Resources' },
   { path: '/admin/availability', label: 'Availability' },
   { path: '/admin/weekly-schedule', label: 'Weekly schedule' },
+  { path: '/admin/closures', label: 'Closures' },
   { path: '/admin/reservations', label: 'Reservations' },
 ]
 

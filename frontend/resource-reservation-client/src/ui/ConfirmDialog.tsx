@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { Alert } from './Alert'
 import { Button } from './Button'
 import './ConfirmDialog.css'
@@ -11,6 +11,8 @@ export const mainContentId = 'main-content'
 export interface ConfirmDialogProps {
   title: string
   message: string
+  // More about what the action affects, such as a list, shown below the message.
+  details?: ReactNode
   confirmLabel: string
   cancelLabel?: string
   // "danger" for actions that delete or cancel something.
@@ -37,6 +39,7 @@ const focusableSelector =
 export function ConfirmDialog({
   title,
   message,
+  details,
   confirmLabel,
   cancelLabel = 'Keep unchanged',
   tone = 'danger',
@@ -115,6 +118,7 @@ export function ConfirmDialog({
       >
         <h2 id={titleId} className="confirm-title">{title}</h2>
         <p id={messageId} className="confirm-message">{message}</p>
+        {details && <div className="confirm-details" tabIndex={0}>{details}</div>}
         {error && <Alert tone="danger">{error}</Alert>}
         <div className="confirm-actions">
           <Button
