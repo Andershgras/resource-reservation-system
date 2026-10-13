@@ -73,5 +73,41 @@ public static class DevelopmentDemoDataSeeder
         }
 
         await context.SaveChangesAsync();
+
+        // Weekday opening hours, so there is always something to book inside
+        // the booking horizon. A resource that already has weekly rules keeps them.
+        await SeedWeekdayRulesAsync(context, meetingRoom.Id, new TimeOnly(8, 0), new TimeOnly(16, 0));
+        await SeedWeekdayRulesAsync(context, projector.Id, new TimeOnly(9, 0), new TimeOnly(15, 0));
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedWeekdayRulesAsync(
+        AppDbContext context,
+        int resourceId,
+        TimeOnly startTime,
+        TimeOnly endTime)
+    {
+        if (await context.AvailabilityRules.AnyAsync(rule => rule.ResourceId == resourceId))
+        {
+            return;
+        }
+
+        foreach (var dayOfWeek in new[]
+                 {
+                     DayOfWeek.Monday,
+                     DayOfWeek.Tuesday,
+                     DayOfWeek.Wednesday,
+                     DayOfWeek.Thursday,
+                     DayOfWeek.Friday
+                 })
+        {
+            context.AvailabilityRules.Add(new AvailabilityRule
+            {
+                ResourceId = resourceId,
+                DayOfWeek = dayOfWeek,
+                StartTime = startTime,
+                EndTime = endTime
+            });
+        }
     }
 }
