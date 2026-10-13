@@ -301,7 +301,7 @@ Changes in behaviour:
 - Changed: a half-filled form is lost when switching tabs, because each screen is its own route. Filters and the booking selection are kept.
 
 Follow-ups noticed during M4:
-- `npm audit` reports advisories in `brace-expansion` (through ESLint) and `source-map-js` (through Vite, jsdom and the coverage tool). Both packages are build tooling only, and both were already on `main` before M4. A separate lockfile-only fix is recommended from 14 October 2026. See [security](security.md#dependency-advisories) for the advisories, exploit conditions and fix.
+- `npm audit` reports advisories in `brace-expansion` (through ESLint) and `source-map-js` (through Vite, jsdom and the coverage tool). Both packages are build tooling only, and both were already on `main` before M4. Fixed on 14 October 2026 by a separate lockfile-only pull request. See [security](security.md#dependency-advisories) for the advisories, exploit conditions and fix.
 - Unsaved form drafts are lost when switching screens. This is tracked for M5, below.
 - The development machine runs Node 22.19. React Router 8 and jsdom 30 need Node 22.22 or later, and upgrading Node would allow both.
 
