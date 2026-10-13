@@ -24,6 +24,14 @@ export function getReservations() {
   return apiRequest<ReservationResponse[]>('/reservations')
 }
 
+// A resource's reservations that overlap the given dates, with who booked
+// them. Admin only.
+export function getResourceReservations(resourceId: number, from: string, to: string) {
+  const query = new URLSearchParams({ from, to })
+
+  return apiRequest<ReservationResponse[]>(`/reservations/resource/${resourceId}?${query.toString()}`)
+}
+
 export function rescheduleReservation(id: number, request: RescheduleReservationRequest) {
   return apiRequest<ReservationResponse>(`/reservations/${id}`, {
     method: 'PUT',

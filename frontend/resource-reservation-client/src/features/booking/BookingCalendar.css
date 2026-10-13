@@ -49,6 +49,14 @@
     var(--color-surface-muted);
 }
 
+/* Closed time has a dashed border as well as its colour. */
+.calendar-swatch-closed,
+.calendar-segment-closed .calendar-segment-body {
+  border-color: var(--color-warning-border);
+  border-style: dashed;
+  background: var(--color-warning-soft);
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr));
@@ -138,6 +146,12 @@
   padding: 1px 0;
 }
 
+/* A booking inside a closure sits to the right of it, above it. */
+.calendar-segment-over-closed {
+  left: 35%;
+  z-index: 1;
+}
+
 /* Free time can always be chosen, even if a reservation overlaps it on screen. */
 .calendar-segment-available {
   z-index: 1;
@@ -172,6 +186,10 @@ button.calendar-segment-body:hover {
   box-shadow: inset 0 0 0 1px var(--color-success-soft-text);
 }
 
+.calendar-segment-reserved button.calendar-segment-body:hover {
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}
+
 button.calendar-segment-body:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -188,6 +206,18 @@ button.calendar-segment-body[aria-pressed='true'] {
 
 .calendar-segment-reserved .calendar-segment-body {
   color: var(--color-text);
+}
+
+.calendar-segment-closed .calendar-segment-body {
+  color: var(--color-warning-soft-text);
+}
+
+.calendar-segment-reason {
+  font-style: italic;
+}
+
+.calendar-segment-owner {
+  font-weight: var(--weight-semibold);
 }
 
 /* Phones and narrow windows: a list of days, each with its periods. */
@@ -233,6 +263,11 @@ button.calendar-segment-body[aria-pressed='true'] {
     position: static;
     height: auto;
     padding: 0;
+  }
+
+  /* In the list, a booking inside a closure is indented under it. */
+  .calendar-segment-over-closed {
+    margin-left: var(--space-4);
   }
 
   .calendar-day-panel {

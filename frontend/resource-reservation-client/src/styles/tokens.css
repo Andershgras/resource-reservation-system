@@ -106,8 +106,13 @@
   color-scheme: light dark;
 }
 
+/*
+ * Dark theme. It applies when the viewer chooses Dark, or chooses System (no
+ * data-theme attribute) and their device is in dark mode. The two blocks
+ * must stay identical; tokens.test.ts checks that.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --color-bg: #0b1120;
     --color-surface: #131b2b;
     --color-surface-muted: #1a2436;
@@ -147,6 +152,56 @@
     --shadow-md: 0 4px 12px rgb(0 0 0 / 35%), 0 1px 3px rgb(0 0 0 / 30%);
     --shadow-lg: 0 24px 48px rgb(0 0 0 / 50%);
   }
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #0b1120;
+  --color-surface: #131b2b;
+  --color-surface-muted: #1a2436;
+  --color-border: #283347;
+  --color-border-control: #64748b;
+  --color-overlay: rgb(2 6 23 / 72%);
+
+  --color-text: #cbd5e1;
+  --color-text-muted: #9aa8bc;
+  --color-heading: #f8fafc;
+
+  --color-primary: #2dd4bf;
+  --color-primary-hover: #5eead4;
+  --color-on-primary: #042f2e;
+  --color-primary-soft: #11302e;
+  --color-primary-soft-text: #6ee7d6;
+  --color-danger: #f97066;
+  --color-danger-hover: #fda29b;
+  --color-on-danger: #2b0a07;
+
+  --color-danger-soft: #341616;
+  --color-danger-soft-text: #fda29b;
+  --color-danger-border: #7a271a;
+  --color-success-soft: #0e2b20;
+  --color-success-soft-text: #75e0a7;
+  --color-success-border: #085d3a;
+  --color-warning-soft: #2f240c;
+  --color-warning-soft-text: #fec84b;
+  --color-warning-border: #93370d;
+  --color-info-soft: #14203d;
+  --color-info-soft-text: #a4bcfd;
+  --color-info-border: #2d4a8a;
+
+  --color-focus: #60a5fa;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 35%), 0 1px 3px rgb(0 0 0 / 30%);
+  --shadow-lg: 0 24px 48px rgb(0 0 0 / 50%);
+}
+
+/* A chosen theme also sets the browser's own colours, such as scrollbars. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 @media (max-width: 760px) {

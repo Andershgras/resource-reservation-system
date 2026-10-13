@@ -24,7 +24,7 @@ flowchart LR
 | Layer | Folder | Responsibility |
 |---|---|---|
 | Controllers | `Controllers/` | Routing, `[Authorize]` rules, reading the current user from the token, and turning service results into HTTP responses |
-| Services | `Services/` | Business rules: availability, booking policies, booking, moving and cancellation, authentication, tokens and scheduling time |
+| Services | `Services/` | Business rules: availability and closures, booking policies, booking, moving and cancellation, the booking locks, authentication, tokens and scheduling time |
 | Data | `Data/`, `Models/`, `Migrations/` | EF Core model, database constraints and migrations |
 | Contracts | `DTOs/` | Request and response shapes, with DataAnnotations validation |
 | Configuration | `Configuration/` | Typed settings, validated when the app starts |
@@ -81,6 +81,8 @@ sequenceDiagram
     end
 ```
 
+Availability is checked after the locks are taken, so a closure saved while the booking waited is seen. Creating a closure takes the same resource lock, through the shared `BookingLocks` service ([ADR 0009](adr/0009-availability-exceptions.md)).
+
 Moving a booking (`PUT /api/reservations/{id}`) follows the same steps, with three differences:
 
 - It first checks the `version` the client sent.
@@ -98,6 +100,7 @@ erDiagram
     RESOURCE ||--o{ RESERVATION : "is booked by"
     RESOURCE ||--o{ AVAILABILITY : "has one-off windows"
     RESOURCE ||--o{ AVAILABILITY_RULE : "has weekly rules"
+    RESOURCE ||--o{ AVAILABILITY_EXCEPTION : "has closures"
 
     USER {
         int Id PK
@@ -130,6 +133,15 @@ erDiagram
         time StartTime
         time EndTime
     }
+    AVAILABILITY_EXCEPTION {
+        int Id PK
+        int ResourceId FK
+        datetime StartTime
+        datetime EndTime
+        string Reason "max 200, shown to everyone"
+        datetimeoffset CreatedAt "UTC"
+        int CreatedByUserId FK
+    }
     RESERVATION {
         int Id PK
         int ResourceId FK
@@ -150,6 +162,7 @@ The database enforces the integrity rules as well:
 - a unique, normalised email
 - a check constraint on reservation status
 - a check constraint that keeps resource booking rule overrides in range, with the minimum duration no longer than the maximum
+- a check constraint that a closure ends after it starts
 - an index for the overlap query
 - `RESTRICT` on reservation foreign keys, so deleting a user or resource can never remove booking history
 
@@ -239,6 +252,7 @@ Styles are plain CSS. Colours, spacing, type, radii and shadows are custom prope
 - **Messages** are `Alert`s with a tone. Errors are announced at once (`role="alert"`), other messages politely (`role="status"`).
 - **The confirmation dialog** follows the WAI-ARIA alert dialog pattern, and the page behind it is inert.
 - **The layout** has a skip link to `<main id="main-content">`, one `h1` per page, and a document title for the current screen.
+- **Theme:** Light, Dark or System, chosen in the header and saved in the browser. An inline script in `index.html` applies it before the page draws.
 - **Dates** come from `lib/dates.ts` in `en-GB` with a 24-hour clock, read from the API's wall-clock text rather than through the browser's time zone.
 
 ### Booking calendar
@@ -247,6 +261,9 @@ Styles are plain CSS. Colours, spacing, type, radii and shadows are custom prope
 
 - **The model** (`lib/calendar.ts`) is pure and unit tested. It turns the schedule into seven days of free and reserved segments at their exact minutes, split at midnight. Each day is open, fully booked, closed or past: the API leaves out time that has gone but still returns past reservations, so past days are marked rather than shown as fully booked.
 - **Times to choose** come in 15-minute steps, plus the exact edges of the free period, because an existing reservation can end at any minute. Only starts and ends within the resource's shortest and longest booking are offered, from the rules the schedule returns. The page describes the rules in a sentence. All arithmetic is on wall-clock minutes, as in [ADR 0001](adr/0001-time-zone-convention.md).
+- **Closed time** from closures shows as a third kind of period, with each reason. A day without free time is fully booked only if bookings fill it, otherwise closed. A booking that a later closure covers is drawn beside the closure.
+- **Freshness:** the calendar reloads when the window regains focus and every minute while visible ([ADR 0006](adr/0006-frontend-routing-and-state.md#updates)). The query key stays the same, so the resource, the week and a time being chosen are kept.
+- **The admin calendar** (`/admin/calendar`) is the same page as an admin variant. Reserved periods come from the admin-only reservations of that week, with who booked them; choosing one opens move mode for it. Free time can only be chosen while moving. The user calendar never asks for owner details.
 - **Move mode** (`&move=42`, opened from My reservations) shows the booking instead of the resource list. It loads the schedule without that booking, so its own time shows as free. Afterwards the page returns to ordinary booking in the same week and says where the booking went. A notice belongs to the address it was shown for, which is how "Booking moved" survives that change of address.
 - **The view** (`BookingCalendar`) is one labelled section per day with its periods in order. On wide screens CSS places them on an hour grid; under 760 px it is a list of days, and the booking form opens inside the chosen day.
 - **A clash** (409) with a booking made meanwhile reloads the calendar and says so.
@@ -270,3 +287,4 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0006: Frontend routing and server state](adr/0006-frontend-routing-and-state.md)
 - [ADR 0007: Plain CSS with design tokens and shared components](adr/0007-design-system.md)
 - [ADR 0008: Booking policies, rescheduling and reservation history](adr/0008-booking-policies-and-reservation-changes.md)
+- [ADR 0009: Closures (availability exceptions)](adr/0009-availability-exceptions.md)

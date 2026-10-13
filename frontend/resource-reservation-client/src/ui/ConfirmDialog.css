@@ -73,3 +73,9 @@
     width: 100%;
   }
 }
+
+/* A long list scrolls inside the dialog, keeping the buttons in view. */
+.confirm-details {
+  max-height: 40vh;
+  overflow-y: auto;
+}

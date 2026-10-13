@@ -7,6 +7,7 @@ import {
 import { AuthPage } from '../auth/AuthPage'
 import { ConfirmProvider } from '../components/ConfirmProvider'
 import { AdminAvailabilityPage } from '../features/availability/AdminAvailabilityPage'
+import { AdminClosuresPage } from '../features/closures/AdminClosuresPage'
 import { BookingPage } from '../features/booking/BookingPage'
 import { AdminReservationsPage } from '../features/reservations/AdminReservationsPage'
 import { MyReservationsPage } from '../features/reservations/MyReservationsPage'
@@ -39,6 +40,8 @@ export const appRoutes = createRoutesFromElements(
       <Route path="resources" element={<AdminResourcesPage />} />
       <Route path="availability" element={<AdminAvailabilityPage />} />
       <Route path="weekly-schedule" element={<AdminWeeklySchedulePage />} />
+      <Route path="calendar" element={<BookingPage variant="admin" />} />
+      <Route path="closures" element={<AdminClosuresPage />} />
       <Route path="reservations" element={<AdminReservationsPage />} />
     </Route>
 

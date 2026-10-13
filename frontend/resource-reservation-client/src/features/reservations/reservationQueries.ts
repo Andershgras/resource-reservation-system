@@ -5,6 +5,7 @@ import {
   getMyReservations,
   getReservation,
   getReservations,
+  getResourceReservations,
   rescheduleReservation,
 } from '../../api/reservationsApi'
 import type {
@@ -13,6 +14,8 @@ import type {
   ReservationResponse,
 } from '../../api/types'
 import { queryKeys } from '../../lib/queryKeys'
+import { liveQueryOptions } from '../booking/bookingQueries'
+import { weekRange } from '../booking/bookingSearch'
 import { useInvalidateQueries } from '../../lib/useInvalidateQueries'
 
 // Every reservation, for admins.
@@ -23,6 +26,19 @@ export function useAllReservations() {
 // The logged-in user's reservations.
 export function useMyReservations() {
   return useQuery({ queryKey: queryKeys.myReservations, queryFn: getMyReservations })
+}
+
+// A resource's bookings in one week, with who booked them, for the admin
+// calendar. Like the calendar, it reloads while on screen.
+export function useResourceReservations(resourceId: number | null, weekStart: string) {
+  const { fromDate, toDate } = weekRange(weekStart)
+
+  return useQuery({
+    queryKey: queryKeys.resourceReservations(resourceId ?? 0, fromDate, toDate),
+    queryFn: () => getResourceReservations(resourceId!, fromDate, toDate),
+    enabled: resourceId !== null,
+    ...liveQueryOptions,
+  })
 }
 
 // One reservation, such as the one being moved. Nothing loads for null.

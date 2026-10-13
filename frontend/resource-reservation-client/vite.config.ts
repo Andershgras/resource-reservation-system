@@ -12,6 +12,9 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
+    // CSS is replaced with an empty string in tests, except the tokens, which
+    // a test reads to check that the two dark theme blocks match.
+    css: { include: [/tokens\.css/] },
     restoreMocks: true,
     unstubGlobals: true,
   },

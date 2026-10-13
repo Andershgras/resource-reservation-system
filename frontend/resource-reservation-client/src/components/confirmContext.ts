@@ -1,8 +1,10 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 
 export interface ConfirmationRequest {
   title: string
   message: string
+  // Shown below the message, such as the items an action affects.
+  details?: ReactNode
   confirmLabel: string
   // "Keep unchanged" unless given.
   cancelLabel?: string

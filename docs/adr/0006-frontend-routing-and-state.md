@@ -85,3 +85,6 @@ Each mutation invalidates everything its change affects, and resolves once the d
 - **Bundle size** grew from 69.7 kB to 94.1 kB gzipped: React Router about 13 kB, TanStack Query about 12 kB.
 - **Adding a screen** means a route in `App.tsx`, a tab in its layout, and a page component with its feature hooks.
 - **Testing:** pages and hooks can be tested on their own, with a test `QueryClient` and mocked API modules (see [testing](../testing.md)).
+
+## Updates
+- **Milestone 6 PR 2:** the booking and admin calendars opt in to fresher data. They refetch when the window regains focus, and every 60 seconds while the window is visible and focused. TanStack Query pauses the interval in the background, and only a calendar on screen has a query to refresh. Everything else keeps the defaults above. `/admin/calendar` is an admin variant of the booking page, so both share the address handling and move mode.

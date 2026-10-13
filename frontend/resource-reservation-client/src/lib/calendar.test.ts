@@ -20,6 +20,7 @@ import {
 function schedule(
   bookableSlots: [string, string][],
   reservedSlots: [string, string][] = [],
+  closedSlots: [string, string, string[]][] = [],
 ): ResourceScheduleResponse {
   return {
     resourceId: 1,
@@ -29,6 +30,7 @@ function schedule(
     policy: testPolicy,
     bookableSlots: bookableSlots.map(([startTime, endTime]) => ({ startTime, endTime })),
     reservedSlots: reservedSlots.map(([startTime, endTime]) => ({ startTime, endTime })),
+    closedSlots: closedSlots.map(([startTime, endTime, reasons]) => ({ startTime, endTime, reasons })),
   }
 }
 
@@ -293,4 +295,61 @@ describe('formatMinutes', () => {
       expect(formatMinutes(minutes)).toBe(expected)
     },
   )
+})
+
+describe('closed time', () => {
+  it('shows closures with their reasons, split at midnight', () => {
+    const days = buildCalendarWeek(
+      schedule([], [], [['2030-01-15T20:00:00', '2030-01-16T02:00:00', ['Holiday', 'Repairs']]]),
+      '2030-01-14',
+      '2030-01-14',
+    )
+
+    const tuesday = days[1].segments
+    const wednesday = days[2].segments
+    expect(tuesday.map((segment) => [segment.kind, segment.start, segment.end, segment.reasons])).toEqual([
+      ['closed', '2030-01-15T20:00:00', '2030-01-16T00:00:00', ['Holiday', 'Repairs']],
+    ])
+    expect(wednesday[0].end).toBe('2030-01-16T02:00:00')
+  })
+
+  it('marks a day closed when a closure takes all its time, and fully booked when bookings do', () => {
+    const days = buildCalendarWeek(
+      schedule(
+        [],
+        [['2030-01-16T08:00:00', '2030-01-16T10:00:00']],
+        [
+          ['2030-01-15T08:00:00', '2030-01-15T16:00:00', ['Holiday']],
+          ['2030-01-16T10:00:00', '2030-01-16T16:00:00', ['Repairs']],
+        ],
+      ),
+      '2030-01-14',
+      '2030-01-14',
+    )
+
+    expect(days[1].status).toBe('closed')
+    expect(days[2].status).toBe('fullyBooked')
+    expect(days[2].segments.find((segment) => segment.kind === 'reserved')?.overClosed).toBeUndefined()
+    expect(visibleHours(days)).toEqual({ firstHour: 8, lastHour: 16 })
+  })
+})
+
+describe('bookings inside a closure', () => {
+  it('are marked, so they can be drawn beside the closure', () => {
+    const days = buildCalendarWeek(
+      schedule(
+        [],
+        [['2030-01-15T10:00:00', '2030-01-15T11:00:00'], ['2030-01-15T13:00:00', '2030-01-15T14:00:00']],
+        [['2030-01-15T09:00:00', '2030-01-15T12:00:00', ['Repairs']]],
+      ),
+      '2030-01-14',
+      '2030-01-14',
+    )
+
+    const reserved = days[1].segments.filter((segment) => segment.kind === 'reserved')
+    expect(reserved.map((segment) => [segment.start, segment.overClosed ?? false])).toEqual([
+      ['2030-01-15T10:00:00', true],
+      ['2030-01-15T13:00:00', false],
+    ])
+  })
 })

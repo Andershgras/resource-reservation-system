@@ -22,13 +22,20 @@ public class AuthorizationTests : ApiTestBase
         { "PUT", "/api/resources/1" },
         { "DELETE", "/api/resources/1" },
         { "POST", "/api/availabilities" },
-        { "POST", "/api/availabilityrules" }
+        { "POST", "/api/availabilityrules" },
+        { "PUT", "/api/reservations/1" },
+        { "GET", "/api/bookingpolicy" },
+        { "GET", "/api/availabilityexceptions" },
+        { "POST", "/api/availabilityexceptions/preview" },
+        { "POST", "/api/availabilityexceptions" },
+        { "DELETE", "/api/availabilityexceptions/1" }
     };
 
     public static TheoryData<string, string> AdminOnlyEndpoints => new()
     {
         { "GET", "/api/reservations" },
         { "GET", "/api/reservations/resource/1" },
+        { "GET", "/api/reservations/resource/1?from=2030-01-14&to=2030-01-20" },
         { "GET", "/api/reservations/user/1" },
         { "POST", "/api/resources" },
         { "PUT", "/api/resources/1" },
@@ -38,7 +45,11 @@ public class AuthorizationTests : ApiTestBase
         { "DELETE", "/api/availabilities/1" },
         { "POST", "/api/availabilityrules" },
         { "PUT", "/api/availabilityrules/1" },
-        { "DELETE", "/api/availabilityrules/1" }
+        { "DELETE", "/api/availabilityrules/1" },
+        { "GET", "/api/availabilityexceptions" },
+        { "POST", "/api/availabilityexceptions/preview" },
+        { "POST", "/api/availabilityexceptions" },
+        { "DELETE", "/api/availabilityexceptions/1" }
     };
 
     [Theory]

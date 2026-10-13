@@ -9,4 +9,5 @@ public class ResourceScheduleResponseDto
     public BookingPolicyResponseDto Policy { get; set; } = new();
     public List<BookableSlotResponseDto> BookableSlots { get; set; } = [];
     public List<ReservedSlotResponseDto> ReservedSlots { get; set; } = [];
+    public List<ClosedSlotResponseDto> ClosedSlots { get; set; } = [];
 }

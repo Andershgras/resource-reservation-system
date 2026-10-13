@@ -85,6 +85,7 @@ interface ResourceScheduleResponse {
   policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
+  closedSlots: { startTime: string; endTime: string; reasons: string[] }[]
 }
 
 interface ReservationResponse {
@@ -118,6 +119,17 @@ function newReservationFields(version: number) {
 }
 
 let nextVersion = 100
+
+interface ClosureResponse {
+  id: number
+  resourceId: number
+  resourceName: string
+  startTime: string
+  endTime: string
+  reason: string
+  createdAt: string
+  createdByName: string | null
+}
 
 test('main frontend reservation flow', async ({ page }) => {
   await mockApi(page)
@@ -640,6 +652,68 @@ test('a booking can be moved to a new time in the calendar', async ({ page }) =>
   await expect(sectionByHeading(page, 'My reservations').getByText('Moved')).toBeVisible()
 })
 
+test('an admin closes a resource, sees the booking inside first, and users see it closed', async ({ page }) => {
+  // Without motion, so axe measures the dialog after it has faded in.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true })
+  // Signed in through the form, not storeSession, whose script would restore
+  // the admin on every page load and keep the user out of the calendar later.
+  await page.goto('/login')
+  await login(page, 'admin@example.com', 'Admin1234')
+  await selectRoleTab(page, 'Closures')
+
+  const form = sectionByHeading(page, 'Close a resource')
+  await form.getByLabel('Resource').selectOption({ label: 'Reserved Test Room' })
+  await form.getByLabel('Start').fill('2030-01-15T08:00')
+  await form.getByLabel('End').fill('2030-01-15T12:00')
+  await form.getByLabel('Reason').fill('Floor repairs')
+  await form.getByRole('button', { name: 'Check affected bookings' }).click()
+
+  const dialog = page.getByRole('alertdialog', { name: 'Close Reserved Test Room?' })
+  await expect(dialog.getByRole('list', { name: 'Affected bookings' })).toContainText('Smoke Test User')
+  await expectNoAccessibilityViolations(page, 'the closure confirmation')
+  await dialog.getByRole('button', { name: 'Close resource' }).click()
+
+  await expect(page.getByText(/1 booking is inside the closure and still active/)).toBeVisible()
+  await expect(sectionByHeading(page, 'Bookings inside the new closure').getByText('Smoke Test User', { exact: false })).toBeVisible()
+  await expect(sectionByHeading(page, 'Closures').getByText('Floor repairs')).toBeVisible()
+  await expectNoAccessibilityViolations(page, 'the closures screen')
+
+  await page.getByRole('button', { name: 'Logout' }).click()
+  await login(page, 'smoke.user@example.com', 'Password123')
+  await page.getByRole('button', { name: 'View availability for Reserved Test Room' }).click()
+  await page.getByLabel('Go to date').fill('2030-01-15')
+  const tuesday = sectionByHeading(page, 'Resource schedule').getByRole('region', { name: 'Tue 15 Jan' })
+  await expect(tuesday.getByText('Floor repairs')).toBeVisible()
+  await expect(tuesday.getByText('Closed', { exact: true }).first()).toBeVisible()
+})
+
+test('an admin moves a booking from the admin calendar', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
+  await storeSession(page, Date.now() + 60 * 60_000, 'Admin')
+  await page.goto('/admin/resources')
+  await selectRoleTab(page, 'Calendar')
+  await page.getByRole('button', { name: 'View availability for Reserved Test Room' }).click()
+  await page.getByLabel('Go to date').fill('2030-01-15')
+
+  const schedule = sectionByHeading(page, 'Resource schedule')
+  const booking = schedule.getByRole('button', { name: /^Reserved Tue 15 Jan 2030, 09:00–11:00 by Smoke Test User/ })
+  await expect(booking).toBeVisible()
+  await expectNoAccessibilityViolations(page, 'the admin calendar')
+  await booking.click()
+
+  await expect(page.getByRole('heading', { name: 'Move a booking' })).toBeVisible()
+  await expect(page.getByText('Smoke Test User (smoke.user@example.com)')).toBeVisible()
+  await schedule.getByRole('button', { name: /^Available Wed 16 Jan 2030/ }).click()
+  await schedule.getByLabel('Start', { exact: true }).selectOption({ label: '09:00' })
+  await schedule.getByLabel('End', { exact: true }).selectOption({ label: '10:00' })
+  await schedule.getByRole('button', { name: 'Move booking' }).click()
+
+  await expect(page.getByText('Booking moved to Wed 16 Jan 2030, 09:00–10:00.')).toBeVisible()
+  await expect(schedule.getByRole('button', { name: /^Reserved Wed 16 Jan 2030, 09:00–10:00 by Smoke Test User/ })).toBeVisible()
+})
+
 // In a real browser, making the page inert takes focus away from the button
 // that opened the dialog, so the dialog must record it beforehand.
 test('the confirmation dialog works with the keyboard alone', async ({ page }) => {
@@ -672,6 +746,39 @@ test('the confirmation dialog works with the keyboard alone', async ({ page }) =
   // The opener is gone with the reservation's Cancel button, so focus moves
   // to the main content rather than being lost.
   await expect(page.getByRole('main')).toBeFocused()
+})
+
+test('a saved theme applies before the app runs, so it never flashes', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.addInitScript(() => localStorage.setItem('rr-theme', 'dark'))
+  // Without the app's JavaScript, only index.html's own script can set the
+  // theme. The stylesheet's dark tokens key off this attribute.
+  await page.route('**/src/main.tsx', (route) => route.abort())
+
+  await page.goto('/login')
+
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})
+
+test('the theme switch overrides the device and is remembered', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await mockApi(page)
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/my-reservations')
+  const theme = page.getByRole('combobox', { name: 'Theme' })
+  await expect(theme).toHaveValue('system')
+
+  await theme.selectOption({ label: 'Dark' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(11, 17, 32)')
+  await expectNoAccessibilityViolations(page, 'my reservations in a chosen dark theme on a light device')
+  // Saved for the next visit, which index.html applies before the app runs.
+  expect(await page.evaluate(() => localStorage.getItem('rr-theme'))).toBe('dark')
+
+  await theme.selectOption({ label: 'System' })
+
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme')
+  expect(await page.evaluate(() => localStorage.getItem('rr-theme'))).toBeNull()
 })
 
 // Accessibility in a real browser. Unlike the unit tests in jsdom, Chromium
@@ -969,6 +1076,9 @@ async function mockApi(
       ]
     : []
 
+  let closures: ClosureResponse[] = []
+  let nextClosureId = 1
+
   await page.route('http://localhost:5052/api/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -987,6 +1097,46 @@ async function mockApi(
 
     if (request.method() === 'POST' && path === '/auth/register') {
       await route.fulfill({ status: 200, json: normalUser })
+      return
+    }
+
+    if (request.method() === 'GET' && path === '/availabilityexceptions') {
+      await route.fulfill({ status: 200, json: closures })
+      return
+    }
+
+    if (request.method() === 'POST' && path.startsWith('/availabilityexceptions')) {
+      const body = await request.postDataJSON() as { resourceId: number; startTime: string; endTime: string; reason: string }
+      const affected = reservations.filter((reservation) =>
+        reservation.resourceId === body.resourceId &&
+        reservation.status === 'Active' &&
+        reservation.startTime < `${body.endTime}:00` &&
+        reservation.endTime > `${body.startTime}:00`)
+
+      if (path === '/availabilityexceptions/preview') {
+        await route.fulfill({ status: 200, json: affected })
+        return
+      }
+
+      const closure: ClosureResponse = {
+        id: nextClosureId++,
+        resourceId: body.resourceId,
+        resourceName: resources.find((resource) => resource.id === body.resourceId)?.name ?? '',
+        startTime: `${body.startTime}:00`,
+        endTime: `${body.endTime}:00`,
+        reason: body.reason,
+        createdAt: '2030-01-11T08:00:00+00:00',
+        createdByName: currentUser.name,
+      }
+      closures = [...closures, closure]
+      await route.fulfill({ status: 201, json: { closure, affectedReservations: affected } })
+      return
+    }
+
+    const closureMatch = path.match(/^\/availabilityexceptions\/(\d+)$/)
+    if (closureMatch && request.method() === 'DELETE') {
+      closures = closures.filter((closure) => closure.id !== Number(closureMatch[1]))
+      await route.fulfill({ status: 204 })
       return
     }
 
@@ -1018,6 +1168,7 @@ async function mockApi(
           availabilityRules,
           reservations.filter((reservation) => reservation.id !== excludedId),
           options.showReservedSlotAsBookable ?? false,
+          closures,
         ),
       })
       return
@@ -1214,6 +1365,16 @@ async function mockApi(
       return
     }
 
+    const resourceReservationsMatch = path.match(/^\/reservations\/resource\/(\d+)$/)
+    if (resourceReservationsMatch && request.method() === 'GET') {
+      const resourceId = Number(resourceReservationsMatch[1])
+      await route.fulfill({
+        status: 200,
+        json: reservations.filter((reservation) => reservation.resourceId === resourceId),
+      })
+      return
+    }
+
     const reservationMatch = path.match(/^\/reservations\/(\d+)$/)
     if (reservationMatch && request.method() === 'GET') {
       const reservation = reservations.find((item) => item.id === Number(reservationMatch[1]))
@@ -1314,7 +1475,14 @@ function buildResourceSchedule(
   availabilityRules: AvailabilityRuleResponse[],
   reservations: ReservationResponse[],
   showReservedSlotAsBookable: boolean,
+  closures: ClosureResponse[] = [],
 ): ResourceScheduleResponse {
+  const closedSlots = closures
+    .filter((closure) =>
+      closure.resourceId === resourceId &&
+      closure.startTime.slice(0, 10) >= fromDate &&
+      closure.startTime.slice(0, 10) <= toDate)
+    .map((closure) => ({ startTime: closure.startTime, endTime: closure.endTime, reasons: [closure.reason] }))
   const resource = resources.find((item) => item.id === resourceId)
   const availabilitySlots = availabilities
     .filter((availability) =>
@@ -1354,13 +1522,14 @@ function buildResourceSchedule(
       ? [...availabilitySlots, ...ruleSlots]
       : [...availabilitySlots, ...ruleSlots].filter(
           (slot) =>
-            !reservedSlots.some(
-              (reservedSlot) =>
-                slot.startTime < reservedSlot.endTime &&
-                slot.endTime > reservedSlot.startTime,
+            ![...reservedSlots, ...closedSlots].some(
+              (taken) =>
+                slot.startTime < taken.endTime &&
+                slot.endTime > taken.startTime,
             ),
         ),
     reservedSlots,
+    closedSlots,
   }
 }
 

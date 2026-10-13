@@ -16,6 +16,8 @@ This page describes how the application protects accounts and data, and lists th
 - Users can only see, move and cancel their own reservations. The service layer checks ownership; Admins can act on any reservation.
 - The schedule is anonymous, but leaving out a reservation that is being moved (`excludeReservationId`) needs its owner or an admin. Anyone else gets 401 or 403, as when reading the reservation itself.
 - Moves and cancellations can carry the reservation's `version`. A change based on an out-of-date copy is rejected with 409, so one person can't silently overwrite another's change ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
+- Who made a booking is only ever sent to its owner or an admin. The admin calendar gets names from the admin-only `GET /api/reservations/resource/{id}`; the public schedule carries times and closure reasons only, and tests check its JSON for every role.
+- Closure reasons are public, since everyone sees them in the calendar. The admin form says so. Managing closures is admin only.
 - Booking rules apply to admins too. The cap on upcoming bookings limits how much of the calendar one account can hold.
 - Integration tests check that every protected endpoint returns 401 without a token, and every Admin endpoint returns 403 for a User.
 
@@ -33,7 +35,7 @@ The frontend keeps the token in `localStorage` ([ADR 0004](adr/0004-token-storag
 - React escapes rendered values, and the frontend doesn't use `dangerouslySetInnerHTML`.
 - Tokens are short-lived.
 
-**Before any public deployment** (Milestone 7), review moving the token to an httpOnly cookie, and give the frontend a strict Content-Security-Policy. This is tracked in the [roadmap](roadmap.md).
+**Before any public deployment** (Milestone 7), review moving the token to an httpOnly cookie, and give the frontend a strict Content-Security-Policy. `index.html` has one small inline script, which applies the saved theme before the page draws; a strict policy must allow it by its hash. This is tracked in the [roadmap](roadmap.md).
 
 ## Brute-force protection
 

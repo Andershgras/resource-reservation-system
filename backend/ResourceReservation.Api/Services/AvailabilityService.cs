@@ -68,12 +68,14 @@ public class AvailabilityService
         var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue);
         var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
         var reservedSlots = await GetReservedSlotsAsync(resourceId, rangeStart, rangeEnd, excludedReservationId);
-        var availabilityIntervals = await GetAvailabilityIntervalsAsync(resourceId, from.Value, to.Value);
+        var openingHours = await GetOpeningHoursAsync(resourceId, from.Value, to.Value);
+        var closures = await GetClosuresAsync(resourceId, rangeStart, rangeEnd);
+        var availabilityIntervals = SubtractTimeRanges(openingHours, closures.Select(closure => closure.Range));
         var policy = BookingPolicy.For(resource, _bookingPolicyOptions);
         var localNow = _schedulingClock.GetLocalNow();
         var bookableSlots = RemoveTimeAfter(
                 RemoveTimeBefore(
-                    SubtractReservedSlots(
+                    SubtractTimeRanges(
                         availabilityIntervals,
                         reservedSlots),
                     GetNextWholeMinute(policy.GetEarliestStart(localNow))),
@@ -110,11 +112,36 @@ public class AvailabilityService
                     StartTime = slot.StartTime,
                     EndTime = slot.EndTime
                 })
+                .ToList(),
+            ClosedSlots = GetClosedTime(openingHours, closures)
+                .Select(slot => new ClosedSlotResponseDto
+                {
+                    StartTime = slot.StartTime,
+                    EndTime = slot.EndTime,
+                    Reasons = slot.Reasons.ToList()
+                })
                 .ToList()
         };
     }
 
+    // Bookable availability: opening hours (one-off windows and weekly rules,
+    // merged) minus closures. Booking validation and the schedule both use it,
+    // so they can't disagree (audit H2, ADR 0009).
     public async Task<List<TimeRange>> GetAvailabilityIntervalsAsync(
+        int resourceId,
+        DateOnly from,
+        DateOnly to)
+    {
+        var rangeStart = from.ToDateTime(TimeOnly.MinValue);
+        var rangeEnd = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var openingHours = await GetOpeningHoursAsync(resourceId, from, to);
+        var closures = await GetClosuresAsync(resourceId, rangeStart, rangeEnd);
+
+        return SubtractTimeRanges(openingHours, closures.Select(closure => closure.Range));
+    }
+
+    // One-off windows and weekly rules, merged, before closures.
+    private async Task<List<TimeRange>> GetOpeningHoursAsync(
         int resourceId,
         DateOnly from,
         DateOnly to)
@@ -165,7 +192,9 @@ public class AvailabilityService
             endTime <= interval.EndTime);
     }
 
-    public static List<TimeRange> SubtractReservedSlots(
+    // Removes time from intervals, such as reservations or closures. The time
+    // removed may overlap itself; each overlapping part is removed once.
+    public static List<TimeRange> SubtractTimeRanges(
         IEnumerable<TimeRange> availabilityIntervals,
         IEnumerable<TimeRange> reservedSlots)
     {
@@ -224,6 +253,66 @@ public class AvailabilityService
             .Select(interval => interval.EndTime > cutoff
                 ? interval with { EndTime = cutoff }
                 : interval)
+            .ToList();
+    }
+
+    // The closed part of the opening hours, for the calendar. Time a closure
+    // covers outside opening hours is left out, since nothing could be booked
+    // then anyway. Overlapping closures show as one period with each reason.
+    public static List<ClosedTime> GetClosedTime(
+        IEnumerable<TimeRange> openingHours,
+        IEnumerable<ClosureRange> closures)
+    {
+        var openingList = openingHours.ToList();
+        var pieces = closures
+            .SelectMany(closure => openingList
+                .Where(open => closure.Range.StartTime < open.EndTime && closure.Range.EndTime > open.StartTime)
+                .Select(open => new ClosedTime(
+                    closure.Range.StartTime > open.StartTime ? closure.Range.StartTime : open.StartTime,
+                    closure.Range.EndTime < open.EndTime ? closure.Range.EndTime : open.EndTime,
+                    [closure.Reason])))
+            .OrderBy(piece => piece.StartTime)
+            .ThenBy(piece => piece.EndTime);
+        var closedTime = new List<ClosedTime>();
+
+        foreach (var piece in pieces)
+        {
+            var previous = closedTime.LastOrDefault();
+
+            if (previous is null || piece.StartTime >= previous.EndTime)
+            {
+                closedTime.Add(piece);
+                continue;
+            }
+
+            closedTime[^1] = previous with
+            {
+                EndTime = piece.EndTime > previous.EndTime ? piece.EndTime : previous.EndTime,
+                Reasons = previous.Reasons.Union(piece.Reasons).ToList()
+            };
+        }
+
+        return closedTime;
+    }
+
+    private async Task<List<ClosureRange>> GetClosuresAsync(
+        int resourceId,
+        DateTime rangeStart,
+        DateTime rangeEnd)
+    {
+        var closures = await _context.AvailabilityExceptions
+            .Where(closure =>
+                closure.ResourceId == resourceId &&
+                closure.StartTime < rangeEnd &&
+                closure.EndTime > rangeStart)
+            .OrderBy(closure => closure.StartTime)
+            .Select(closure => new { closure.StartTime, closure.EndTime, closure.Reason })
+            .ToListAsync();
+
+        return closures
+            .Select(closure => new ClosureRange(
+                new TimeRange(closure.StartTime, closure.EndTime),
+                closure.Reason))
             .ToList();
     }
 
@@ -290,3 +379,7 @@ public class AvailabilityService
 }
 
 public sealed record TimeRange(DateTime StartTime, DateTime EndTime);
+
+public sealed record ClosureRange(TimeRange Range, string Reason);
+
+public sealed record ClosedTime(DateTime StartTime, DateTime EndTime, IReadOnlyList<string> Reasons);

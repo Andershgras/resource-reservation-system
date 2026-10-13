@@ -50,6 +50,7 @@ These run in about a second, with no external dependencies.
   - moving a booking: its own old time, overlaps, the rules, the cap, cancelled and started bookings, and out-of-date versions
   - when a booking was made and cancelled, and by whom
   - existing bookings that break today's rules staying valid
+  - closures (`ClosureTests`): overlapping closures combined but deleted one by one, closed time limited to opening hours, booking and moving at the closure's edges, both Copenhagen daylight-saving changes, and previews and saves that never cancel
   - registration and login
 - **Controller tests** cover the CRUD controllers for resources, availability windows and weekly rules. `ControllerExtensionsTests` checks how service errors map to HTTP status codes.
 - **Database:** tests use the EF Core in-memory provider. It doesn't enforce constraints, transactions or locks; the integration tests cover those.
@@ -68,6 +69,8 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - A held resource or user lock gives a 503 with `Retry-After`.
   - A move and a cancellation of the same booking in parallel: one succeeds and the other gets 409, in every round. Without the `rowversion` check turned into a 409, the loser gets a 500.
   - Two moves, or a move and a new booking, into the same free time: only one succeeds.
+  - Closures and bookings share the resource lock. With the lock held elsewhere, creating a closure waits and returns 503. A booking waiting for the lock is refused once a closure is saved meanwhile, because availability is checked under the lock. Each test fails with its protection removed. A parallel test also checks that a booking either is listed as affected or is refused.
+- **Closures:** the full flow through the API, bookings made between preview and save, deleting one of two overlapping closures, the admin-only reservations for a week, and that the public schedule never names who booked.
 - **Booking rules and moves:** resource overrides saved and applied to bookings and the schedule, overrides that contradict the defaults rejected beside their field, the real 90-day horizon with dates relative to today, out-of-date versions, and the schedule leaving out a booking being moved only for its owner or an admin.
 - **Registration:** parallel registrations with the same email, and email normalization.
 - **Security configuration:**
@@ -107,6 +110,10 @@ The tests delete all data in this database. To prevent accidents, the harness re
 - **Time zone:** the tests run in `Europe/Copenhagen`, set in `vite.config.ts`, so date handling behaves the same locally and on CI runners that use UTC. The date tests include both summer-time switches.
 - **`src/lib/`:** date formatting and conversion, form validation including booking rules, the calendar model and its duration limits, the booking rules described in words, and error messages. The date and calendar tests cover both summer-time switches, a UTC instant that is already the next day in Copenhagen, periods off the 15-minute grid or shorter than 15 minutes, midnight, and malformed periods.
 - **The booking screen** (`BookingPage.test.tsx`): the week loaded, every day shown including fully booked and closed days, choosing and booking a time within the booking rules, a clash with another booking, a schedule that fails to load, and where the booking form opens on small and wide screens. In move mode: the booking shown and left out of the schedule, the move sent with its version, the return to ordinary booking, a 409, and bookings that can't be moved.
+- **Closures and freshness** (`BookingPage.test.tsx`): closed time with its reasons; reloading every minute while visible, keeping the week and a time being chosen; and waiting in the background until focus returns. The refresh tests fail without the live options.
+- **The admin calendar** (`AdminCalendar.test.tsx`): owners shown, free time only while moving, moving a booking with its version, and the user calendar never asking for owners.
+- **Closures screen** (`AdminClosuresPage.test.tsx`): field checks, the confirmation listing affected bookings, bookings made after the preview, refusals, deleting one closure, and axe with the dialog open.
+- **Theme** (`theme.test.tsx`): reading and saving the choice, storage being unavailable, the switch, and the two dark token blocks staying identical.
 - **My reservations** (`MyReservationsPage.test.tsx`): when each booking was made, moved and cancelled, in Copenhagen time; which bookings offer Move; and cancelling with the version.
 - **Admin resources** (`AdminResourcesPage.test.tsx`): the booking rules form, with its defaults, checks, API errors and unsaved changes.
 - **The unsaved-changes guard** (`useUnsavedChangesGuard.test.tsx`): Stay, Discard, Escape, the back button, a quick Stay followed by another navigation, same-screen changes, reloads, logout and session expiry. `src/test/renderScreen.tsx` renders a screen in a data router with a signed-in user, as the app does.
@@ -154,6 +161,8 @@ The smoke tests run the same axe-core in Chromium, where the page is rendered, s
 - registration with errors
 - the calendar with a time being chosen
 - moving a booking (light mode)
+- the closure confirmation, the closures screen and the admin calendar
+- a chosen dark theme on a light device
 - both reservation lists
 - the admin form with errors
 - the confirmation dialog
@@ -186,6 +195,9 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
   - tabs remembering their selection
 - cancelling a reservation freeing its time in the booking schedule (audit L2)
 - moving a booking from My reservations to a new time in the calendar
+- closing a resource, then seeing it closed as a user
+- moving another user's booking from the admin calendar
+- the saved theme applying before the app's JavaScript runs, and the theme switch
 
 Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.
 

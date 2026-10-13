@@ -69,6 +69,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           key={open.key}
           title={open.request.title}
           message={open.request.message}
+          details={open.request.details}
           confirmLabel={open.request.confirmLabel}
           cancelLabel={open.request.cancelLabel}
           tone={open.request.tone}

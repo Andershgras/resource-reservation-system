@@ -53,7 +53,9 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddScoped<AvailabilityService>();
+builder.Services.AddScoped<BookingLocks>();
 builder.Services.AddScoped<ReservationService>();
+builder.Services.AddScoped<AvailabilityExceptionService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();

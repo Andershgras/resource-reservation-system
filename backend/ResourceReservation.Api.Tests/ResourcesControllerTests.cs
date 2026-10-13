@@ -115,7 +115,7 @@ public class ResourcesControllerTests
                 context,
                 availabilityService,
                 clock,
-                Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }),
+                new BookingLocks(context, Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" })),
                 bookingPolicy),
             bookingPolicy)
             .WithHttpContext();

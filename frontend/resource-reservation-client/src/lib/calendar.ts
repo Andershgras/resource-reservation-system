@@ -1,4 +1,9 @@
-import type { BookableSlotResponse, BookingPolicyResponse, ResourceScheduleResponse } from '../api/types'
+import type {
+  BookableSlotResponse,
+  BookingPolicyResponse,
+  ReservationResponse,
+  ResourceScheduleResponse,
+} from '../api/types'
 import { addDaysToDateKey, formatDateHeading, formatTime, getDateKey } from './dates'
 
 // The weekly booking calendar's model. Times are the API's wall-clock times
@@ -43,7 +48,7 @@ export function weekDates(weekStart: string) {
 }
 
 export interface CalendarSegment {
-  kind: 'available' | 'reserved'
+  kind: 'available' | 'reserved' | 'closed'
   // The part of the period on this day.
   start: string
   end: string
@@ -53,11 +58,18 @@ export interface CalendarSegment {
   // The whole bookable period, which may continue into the next day. A
   // booking can be made anywhere inside it.
   interval: BookableSlotResponse
+  // Why a closed period is closed.
+  reasons?: string[]
+  // The booking behind a reserved period, in the admin calendar only.
+  reservation?: ReservationResponse
+  // A booking that was already there when a closure covered its time. It is
+  // drawn inset, so the closure and its reason stay visible beside it.
+  overClosed?: boolean
 }
 
 // Tells segments apart, such as the one being booked.
 export function segmentKey(segment: CalendarSegment) {
-  return `${segment.kind}-${segment.start}-${segment.end}`
+  return `${segment.kind}-${segment.start}-${segment.end}-${segment.reservation?.id ?? ''}`
 }
 
 export type CalendarDayStatus = 'open' | 'fullyBooked' | 'closed' | 'past'
@@ -70,7 +82,11 @@ export interface CalendarDay {
 }
 
 // Splits a period at midnight into one piece per day it touches.
-function splitByDay(kind: CalendarSegment['kind'], interval: BookableSlotResponse): CalendarSegment[] {
+function splitByDay(
+  kind: CalendarSegment['kind'],
+  interval: BookableSlotResponse,
+  details: Partial<CalendarSegment> = {},
+): CalendarSegment[] {
   const start = toWallClockMinutes(interval.startTime)
   const end = toWallClockMinutes(interval.endTime)
 
@@ -92,6 +108,7 @@ function splitByDay(kind: CalendarSegment['kind'], interval: BookableSlotRespons
         startMinute: pieceStart - dayStart,
         endMinute: pieceEnd - dayStart,
         interval,
+        ...details,
       })
     }
   }
@@ -99,21 +116,33 @@ function splitByDay(kind: CalendarSegment['kind'], interval: BookableSlotRespons
   return segments
 }
 
-// The seven days of a week, each with its free and reserved time in order.
-// Every day is shown: a day with only reservations is fully booked, a day with
-// neither has no opening hours, and a day before today is past, because the
-// schedule leaves out time that has gone. Periods that can't be read, or that
-// end before they start, are left out.
+// The seven days of a week, each with its free, reserved and closed time in
+// order. Every day is shown: a day with reservations but no free time is fully
+// booked, a day with neither is closed, whether it has no opening hours or a
+// closure takes them, and a day before today is past, because the schedule
+// leaves out time that has gone. Periods that can't be read, or that end
+// before they start, are left out.
+//
+// For admins, `reservations` replaces the schedule's anonymous reserved time
+// with the active bookings themselves, so each period knows who booked it.
 export function buildCalendarWeek(
   schedule: ResourceScheduleResponse | null,
   weekStart: string,
   today: string,
+  reservations?: ReservationResponse[],
 ): CalendarDay[] {
   const segmentsByDate = new Map<string, CalendarSegment[]>()
+  const reservedSegments = reservations
+    ? reservations
+        .filter((reservation) => reservation.status === 'Active')
+        .flatMap((reservation) => splitByDay('reserved', reservation, { reservation }))
+    : schedule?.reservedSlots.flatMap((slot) => splitByDay('reserved', slot)) ?? []
   const segments = schedule
     ? [
         ...schedule.bookableSlots.flatMap((slot) => splitByDay('available', slot)),
-        ...schedule.reservedSlots.flatMap((slot) => splitByDay('reserved', slot)),
+        ...reservedSegments,
+        ...schedule.closedSlots.flatMap((slot) =>
+          splitByDay('closed', slot, { reasons: slot.reasons })),
       ]
     : []
 
@@ -123,15 +152,22 @@ export function buildCalendarWeek(
   }
 
   return weekDates(weekStart).map((date) => {
-    const daySegments = (segmentsByDate.get(date) ?? []).sort(
+    const sorted = (segmentsByDate.get(date) ?? []).sort(
       (first, second) => first.startMinute - second.startMinute || first.endMinute - second.endMinute,
     )
+    const closed = sorted.filter((segment) => segment.kind === 'closed')
+    const daySegments = sorted.map((segment) =>
+      segment.kind === 'reserved' &&
+      closed.some((closure) => closure.startMinute < segment.endMinute && closure.endMinute > segment.startMinute)
+        ? { ...segment, overClosed: true }
+        : segment)
     const hasAvailable = daySegments.some((segment) => segment.kind === 'available')
+    const hasReserved = daySegments.some((segment) => segment.kind === 'reserved')
     const status: CalendarDayStatus = hasAvailable
       ? 'open'
       : date < today
         ? 'past'
-        : daySegments.length > 0
+        : hasReserved
           ? 'fullyBooked'
           : 'closed'
 

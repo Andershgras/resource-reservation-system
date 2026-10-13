@@ -64,3 +64,6 @@ Text and background pairs were checked against WCAG AA (4.5:1). Control borders 
 - **jsdom can't check colour contrast**, so the axe tests leave that rule off. Token contrast was checked by hand. Changing a colour token means checking its pairs again.
 - **Adding a screen** means composing `src/ui/` components. A new visual pattern should become a component, or a token, rather than a one-off style.
 - Dark mode follows the operating system. There is no in-app theme switch.
+
+## Updates
+- **Milestone 6 PR 2:** a Light/Dark/System theme switch in the header, saved in `localStorage`. The dark tokens apply under `data-theme="dark"`, or under the device's dark mode when no theme is chosen. CSS can't share one block between those two selectors, so the dark values appear twice, and a unit test fails if the copies differ. A small inline script in `index.html` applies the saved theme before the page draws, so there is no flash of the other theme. axe runs in the browser on a chosen dark theme on a light device. The section tabs now always have their own header row, so every tab stays visible.

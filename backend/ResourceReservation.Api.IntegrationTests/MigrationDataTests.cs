@@ -75,6 +75,7 @@ public class MigrationDataTests : ApiTestBase
                 (resource.MinDurationMinutes, resource.MaxDurationMinutes,
                     resource.MinLeadTimeMinutes, resource.MaxAdvanceDays));
             Assert.Equal("legacy@example.com", (await context.Users.AsNoTracking().SingleAsync()).Email);
+            Assert.Empty(await context.AvailabilityExceptions.AsNoTracking().ToListAsync());
         }
         finally
         {

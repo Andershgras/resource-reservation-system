@@ -75,6 +75,14 @@ export interface ReservedSlotResponse {
   endTime: string
 }
 
+// Opening hours a closure takes away, with the reason of each closure that
+// covers them.
+export interface ClosedSlotResponse {
+  startTime: string
+  endTime: string
+  reasons: string[]
+}
+
 export interface ResourceScheduleResponse {
   resourceId: number
   resourceName: string
@@ -83,6 +91,7 @@ export interface ResourceScheduleResponse {
   policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
+  closedSlots: ClosedSlotResponse[]
 }
 
 export interface AvailabilityResponse {
@@ -152,4 +161,29 @@ export interface RescheduleReservationRequest {
   startTime: string
   endTime: string
   version: string
+}
+
+// A closure: time a resource can't be booked, such as a holiday. Times are
+// wall-clock times; createdAt is a UTC instant.
+export interface ClosureResponse {
+  id: number
+  resourceId: number
+  resourceName: string
+  startTime: string
+  endTime: string
+  reason: string
+  createdAt: string
+  createdByName: string | null
+}
+
+export interface CreateClosureRequest {
+  resourceId: number
+  startTime: string
+  endTime: string
+  reason: string
+}
+
+export interface ClosureCreatedResponse {
+  closure: ClosureResponse
+  affectedReservations: ReservationResponse[]
 }
