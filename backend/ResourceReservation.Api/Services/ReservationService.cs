@@ -1,7 +1,4 @@
-using System.Data;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
@@ -21,20 +18,20 @@ public class ReservationService
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
     private readonly SchedulingClock _schedulingClock;
-    private readonly SchedulingOptions _schedulingOptions;
+    private readonly BookingLocks _bookingLocks;
     private readonly BookingPolicyOptions _bookingPolicyOptions;
 
     public ReservationService(
         AppDbContext context,
         AvailabilityService availabilityService,
         SchedulingClock schedulingClock,
-        IOptions<SchedulingOptions> schedulingOptions,
+        BookingLocks bookingLocks,
         IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
         _schedulingClock = schedulingClock;
-        _schedulingOptions = schedulingOptions.Value;
+        _bookingLocks = bookingLocks;
         _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
@@ -116,6 +113,19 @@ public class ReservationService
             return policyError;
         }
 
+        // Serialize bookings per user and per resource, so neither the cap check
+        // nor the overlap check can interleave with another booking (ADR 0002).
+        var bookingLock = await _bookingLocks.AcquireAsync(userId, request.ResourceId);
+
+        if (!bookingLock.Acquired)
+        {
+            return ServiceError.Unavailable(ResourceBusyMessage);
+        }
+
+        await using var transaction = bookingLock.Transaction;
+
+        // Under the lock, so a closure saved meanwhile is either seen here or
+        // reports this booking as affected (ADR 0009).
         var isWithinAvailability = await _availabilityService.IsWithinAvailabilityAsync(
             request.ResourceId,
             request.StartTime,
@@ -125,17 +135,6 @@ public class ReservationService
         {
             return ServiceError.Validation("Resource is not available in this time period.");
         }
-
-        // Serialize bookings per user and per resource, so neither the cap check
-        // nor the overlap check can interleave with another booking (ADR 0002).
-        var bookingLock = await AcquireBookingLocksAsync(userId, request.ResourceId);
-
-        if (!bookingLock.Acquired)
-        {
-            return ServiceError.Unavailable(ResourceBusyMessage);
-        }
-
-        await using var transaction = bookingLock.Transaction;
 
         var localNow = _schedulingClock.GetLocalNow();
         var maxActiveReservations = _bookingPolicyOptions.MaxActiveReservationsPerUser;
@@ -283,6 +282,18 @@ public class ReservationService
             return policyError;
         }
 
+        // Moving doesn't change how many bookings the user holds, so only the
+        // resource is locked.
+        var bookingLock = await _bookingLocks.AcquireAsync(null, reservation.ResourceId);
+
+        if (!bookingLock.Acquired)
+        {
+            return ServiceError.Unavailable(ResourceBusyMessage);
+        }
+
+        await using var transaction = bookingLock.Transaction;
+
+        // Under the lock, as when booking.
         var isWithinAvailability = await _availabilityService.IsWithinAvailabilityAsync(
             reservation.ResourceId,
             request.StartTime,
@@ -292,17 +303,6 @@ public class ReservationService
         {
             return ServiceError.Validation("Resource is not available in this time period.");
         }
-
-        // Moving doesn't change how many bookings the user holds, so only the
-        // resource is locked.
-        var bookingLock = await AcquireBookingLocksAsync(null, reservation.ResourceId);
-
-        if (!bookingLock.Acquired)
-        {
-            return ServiceError.Unavailable(ResourceBusyMessage);
-        }
-
-        await using var transaction = bookingLock.Transaction;
 
         var overlapsAnotherReservation = await _context.Reservations
             .AnyAsync(other =>
@@ -332,81 +332,6 @@ public class ReservationService
         }
 
         return ToResponseDto(reservation);
-    }
-
-    // Locks are always taken in the same order, the user's before the resource's,
-    // so two requests can never each hold one lock while waiting for the other.
-    // Pass a null user when only the resource needs locking.
-    private async Task<BookingLock> AcquireBookingLocksAsync(int? userId, int resourceId)
-    {
-        // The in-memory test provider has no transactions or locks.
-        if (!_context.Database.IsRelational())
-        {
-            return new BookingLock(true, null);
-        }
-
-        var transaction = await _context.Database.BeginTransactionAsync();
-        var lockNames = userId is null
-            ? [$"reservation:resource:{resourceId}"]
-            : new[] { $"reservation:user:{userId}", $"reservation:resource:{resourceId}" };
-
-        try
-        {
-            foreach (var lockName in lockNames)
-            {
-                if (!await TryAcquireLockAsync(lockName))
-                {
-                    await transaction.DisposeAsync();
-
-                    return new BookingLock(false, null);
-                }
-            }
-        }
-        catch
-        {
-            await transaction.DisposeAsync();
-            throw;
-        }
-
-        return new BookingLock(true, transaction);
-    }
-
-    // The lock is owned by the transaction and released on commit or rollback.
-    private async Task<bool> TryAcquireLockAsync(string lockName)
-    {
-        var lockResult = new SqlParameter("@result", SqlDbType.Int)
-        {
-            Direction = ParameterDirection.Output
-        };
-
-        await _context.Database.ExecuteSqlRawAsync(
-            """
-            EXEC @result = sp_getapplock
-                @Resource = @resource,
-                @LockMode = 'Exclusive',
-                @LockOwner = 'Transaction',
-                @LockTimeout = @timeout;
-            """,
-            new SqlParameter("@resource", lockName),
-            new SqlParameter("@timeout", _schedulingOptions.BookingLockTimeoutMilliseconds),
-            lockResult);
-
-        // 0 and 1 mean granted. -1 is a timeout and -3 a deadlock victim; both are
-        // temporary, so the caller is told to retry. Anything else is a bug.
-        var resultCode = (int)lockResult.Value;
-
-        if (resultCode >= 0)
-        {
-            return true;
-        }
-
-        if (resultCode is -1 or -3)
-        {
-            return false;
-        }
-
-        throw new InvalidOperationException(
-            $"sp_getapplock failed for '{lockName}' with result code {resultCode}.");
     }
 
     private IQueryable<ReservationResponseDto> QueryReservations(
@@ -476,6 +401,4 @@ public class ReservationService
             Version = Convert.ToBase64String(reservation.Version)
         };
     }
-
-    private sealed record BookingLock(bool Acquired, IDbContextTransaction? Transaction);
 }

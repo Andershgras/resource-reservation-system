@@ -911,7 +911,7 @@ public class ReservationServiceTests
             context,
             new AvailabilityService(context, clock, bookingPolicy),
             clock,
-            Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }),
+            new BookingLocks(context, Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" })),
             bookingPolicy);
     }
 
