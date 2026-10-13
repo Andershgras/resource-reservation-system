@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type ReactNode } from 'react'
-import { MemoryRouter, useLocation } from 'react-router'
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { UserResponse } from '../api/types'
 import { AuthContext, type AuthContextValue, type SessionEnd } from '../auth/authContext'
-import { App } from './App'
+import { appRoutes } from './App'
 
 // The workspaces load data from the API, which these routing tests don't need.
 vi.mock('./UserLayout', () => ({
@@ -55,13 +55,14 @@ function TestAuthProvider({ auth, logIn, children }: {
 
 function renderApp(path: string, auth: TestAuth = {}) {
   const logIn = vi.fn(async () => auth.loginUser ?? user)
+  const router = createMemoryRouter(
+    [{ element: <><Outlet /><CurrentLocation /></>, children: appRoutes }],
+    { initialEntries: [path] },
+  )
 
   render(
     <TestAuthProvider auth={auth} logIn={logIn}>
-      <MemoryRouter initialEntries={[path]}>
-        <App />
-        <CurrentLocation />
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </TestAuthProvider>,
   )
 

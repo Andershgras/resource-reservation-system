@@ -167,8 +167,8 @@ The frontend is a Vite-built React and TypeScript app. Routing uses React Router
 flowchart TB
     subgraph Providers["main.tsx"]
         QC[QueryClientProvider]
-        BR[BrowserRouter]
         AP["AuthProvider<br/>user, session expiry, clears the cache"]
+        BR["RouterProvider<br/>data router (createBrowserRouter)"]
     end
     App["app/App.tsx<br/>route table"]
     Login["/login, /register<br/>RequireLoggedOut"]
@@ -179,7 +179,7 @@ flowchart TB
     Hooks["features/*/…Queries.ts<br/>TanStack Query hooks"]
     Api["api/client.ts<br/>bearer token, problem details"]
 
-    QC --> BR --> AP --> App
+    QC --> AP --> BR --> App
     App --> Login
     App --> Admin --> AdminPages
     App --> User --> UserPages

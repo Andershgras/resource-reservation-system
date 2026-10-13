@@ -1,4 +1,9 @@
-import { Navigate, Route, Routes } from 'react-router'
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Navigate,
+  Route,
+} from 'react-router'
 import { AuthPage } from '../auth/AuthPage'
 import { ConfirmProvider } from '../components/ConfirmProvider'
 import { AdminAvailabilityPage } from '../features/availability/AdminAvailabilityPage'
@@ -12,34 +17,40 @@ import { NotFoundPage } from './NotFoundPage'
 import { HomeRedirect, RequireAuth, RequireLoggedOut } from './RequireAuth'
 import { UserLayout } from './UserLayout'
 
+// The route table. It runs in a data router, which is what lets a form block
+// navigation while it has unsaved changes (useBlocker). Data still loads
+// through TanStack Query, not route loaders (ADR 0006).
+//
 // A layout route stays mounted while moving between its child screens.
-export function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<HomeRedirect />} />
+export const appRoutes = createRoutesFromElements(
+  <>
+    <Route path="/" element={<HomeRedirect />} />
 
-      <Route element={<RequireLoggedOut><AuthPage /></RequireLoggedOut>}>
-        <Route path="/login" />
-        <Route path="/register" />
-      </Route>
+    <Route element={<RequireLoggedOut><AuthPage /></RequireLoggedOut>}>
+      <Route path="/login" />
+      <Route path="/register" />
+    </Route>
 
-      <Route
-        path="/admin"
-        element={<RequireAuth role="Admin"><ConfirmProvider><AdminLayout /></ConfirmProvider></RequireAuth>}
-      >
-        <Route index element={<Navigate to="/admin/resources" replace />} />
-        <Route path="resources" element={<AdminResourcesPage />} />
-        <Route path="availability" element={<AdminAvailabilityPage />} />
-        <Route path="weekly-schedule" element={<AdminWeeklySchedulePage />} />
-        <Route path="reservations" element={<AdminReservationsPage />} />
-      </Route>
+    <Route
+      path="/admin"
+      element={<RequireAuth role="Admin"><ConfirmProvider><AdminLayout /></ConfirmProvider></RequireAuth>}
+    >
+      <Route index element={<Navigate to="/admin/resources" replace />} />
+      <Route path="resources" element={<AdminResourcesPage />} />
+      <Route path="availability" element={<AdminAvailabilityPage />} />
+      <Route path="weekly-schedule" element={<AdminWeeklySchedulePage />} />
+      <Route path="reservations" element={<AdminReservationsPage />} />
+    </Route>
 
-      <Route element={<RequireAuth role="User"><ConfirmProvider><UserLayout /></ConfirmProvider></RequireAuth>}>
-        <Route path="/book" element={<BookingPage />} />
-        <Route path="/my-reservations" element={<MyReservationsPage />} />
-      </Route>
+    <Route element={<RequireAuth role="User"><ConfirmProvider><UserLayout /></ConfirmProvider></RequireAuth>}>
+      <Route path="/book" element={<BookingPage />} />
+      <Route path="/my-reservations" element={<MyReservationsPage />} />
+    </Route>
 
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
-  )
+    <Route path="*" element={<NotFoundPage />} />
+  </>,
+)
+
+export function createAppRouter() {
+  return createBrowserRouter(appRoutes)
 }

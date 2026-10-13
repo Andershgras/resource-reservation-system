@@ -1,6 +1,6 @@
 # ADR 0006: Frontend Routing And Server State
 
-- **Status:** Accepted
+- **Status:** Accepted. Amended in Milestone 5: the routes run in a data router (see below).
 - **Date:** 2026-10-13
 - **Related findings:** M7, L2 and L4 context in the [initial audit](../audit/2026-10-initial-audit.md)
 
@@ -44,6 +44,8 @@ The guards make every redirect around login and logout. Event handlers don't nav
 
 React Router 8 was available, but it needs Node 22.22 or later, and the development machine runs Node 22.19. Version 7 has the same declarative API and still receives fixes.
 
+**Amended in Milestone 5:** the same route table now runs in a data router (`createBrowserRouter`, with `createMemoryRouter` in tests). Only a data router supports `useBlocker`, which the unsaved-changes guard needs. The routes, guards and layouts are unchanged, and there are still no loaders or actions: server data stays in TanStack Query. `AuthProvider` uses no router hooks, so it wraps the `RouterProvider`.
+
 ### Server data: TanStack Query, one set of hooks per feature
 
 Each feature folder has its query hooks, such as `useResources`, `useSaveResource` and `useCancelReservation`. Keys are central in `lib/queryKeys.ts` and nested, so invalidating `['reservations']` refreshes both the user's and the admin's lists.
@@ -74,7 +76,7 @@ Each mutation invalidates everything its change affects, and resolves once the d
 
 - **Hand-written hooks with `useState` and `useEffect`:** no dependency, but we would rebuild loading and error states, cache clearing and cross-screen refreshes ourselves.
 - **TanStack Router:** fully typed routes, but less familiar, and more setup than six routes need.
-- **React Router's data mode (loaders and actions):** overlaps with TanStack Query, and would mean two ways to load data.
+- **React Router's loaders and actions:** overlap with TanStack Query, and would mean two ways to load data. (The data router itself is used since Milestone 5, for navigation blocking only.)
 
 ## Consequences
 
