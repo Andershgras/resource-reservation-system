@@ -4,9 +4,15 @@ export interface ConfirmationRequest {
   title: string
   message: string
   confirmLabel: string
+  // "Keep unchanged" unless given.
+  cancelLabel?: string
+  // "danger", the default, for actions that delete or cancel something.
+  tone?: 'danger' | 'primary'
   // Runs when the user confirms. The dialog stays open, showing "Working...",
-  // until it finishes.
-  onConfirm: () => Promise<void>
+  // until it finishes. If it throws, the dialog stays open with an error.
+  onConfirm: () => Promise<void> | void
+  // Runs when the user closes the dialog without confirming.
+  onCancel?: () => void
 }
 
 export const ConfirmContext = createContext<((request: ConfirmationRequest) => void) | null>(null)

@@ -81,6 +81,34 @@ describe('apiRequest', () => {
     )
   })
 
+  it('keeps the first message for each field, keyed by its camelCase name', async () => {
+    fetchMock.mockResolvedValue(problem(400, {
+      title: 'One or more validation errors occurred.',
+      errors: {
+        Password: ['Enter a password.', 'Password must be at least 8 characters.'],
+        ResourceId: ['Select a resource.'],
+        '$.startTime': ['The JSON value could not be converted to System.DateTime.'],
+      },
+    }))
+
+    const error = await apiRequest('/reservations').catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).fieldErrors).toEqual({
+      password: 'Enter a password.',
+      resourceId: 'Select a resource.',
+      startTime: 'The JSON value could not be converted to System.DateTime.',
+    })
+  })
+
+  it('has no field errors for other problems', async () => {
+    fetchMock.mockResolvedValue(problem(409, { detail: 'Resource is already reserved in this time period.' }))
+
+    const error = await apiRequest('/reservations').catch((caught: unknown) => caught)
+
+    expect((error as ApiError).fieldErrors).toEqual({})
+  })
+
   it('falls back to the title, then to the status', async () => {
     fetchMock.mockResolvedValueOnce(problem(404, { title: 'Not Found' }))
     fetchMock.mockResolvedValueOnce(new Response('', { status: 502 }))

@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router'
 import type { ReservationResponse, ReservationStatus } from '../../api/types'
 import { useConfirm } from '../../components/confirmContext'
 import { ReservationsSection } from '../../components/ReservationsSection'
-import { formatDateTime } from '../../lib/dates'
-import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
+import { errorNotice, getErrorMessage } from '../../lib/errors'
+import type { Notice } from '../../ui/Alert'
 import { useResources } from '../resources/resourceQueries'
 import { useAllReservations, useCancelReservation } from './reservationQueries'
 
@@ -19,7 +19,7 @@ export function AdminReservationsPage() {
   const cancelReservation = useCancelReservation()
   const confirm = useConfirm()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
   const resourceFilter = parseResourceFilter(searchParams.get('resource'))
   const statusFilter = parseStatusFilter(searchParams.get('status'))
   const hasFilters = resourceFilter !== '' || statusFilter !== ''
@@ -52,13 +52,13 @@ export function AdminReservationsPage() {
       message: `Cancel reservation for "${reservation.resourceName}"?`,
       confirmLabel: 'Cancel reservation',
       onConfirm: async () => {
-        setMessage('')
+        setNotice(null)
 
         try {
           await cancelReservation.mutateAsync(reservation.id)
-          setMessage('Reservation cancelled.')
+          setNotice({ tone: 'success', text: 'Reservation cancelled.' })
         } catch (error) {
-          setMessage(getErrorMessage(error))
+          setNotice({ tone: 'danger', text: getErrorMessage(error) })
         }
       },
     })
@@ -69,8 +69,8 @@ export function AdminReservationsPage() {
       title="Reservations"
       reservations={filteredReservations}
       isLoading={reservationsQuery.isPending}
-      message={message || getQueryErrorMessage(reservationsQuery.error)}
-      showUserId
+      notice={notice ?? errorNotice(reservationsQuery.error)}
+      showUser
       filterResources={resourcesQuery.data ?? []}
       selectedResourceId={resourceFilter}
       selectedStatus={statusFilter}
@@ -80,9 +80,9 @@ export function AdminReservationsPage() {
       emptyMessage={
         hasFilters ? 'No reservations match the selected filters.' : 'No reservations found.'
       }
+      emptyDescription={hasFilters ? 'Try another resource or status, or clear the filters.' : undefined}
       cancellingReservationId={cancelReservation.isPending ? cancelReservation.variables : null}
       onCancelReservation={handleCancel}
-      formatDateTime={formatDateTime}
     />
   )
 }

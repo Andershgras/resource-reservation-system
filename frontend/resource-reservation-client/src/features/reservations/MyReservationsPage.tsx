@@ -2,8 +2,8 @@ import { useState } from 'react'
 import type { ReservationResponse } from '../../api/types'
 import { useConfirm } from '../../components/confirmContext'
 import { ReservationsSection } from '../../components/ReservationsSection'
-import { formatDateTime } from '../../lib/dates'
-import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
+import { errorNotice, getErrorMessage } from '../../lib/errors'
+import type { Notice } from '../../ui/Alert'
 import { useCancelReservation, useMyReservations } from './reservationQueries'
 
 // /my-reservations: the user's own reservations.
@@ -11,7 +11,7 @@ export function MyReservationsPage() {
   const reservationsQuery = useMyReservations()
   const cancelReservation = useCancelReservation()
   const confirm = useConfirm()
-  const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
 
   function handleCancel(reservation: ReservationResponse) {
     confirm({
@@ -19,14 +19,14 @@ export function MyReservationsPage() {
       message: `Cancel reservation for "${reservation.resourceName}"?`,
       confirmLabel: 'Cancel reservation',
       onConfirm: async () => {
-        setMessage('')
+        setNotice(null)
 
         try {
           // Also reloads the booking schedule, so the time shows as free again.
           await cancelReservation.mutateAsync(reservation.id)
-          setMessage('Reservation cancelled.')
+          setNotice({ tone: 'success', text: 'Reservation cancelled.' })
         } catch (error) {
-          setMessage(getErrorMessage(error))
+          setNotice({ tone: 'danger', text: getErrorMessage(error) })
         }
       },
     })
@@ -37,10 +37,10 @@ export function MyReservationsPage() {
       title="My reservations"
       reservations={reservationsQuery.data ?? []}
       isLoading={reservationsQuery.isPending}
-      message={message || getQueryErrorMessage(reservationsQuery.error)}
+      notice={notice ?? errorNotice(reservationsQuery.error)}
+      emptyDescription="Book a resource and your reservations show up here."
       cancellingReservationId={cancelReservation.isPending ? cancelReservation.variables : null}
       onCancelReservation={handleCancel}
-      formatDateTime={formatDateTime}
     />
   )
 }

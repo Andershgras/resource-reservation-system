@@ -98,6 +98,8 @@ public class ReservationServiceTests
         Assert.True(result.IsSuccess);
         var response = result.Value;
         Assert.Equal(ReservationStatuses.Active, response.Status);
+        Assert.Equal(user.Name, response.UserName);
+        Assert.Equal(user.Email, response.UserEmail);
     }
 
     [Fact]
@@ -187,6 +189,7 @@ public class ReservationServiceTests
         var response = result.Value;
         Assert.Equal(reservation.Id, response.Id);
         Assert.Equal(user.Id, response.UserId);
+        Assert.Equal(user.Email, response.UserEmail);
     }
 
     [Fact]
@@ -232,6 +235,30 @@ public class ReservationServiceTests
         var response = result.Value;
         Assert.Equal(reservation.Id, response.Id);
         Assert.Equal(reservationOwner.Id, response.UserId);
+        Assert.Equal(reservationOwner.Name, response.UserName);
+        Assert.Equal(reservationOwner.Email, response.UserEmail);
+    }
+
+    [Fact]
+    public async Task GetAllReservations_IncludesEachOwnersNameAndEmail()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var owner = await SeedUserAsync(context);
+        await SeedReservationAsync(
+            context,
+            resource.Id,
+            owner.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0),
+            new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var reservations = await service.GetAllAsync();
+
+        var reservation = Assert.Single(reservations);
+        Assert.Equal(owner.Name, reservation.UserName);
+        Assert.Equal(owner.Email, reservation.UserEmail);
     }
 
     [Fact]

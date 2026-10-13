@@ -56,6 +56,7 @@ public class ReservationService
     {
         var reservation = await _context.Reservations
             .Include(reservation => reservation.Resource)
+            .Include(reservation => reservation.User)
             .FirstOrDefaultAsync(reservation => reservation.Id == id);
 
         if (reservation is null)
@@ -75,7 +76,9 @@ public class ReservationService
         CreateReservationDto request,
         int userId)
     {
-        if (!await _context.Users.AnyAsync(user => user.Id == userId))
+        var user = await _context.Users.FindAsync(userId);
+
+        if (user is null)
         {
             return ServiceError.Unauthorized("User does not exist.");
         }
@@ -143,7 +146,8 @@ public class ReservationService
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             Status = ReservationStatuses.Active,
-            Resource = resource
+            Resource = resource,
+            User = user
         };
 
         _context.Reservations.Add(reservation);
@@ -232,7 +236,10 @@ public class ReservationService
     private IQueryable<ReservationResponseDto> QueryReservations(
         System.Linq.Expressions.Expression<Func<Reservation, bool>>? filter = null)
     {
-        var reservations = _context.Reservations.Include(reservation => reservation.Resource).AsQueryable();
+        var reservations = _context.Reservations
+            .Include(reservation => reservation.Resource)
+            .Include(reservation => reservation.User)
+            .AsQueryable();
 
         if (filter is not null)
         {
@@ -255,6 +262,8 @@ public class ReservationService
             ResourceId = reservation.ResourceId,
             ResourceName = reservation.Resource?.Name ?? string.Empty,
             UserId = reservation.UserId,
+            UserName = reservation.User?.Name ?? string.Empty,
+            UserEmail = reservation.User?.Email ?? string.Empty,
             StartTime = reservation.StartTime,
             EndTime = reservation.EndTime,
             Status = reservation.Status

@@ -16,11 +16,15 @@ interface ProblemDetailsResponse {
 
 export class ApiError extends Error {
   readonly status: number
+  // The first validation message for each field, keyed by the request's
+  // camelCase property name, such as { name: 'Enter a resource name.' }.
+  readonly fieldErrors: Record<string, string>
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, fieldErrors: Record<string, string> = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.fieldErrors = fieldErrors
   }
 }
 
@@ -53,7 +57,8 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError(await readErrorMessage(response), response.status)
+    const { message, fieldErrors } = await readError(response)
+    throw new ApiError(message, response.status, fieldErrors)
   }
 
   if (response.status === 204) {
@@ -63,24 +68,45 @@ export async function apiRequest<T>(
   return response.json() as Promise<T>
 }
 
-async function readErrorMessage(response: Response) {
+async function readError(response: Response) {
   const fallbackMessage = `Request failed with status ${response.status}`
   const text = await response.text()
 
   if (!text) {
-    return fallbackMessage
+    return { message: fallbackMessage, fieldErrors: {} }
   }
 
   try {
     const problem = JSON.parse(text) as ProblemDetailsResponse
-    const validationMessages = Object.values(problem.errors ?? {}).flat()
+    const fieldErrors = readFieldErrors(problem.errors ?? {})
+    const validationMessages = Object.values(fieldErrors)
 
     if (validationMessages.length > 0) {
-      return validationMessages.join(' ')
+      return { message: validationMessages.join(' '), fieldErrors }
     }
 
-    return problem.detail ?? problem.title ?? fallbackMessage
+    return { message: problem.detail ?? problem.title ?? fallbackMessage, fieldErrors }
   } catch {
-    return text
+    return { message: text, fieldErrors: {} }
   }
+}
+
+// ASP.NET Core names a field by its C# property ("ResourceId"), or by its JSON
+// path ("$.startTime") when the value can't be read. Both become the request's
+// property name, "resourceId" or "startTime". A field with several messages
+// keeps the first, which is the most basic, such as "Enter a password."
+// rather than "Password must be at least 8 characters.".
+function readFieldErrors(errors: Record<string, string[]>) {
+  const fieldErrors: Record<string, string> = {}
+
+  for (const [key, messages] of Object.entries(errors)) {
+    const property = key.replace(/^\$\./, '').split('.').at(-1) ?? key
+    const field = property.charAt(0).toLowerCase() + property.slice(1)
+
+    if (messages.length > 0 && !(field in fieldErrors)) {
+      fieldErrors[field] = messages[0]
+    }
+  }
+
+  return fieldErrors
 }

@@ -61,7 +61,7 @@ public class AvailabilityService
         var bookableSlots = RemoveTimeBefore(
             SubtractReservedSlots(
                 availabilityIntervals,
-                reservedSlots.Select(slot => new TimeRange(slot.StartTime, slot.EndTime))),
+                reservedSlots),
             GetNextWholeMinute(_schedulingClock.GetLocalNow()));
 
         return new ResourceScheduleResponseDto
@@ -80,7 +80,6 @@ public class AvailabilityService
             ReservedSlots = reservedSlots
                 .Select(slot => new ReservedSlotResponseDto
                 {
-                    ReservationId = slot.ReservationId,
                     StartTime = slot.StartTime,
                     EndTime = slot.EndTime
                 })
@@ -189,7 +188,7 @@ public class AvailabilityService
             .ToList();
     }
 
-    private Task<List<ReservedTimeRange>> GetReservedSlotsAsync(
+    private Task<List<TimeRange>> GetReservedSlotsAsync(
         int resourceId,
         DateTime rangeStart,
         DateTime rangeEnd)
@@ -201,8 +200,7 @@ public class AvailabilityService
                 reservation.StartTime < rangeEnd &&
                 reservation.EndTime > rangeStart)
             .OrderBy(reservation => reservation.StartTime)
-            .Select(reservation => new ReservedTimeRange(
-                reservation.Id,
+            .Select(reservation => new TimeRange(
                 reservation.StartTime < rangeStart ? rangeStart : reservation.StartTime,
                 reservation.EndTime > rangeEnd ? rangeEnd : reservation.EndTime))
             .ToListAsync();
@@ -251,5 +249,3 @@ public class AvailabilityService
 }
 
 public sealed record TimeRange(DateTime StartTime, DateTime EndTime);
-
-internal sealed record ReservedTimeRange(int ReservationId, DateTime StartTime, DateTime EndTime);

@@ -4,10 +4,10 @@ namespace ResourceReservation.Api.DTOs;
 
 public class UpdateAvailabilityRuleDto
 {
-    [Range(1, int.MaxValue)]
+    [Range(1, int.MaxValue, ErrorMessage = "Select a resource.")]
     public int ResourceId { get; set; }
 
-    [Range(0, 6)]
+    [Range(0, 6, ErrorMessage = "Select a weekday.")]
     public int DayOfWeek { get; set; }
 
     public TimeOnly StartTime { get; set; }

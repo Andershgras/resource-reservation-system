@@ -1,187 +1,79 @@
-import type { Dispatch, SetStateAction } from 'react'
-import type { AvailabilityResponse, UserRole } from '../api/types'
+import type { AvailabilityResponse } from '../api/types'
+import { formatDateTimeRange } from '../lib/dates'
+import { Alert, type Notice } from '../ui/Alert'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { EmptyState, LoadingState } from '../ui/States'
+import './lists.css'
 
 interface AvailabilitySectionProps {
-  currentUserRole: UserRole
   availabilities: AvailabilityResponse[]
   isLoadingAvailabilities: boolean
-  availabilityMessage: string
-  reservationMessage: string
-  reservationValidationMessage?: string
-  reservingAvailabilityId: number | null
-  selectedReservationAvailabilityId?: number | null
-  reservationStartTime?: string
-  setReservationStartTime?: Dispatch<SetStateAction<string>>
-  reservationEndTime?: string
-  setReservationEndTime?: Dispatch<SetStateAction<string>>
+  notice: Notice | null
   deletingAvailabilityId: number | null
-  onReserve: (availability: AvailabilityResponse) => void
-  onSelectAvailabilityForReservation?: (
-    availability: AvailabilityResponse,
-  ) => void
-  onCancelReservationTimeSelection?: () => void
   onEditAvailability: (availability: AvailabilityResponse) => void
   onDeleteAvailability: (availability: AvailabilityResponse) => void
-  formatDateTime: (value: string) => string
-  formatDateTimeInput?: (value: string) => string
 }
 
+// One-off availability windows, for admins.
 export function AvailabilitySection({
-  currentUserRole,
   availabilities,
   isLoadingAvailabilities,
-  availabilityMessage,
-  reservationMessage,
-  reservationValidationMessage = '',
-  reservingAvailabilityId,
-  selectedReservationAvailabilityId = null,
-  reservationStartTime = '',
-  setReservationStartTime,
-  reservationEndTime = '',
-  setReservationEndTime,
+  notice,
   deletingAvailabilityId,
-  onReserve,
-  onSelectAvailabilityForReservation,
-  onCancelReservationTimeSelection,
   onEditAvailability,
   onDeleteAvailability,
-  formatDateTime,
-  formatDateTimeInput,
 }: AvailabilitySectionProps) {
   return (
-    <section className="panel-section" aria-labelledby="availabilities-title">
-      <div className="section-heading">
-        <h2 id="availabilities-title">Availability</h2>
-        <span className="count-badge">{availabilities.length}</span>
-      </div>
-      {reservationMessage && <p className="status-message">{reservationMessage}</p>}
-      {reservationValidationMessage && (
-        <p className="status-message" role="alert">
-          {reservationValidationMessage}
-        </p>
+    <Card
+      title="Availability"
+      actions={<Badge label={`${availabilities.length} windows`}>{availabilities.length}</Badge>}
+    >
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+      {isLoadingAvailabilities && <LoadingState>Loading availability...</LoadingState>}
+      {!isLoadingAvailabilities && availabilities.length === 0 && (
+        <EmptyState
+          title="No availability found."
+          description="One-off windows add bookable time outside the weekly schedule."
+        />
       )}
-      {isLoadingAvailabilities && (
-        <p className="status-message" role="status">
-          Loading availability...
-        </p>
-      )}
-      {availabilityMessage && (
-        <p className="status-message">{availabilityMessage}</p>
-      )}
-      {!isLoadingAvailabilities &&
-        availabilities.length === 0 && (
-          <p className="status-message">No availability found.</p>
-        )}
       {availabilities.length > 0 && (
-        <ul className="resource-list">
+        <ul className="item-list">
           {availabilities.map((availability) => {
-            const isSelectingReservationTime =
-              selectedReservationAvailabilityId === availability.id
-            const canSelectReservationTime =
-              onSelectAvailabilityForReservation &&
-              onCancelReservationTimeSelection &&
-              setReservationStartTime &&
-              setReservationEndTime &&
-              formatDateTimeInput
+            const period = formatDateTimeRange(availability.startTime, availability.endTime)
 
             return (
-              <li key={availability.id} className="resource-item">
+              <li key={availability.id} className="item">
                 <div className="item-main">
-                  <strong>{availability.resourceName}</strong>
-                  <div className="availability-dates">
-                    <p>
-                      <span>Start</span>
-                      {formatDateTime(availability.startTime)}
-                    </p>
-                    <p>
-                      <span>End</span>
-                      {formatDateTime(availability.endTime)}
-                    </p>
-                  </div>
+                  <p className="item-title">
+                    <strong>{availability.resourceName}</strong>
+                  </p>
+                  <p className="item-meta">{period}</p>
                 </div>
-                {currentUserRole === 'User' && (
-                  <div className="resource-actions">
-                    {isSelectingReservationTime && canSelectReservationTime ? (
-                      <div className="reservation-time-form">
-                        <label>
-                          <span className="label-text">Start</span>
-                          <input
-                            type="datetime-local"
-                            min={formatDateTimeInput(availability.startTime)}
-                            max={formatDateTimeInput(availability.endTime)}
-                            value={reservationStartTime}
-                            onChange={(event) =>
-                              setReservationStartTime(event.target.value)
-                            }
-                          />
-                        </label>
-                        <label>
-                          <span className="label-text">End</span>
-                          <input
-                            type="datetime-local"
-                            min={formatDateTimeInput(availability.startTime)}
-                            max={formatDateTimeInput(availability.endTime)}
-                            value={reservationEndTime}
-                            onChange={(event) =>
-                              setReservationEndTime(event.target.value)
-                            }
-                          />
-                        </label>
-                        <div className="reservation-time-actions">
-                          <button
-                            type="button"
-                            onClick={onCancelReservationTimeSelection}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            disabled={reservingAvailabilityId === availability.id}
-                            onClick={() => onReserve(availability)}
-                          >
-                            {reservingAvailabilityId === availability.id
-                              ? 'Reserving...'
-                              : 'Reserve'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={reservingAvailabilityId === availability.id}
-                        onClick={() =>
-                          onSelectAvailabilityForReservation?.(availability)
-                        }
-                      >
-                        Choose time
-                      </button>
-                    )}
-                  </div>
-                )}
-                {currentUserRole === 'Admin' && (
-                  <div className="resource-actions">
-                    <button
-                      type="button"
-                      onClick={() => onEditAvailability(availability)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={deletingAvailabilityId === availability.id}
-                      onClick={() => onDeleteAvailability(availability)}
-                    >
-                      {deletingAvailabilityId === availability.id
-                        ? 'Deleting...'
-                        : 'Delete'}
-                    </button>
-                  </div>
-                )}
+                <div className="item-actions">
+                  <Button
+                    size="sm"
+                    aria-label={`Edit ${availability.resourceName}, ${period}`}
+                    onClick={() => onEditAvailability(availability)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Delete ${availability.resourceName}, ${period}`}
+                    disabled={deletingAvailabilityId === availability.id}
+                    onClick={() => onDeleteAvailability(availability)}
+                  >
+                    {deletingAvailabilityId === availability.id ? 'Deleting...' : 'Delete'}
+                  </Button>
+                </div>
               </li>
             )
           })}
         </ul>
       )}
-    </section>
+    </Card>
   )
 }

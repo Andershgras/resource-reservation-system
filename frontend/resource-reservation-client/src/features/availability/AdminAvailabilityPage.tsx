@@ -3,11 +3,20 @@ import type { AvailabilityResponse } from '../../api/types'
 import { AvailabilityFormSection } from '../../components/AvailabilityFormSection'
 import { AvailabilitySection } from '../../components/AvailabilitySection'
 import { useConfirm } from '../../components/confirmContext'
-import { formatDateTime, toDateTimeLocalValue } from '../../lib/dates'
-import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
-import { validateAvailabilityForm } from '../../lib/validation'
+import { toDateTimeLocalValue } from '../../lib/dates'
+import {
+  errorNotice,
+  getErrorMessage,
+  getFormErrors,
+  hasFieldErrors,
+  type FieldErrors,
+} from '../../lib/errors'
+import { validateAvailabilityForm, type AvailabilityField } from '../../lib/validation'
+import type { Notice } from '../../ui/Alert'
 import { useResources } from '../resources/resourceQueries'
 import { useAvailabilities, useDeleteAvailability, useSaveAvailability } from './availabilityQueries'
+
+const availabilityFields: readonly AvailabilityField[] = ['resourceId', 'startTime', 'endTime']
 
 // /admin/availability: one-off availability windows.
 export function AdminAvailabilityPage() {
@@ -16,8 +25,9 @@ export function AdminAvailabilityPage() {
   const saveAvailability = useSaveAvailability()
   const deleteAvailability = useDeleteAvailability()
   const confirm = useConfirm()
-  const [message, setMessage] = useState('')
-  const [validationMessage, setValidationMessage] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<AvailabilityField>>({})
+  const [formError, setFormError] = useState('')
   const [editingAvailabilityId, setEditingAvailabilityId] = useState<number | null>(null)
   const [resourceId, setResourceId] = useState('')
   const [startTime, setStartTime] = useState('')
@@ -43,18 +53,19 @@ export function AdminAvailabilityPage() {
     setResourceId('')
     setStartTime('')
     setEndTime('')
-    setValidationMessage('')
+    setFieldErrors({})
+    setFormError('')
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setMessage('')
-    setValidationMessage('')
+    setNotice(null)
+    setFormError('')
 
-    const validationError = validateAvailabilityForm(resourceId, startTime, endTime)
+    const validationErrors = validateAvailabilityForm(resourceId, startTime, endTime)
+    setFieldErrors(validationErrors)
 
-    if (validationError) {
-      setValidationMessage(validationError)
+    if (hasFieldErrors(validationErrors)) {
       return
     }
 
@@ -64,9 +75,14 @@ export function AdminAvailabilityPage() {
         request: { resourceId: Number(resourceId), startTime, endTime },
       })
       resetForm()
-      setMessage(editingAvailabilityId ? 'Availability updated.' : 'Availability created.')
+      setNotice({
+        tone: 'success',
+        text: editingAvailabilityId ? 'Availability updated.' : 'Availability created.',
+      })
     } catch (error) {
-      setMessage(getErrorMessage(error))
+      const formErrors = getFormErrors(error, availabilityFields)
+      setFieldErrors(formErrors.fieldErrors)
+      setFormError(formErrors.message)
     }
   }
 
@@ -75,8 +91,9 @@ export function AdminAvailabilityPage() {
     setResourceId(availability.resourceId.toString())
     setStartTime(toDateTimeLocalValue(availability.startTime))
     setEndTime(toDateTimeLocalValue(availability.endTime))
-    setMessage('')
-    setValidationMessage('')
+    setNotice(null)
+    setFieldErrors({})
+    setFormError('')
   }
 
   function handleDelete(availability: AvailabilityResponse) {
@@ -85,7 +102,7 @@ export function AdminAvailabilityPage() {
       message: `Delete availability for "${availability.resourceName}"?`,
       confirmLabel: 'Delete availability',
       onConfirm: async () => {
-        setMessage('')
+        setNotice(null)
 
         try {
           await deleteAvailability.mutateAsync(availability.id)
@@ -94,9 +111,9 @@ export function AdminAvailabilityPage() {
             resetForm()
           }
 
-          setMessage('Availability deleted.')
+          setNotice({ tone: 'success', text: 'Availability deleted.' })
         } catch (error) {
-          setMessage(getErrorMessage(error))
+          setNotice({ tone: 'danger', text: getErrorMessage(error) })
         }
       },
     })
@@ -113,24 +130,20 @@ export function AdminAvailabilityPage() {
         setAvailabilityStartTime={setStartTime}
         availabilityEndTime={endTime}
         setAvailabilityEndTime={setEndTime}
-        validationMessage={validationMessage}
+        fieldErrors={fieldErrors}
+        formError={formError}
         isSavingAvailability={saveAvailability.isPending}
         onSubmit={(event) => void handleSave(event)}
         onCancelEdit={resetForm}
       />
 
       <AvailabilitySection
-        currentUserRole="Admin"
         availabilities={sortedAvailabilities}
         isLoadingAvailabilities={availabilitiesQuery.isPending}
-        availabilityMessage={message || getQueryErrorMessage(availabilitiesQuery.error)}
-        reservationMessage=""
-        reservingAvailabilityId={null}
+        notice={notice ?? errorNotice(availabilitiesQuery.error)}
         deletingAvailabilityId={deleteAvailability.isPending ? deleteAvailability.variables : null}
-        onReserve={() => undefined}
         onEditAvailability={handleEdit}
         onDeleteAvailability={handleDelete}
-        formatDateTime={formatDateTime}
       />
     </>
   )

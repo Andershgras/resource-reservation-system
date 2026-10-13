@@ -1,59 +1,101 @@
 import type { BookableSlotResponse } from '../api/types'
+import type { FieldErrors } from './errors'
 
-// Client-side checks that run before a form is sent. Each returns an error
-// message, or an empty string when the input is valid.
+// Client-side checks that run before a form is sent. Each returns the errors
+// for every field at once, so the user can fix them together. An empty
+// object means the input is valid.
+
+export type AuthField = 'name' | 'email' | 'password'
+
+// The API checks the same rules, and more, such as passwords needing a number.
+export function validateAuthForm(
+  mode: 'login' | 'register',
+  name: string,
+  email: string,
+  password: string,
+): FieldErrors<AuthField> {
+  const errors: FieldErrors<AuthField> = {}
+
+  if (mode === 'register' && !name.trim()) {
+    errors.name = 'Enter your name.'
+  }
+
+  if (!email.trim()) {
+    errors.email = 'Enter your email address.'
+  } else if (!/^[^\s@]+@[^\s@]+$/.test(email.trim())) {
+    errors.email = 'Enter a valid email address.'
+  }
+
+  if (!password) {
+    errors.password = mode === 'register' ? 'Enter a password.' : 'Enter your password.'
+  } else if (mode === 'register' && password.length < 8) {
+    errors.password = 'Password must be at least 8 characters.'
+  }
+
+  return errors
+}
+
+export type ResourceField = 'name' | 'description' | 'location'
+
+export function validateResourceForm(name: string): FieldErrors<ResourceField> {
+  return name.trim() ? {} : { name: 'Enter a resource name.' }
+}
+
+export type AvailabilityField = 'resourceId' | 'startTime' | 'endTime'
 
 export function validateAvailabilityForm(
   resourceId: string,
   startTime: string,
   endTime: string,
-) {
+): FieldErrors<AvailabilityField> {
+  const errors: FieldErrors<AvailabilityField> = {}
+
   if (!resourceId) {
-    return 'Select a resource before saving availability.'
+    errors.resourceId = 'Select a resource.'
   }
 
   if (!startTime) {
-    return 'Enter a start time before saving availability.'
+    errors.startTime = 'Enter a start time.'
   }
 
   if (!endTime) {
-    return 'Enter an end time before saving availability.'
+    errors.endTime = 'Enter an end time.'
+  } else if (startTime && endTime <= startTime) {
+    errors.endTime = 'End time must be after start time.'
   }
 
-  if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
-    return 'End time must be after start time.'
-  }
-
-  return ''
+  return errors
 }
+
+export type AvailabilityRuleField = 'resourceId' | 'dayOfWeek' | 'startTime' | 'endTime'
 
 export function validateAvailabilityRuleForm(
   resourceId: string,
   dayOfWeek: string,
   startTime: string,
   endTime: string,
-) {
+): FieldErrors<AvailabilityRuleField> {
+  const errors: FieldErrors<AvailabilityRuleField> = {}
+
   if (!resourceId) {
-    return 'Select a resource before saving a weekly schedule.'
+    errors.resourceId = 'Select a resource.'
   }
 
   if (!dayOfWeek) {
-    return 'Select a weekday before saving a weekly schedule.'
+    errors.dayOfWeek = 'Select a weekday.'
   }
 
   if (!startTime) {
-    return 'Enter a start time before saving a weekly schedule.'
+    errors.startTime = 'Enter a start time.'
   }
 
   if (!endTime) {
-    return 'Enter an end time before saving a weekly schedule.'
+    errors.endTime = 'Enter an end time.'
+  } else if (startTime && endTime <= startTime) {
+    errors.endTime = 'End time must be after start time.'
   }
 
-  if (endTime <= startTime) {
-    return 'End time must be after start time.'
-  }
-
-  return ''
+  return errors
 }
 
 export function validateReservationSlotSelection(

@@ -1,10 +1,16 @@
 import type { AvailabilityRuleResponse } from '../api/types'
-import { toTimeOfDay } from '../lib/dates'
+import { formatTimeRange } from '../lib/dates'
+import { Alert, type Notice } from '../ui/Alert'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { EmptyState, LoadingState } from '../ui/States'
+import './lists.css'
 
 interface AvailabilityRulesSectionProps {
   availabilityRules: AvailabilityRuleResponse[]
   isLoadingAvailabilityRules: boolean
-  availabilityRuleMessage: string
+  notice: Notice | null
   deletingAvailabilityRuleId: number | null
   onEditAvailabilityRule: (rule: AvailabilityRuleResponse) => void
   onDeleteAvailabilityRule: (rule: AvailabilityRuleResponse) => void
@@ -13,61 +19,69 @@ interface AvailabilityRulesSectionProps {
 export function AvailabilityRulesSection({
   availabilityRules,
   isLoadingAvailabilityRules,
-  availabilityRuleMessage,
+  notice,
   deletingAvailabilityRuleId,
   onEditAvailabilityRule,
   onDeleteAvailabilityRule,
 }: AvailabilityRulesSectionProps) {
   return (
-    <section className="panel-section" aria-labelledby="availability-rules-title">
-      <div className="section-heading">
-        <h2 id="availability-rules-title">Weekly schedule</h2>
-        <span className="count-badge">{availabilityRules.length}</span>
-      </div>
-      {isLoadingAvailabilityRules && (
-        <p className="status-message" role="status">
-          Loading weekly schedule...
-        </p>
-      )}
-      {availabilityRuleMessage && (
-        <p className="status-message">{availabilityRuleMessage}</p>
-      )}
+    <Card
+      title="Weekly schedule"
+      actions={<Badge label={`${availabilityRules.length} rules`}>{availabilityRules.length}</Badge>}
+    >
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+      {isLoadingAvailabilityRules && <LoadingState>Loading weekly schedule...</LoadingState>}
       {!isLoadingAvailabilityRules && availabilityRules.length === 0 && (
-        <p className="status-message">No weekly schedule found.</p>
+        <EmptyState
+          title="No weekly schedule found."
+          description="Weekly rules set the regular opening hours of each resource."
+        />
       )}
       {availabilityRules.length > 0 && (
-        <ul className="resource-list">
-          {availabilityRules.map((rule) => (
-            <li key={rule.id} className="resource-item">
-              <div className="item-main">
-                <strong>{rule.resourceName}</strong>
-                <div className="availability-dates">
-                  <p>
-                    <span>Day</span>
-                    {rule.dayName}
+        <ul className="item-list">
+          {availabilityRules.map((rule) => {
+            const hours = formatTimeRange(rule.startTime, rule.endTime)
+
+            return (
+              <li key={rule.id} className="item">
+                <div className="item-main">
+                  <p className="item-title">
+                    <strong>{rule.resourceName}</strong>
                   </p>
-                  <p>
-                    <span>Time</span>
-                    {toTimeOfDay(rule.startTime)} - {toTimeOfDay(rule.endTime)}
-                  </p>
+                  <dl className="item-meta">
+                    <div>
+                      <dt className="visually-hidden">Day</dt>
+                      <dd>{rule.dayName}</dd>
+                    </div>
+                    <div>
+                      <dt className="visually-hidden">Hours</dt>
+                      <dd>{hours}</dd>
+                    </div>
+                  </dl>
                 </div>
-              </div>
-              <div className="resource-actions">
-                <button type="button" onClick={() => onEditAvailabilityRule(rule)}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  disabled={deletingAvailabilityRuleId === rule.id}
-                  onClick={() => onDeleteAvailabilityRule(rule)}
-                >
-                  {deletingAvailabilityRuleId === rule.id ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
-            </li>
-          ))}
+                <div className="item-actions">
+                  <Button
+                    size="sm"
+                    aria-label={`Edit ${rule.resourceName}, ${rule.dayName} ${hours}`}
+                    onClick={() => onEditAvailabilityRule(rule)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Delete ${rule.resourceName}, ${rule.dayName} ${hours}`}
+                    disabled={deletingAvailabilityRuleId === rule.id}
+                    onClick={() => onDeleteAvailabilityRule(rule)}
+                  >
+                    {deletingAvailabilityRuleId === rule.id ? 'Deleting...' : 'Delete'}
+                  </Button>
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
-    </section>
+    </Card>
   )
 }

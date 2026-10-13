@@ -53,7 +53,6 @@ export interface BookableSlotResponse {
 }
 
 export interface ReservedSlotResponse {
-  reservationId: number
   startTime: string
   endTime: string
 }
@@ -107,6 +106,8 @@ export interface ReservationResponse {
   resourceId: number
   resourceName: string
   userId: number
+  userName: string
+  userEmail: string
   startTime: string
   endTime: string
   status: ReservationStatus

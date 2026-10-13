@@ -6,6 +6,7 @@ import { toDateTimeLocalValue } from '../../lib/dates'
 import { getErrorMessage, getQueryErrorMessage } from '../../lib/errors'
 import { getSlotKey } from '../../lib/schedule'
 import { validateReservationSlotSelection } from '../../lib/validation'
+import type { Notice } from '../../ui/Alert'
 import { useCreateReservation } from '../reservations/reservationQueries'
 import { useResources } from '../resources/resourceQueries'
 import { useResourceSchedule } from './bookingQueries'
@@ -22,7 +23,7 @@ export function BookingPage() {
   const [fromDate, setFromDate] = useState(selection.fromDate)
   const [toDate, setToDate] = useState(selection.toDate)
   const [scheduleMessage, setScheduleMessage] = useState('')
-  const [reservationMessage, setReservationMessage] = useState('')
+  const [reservationNotice, setReservationNotice] = useState<Notice | null>(null)
   const [validationMessage, setValidationMessage] = useState('')
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null)
   const [reservingSlotKey, setReservingSlotKey] = useState<string | null>(null)
@@ -50,7 +51,7 @@ export function BookingPage() {
 
   function showSchedule(resourceId: number | null) {
     setScheduleMessage('')
-    setReservationMessage('')
+    setReservationNotice(null)
     setValidationMessage('')
 
     if (resourceId === null) {
@@ -84,12 +85,12 @@ export function BookingPage() {
     setSelectedSlotKey(getSlotKey(slot))
     setStartTime(toDateTimeLocalValue(slot.startTime))
     setEndTime(toDateTimeLocalValue(slot.endTime))
-    setReservationMessage('')
+    setReservationNotice(null)
     setValidationMessage('')
   }
 
   async function handleReserve(slot: BookableSlotResponse) {
-    setReservationMessage('')
+    setReservationNotice(null)
     setValidationMessage('')
 
     if (selection.resourceId === null) {
@@ -110,9 +111,9 @@ export function BookingPage() {
       // Resolves once the reservation lists and the schedule have reloaded.
       await createReservation.mutateAsync({ resourceId: selection.resourceId, startTime, endTime })
       resetSlotSelection()
-      setReservationMessage('Reservation created.')
+      setReservationNotice({ tone: 'success', text: 'Reservation created.' })
     } catch (error) {
-      setReservationMessage(getErrorMessage(error))
+      setReservationNotice({ tone: 'danger', text: getErrorMessage(error) })
     } finally {
       setReservingSlotKey(null)
     }
@@ -130,7 +131,7 @@ export function BookingPage() {
       setScheduleToDate={setToDate}
       resourceSchedule={selection.resourceId === null ? null : scheduleQuery.data ?? null}
       resourceScheduleMessage={scheduleMessage || getQueryErrorMessage(scheduleQuery.error)}
-      reservationMessage={reservationMessage}
+      reservationNotice={reservationNotice}
       reservationValidationMessage={validationMessage}
       isLoadingResourceSchedule={scheduleQuery.isFetching}
       selectedScheduleSlotKey={selectedSlotKey}

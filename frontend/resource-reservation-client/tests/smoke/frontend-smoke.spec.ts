@@ -42,7 +42,6 @@ interface BookableSlotResponse {
 }
 
 interface ReservedSlotResponse {
-  reservationId: number
   startTime: string
   endTime: string
 }
@@ -61,6 +60,8 @@ interface ReservationResponse {
   resourceId: number
   resourceName: string
   userId: number
+  userName: string
+  userEmail: string
   startTime: string
   endTime: string
   status: ReservationStatus
@@ -105,14 +106,14 @@ test('main frontend reservation flow', async ({ page }) => {
   const weeklyScheduleSection = sectionByHeading(page, 'Weekly schedule')
   await expect(weeklyScheduleSection.getByText('Smoke Test Room Updated')).toBeVisible()
   await expect(weeklyScheduleSection.getByText('Monday')).toBeVisible()
-  await expect(weeklyScheduleSection.getByText('08:00 - 16:00')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('08:00–16:00')).toBeVisible()
 
   await weeklyScheduleSection.getByRole('button', { name: 'Edit' }).click()
   const editWeeklyScheduleForm = sectionByHeading(page, 'Edit weekly schedule')
   await editWeeklyScheduleForm.getByLabel('End time').fill('17:00')
   await editWeeklyScheduleForm.getByRole('button', { name: 'Save weekly schedule' }).click()
   await expect(page.getByText('Weekly schedule updated.')).toBeVisible()
-  await expect(weeklyScheduleSection.getByText('08:00 - 17:00')).toBeVisible()
+  await expect(weeklyScheduleSection.getByText('08:00–17:00')).toBeVisible()
 
   await selectRoleTab(page, 'Availability')
   const availabilityForm = sectionByHeading(page, 'Create availability')
@@ -132,7 +133,7 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(page.getByText('Availability updated.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
-  await page.getByRole('button', { name: 'Register' }).click()
+  await page.getByRole('link', { name: 'Register' }).click()
   await page.getByLabel('Name').fill('Smoke Test User')
   await page.getByLabel('Email').fill('smoke.user@example.com')
   await page.getByLabel('Password').fill('Password123')
@@ -160,7 +161,7 @@ test('main frontend reservation flow', async ({ page }) => {
   await expect(sectionByHeading(page, 'My reservations').getByText('Smoke Test Room Updated')).toBeVisible()
 
   await sectionByHeading(page, 'My reservations').getByRole('button', { name: 'Cancel' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
   await selectRoleTab(page, 'Book resource')
@@ -178,27 +179,28 @@ test('main frontend reservation flow', async ({ page }) => {
     adminReservationsSection
       .locator('li')
       .filter({ hasText: 'Smoke Test Room Updated' })
+      .filter({ hasText: 'Smoke Test User (smoke.user@example.com)' })
       .first(),
   ).toBeVisible()
   await adminReservationsSection.getByRole('button', { name: 'Cancel' }).first().click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
 
   await selectRoleTab(page, 'Availability')
   await sectionByHeading(page, 'Availability').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete availability' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete availability' }).click()
   await expect(page.getByText('Availability deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Availability').getByText('No availability found.')).toBeVisible()
 
   await selectRoleTab(page, 'Weekly schedule')
   await sectionByHeading(page, 'Weekly schedule').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete weekly schedule' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete weekly schedule' }).click()
   await expect(page.getByText('Weekly schedule deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Weekly schedule').getByText('No weekly schedule found.')).toBeVisible()
 
   await selectRoleTab(page, 'Resources')
   await sectionByHeading(page, 'Resources').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete resource' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete resource' }).click()
   await expect(page.getByText('Resource deleted.')).toBeVisible()
   await expect(sectionByHeading(page, 'Resources').getByText('No resources found.')).toBeVisible()
 })
@@ -245,15 +247,19 @@ test('validation errors from the API are shown per field', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
 
   await page.goto('/')
-  await page.getByRole('button', { name: 'Register', exact: true }).click()
+  await page.getByRole('link', { name: 'Register', exact: true }).click()
   await page.getByLabel('Name').fill('Validation User')
   await page.getByLabel('Email').fill('taken@example.com')
   await page.getByLabel('Password').fill('Password')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await expect(
-    page.getByText('Error: Email is already registered. Password must contain a number.'),
-  ).toBeVisible()
+  // Each message is shown beside its field, and read with it.
+  await expect(page.getByLabel('Email')).toHaveAccessibleDescription('Email is already registered.')
+  await expect(page.getByLabel('Password')).toHaveAccessibleDescription(
+    'At least 8 characters, including a number. Password must contain a number.',
+  )
+  await expect(page.getByLabel('Email')).toBeFocused()
+  await expect(page.getByRole('alert')).toHaveText('Error: Check the highlighted fields.')
 })
 
 test('too many login attempts shows the rate limit message', async ({ page }) => {
@@ -524,7 +530,7 @@ test('cancelling a reservation frees its time in the booking schedule', async ({
 
   await selectRoleTab(page, 'My reservations')
   await sectionByHeading(page, 'My reservations').getByRole('button', { name: 'Cancel' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel reservation' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel reservation' }).click()
   await expect(page.getByText('Reservation cancelled.')).toBeVisible()
   await selectRoleTab(page, 'Book resource')
 
@@ -532,6 +538,40 @@ test('cancelling a reservation frees its time in the booking schedule', async ({
   await expect(page).toHaveURL('/book?resource=1&from=2030-01-15&to=2030-01-15')
   await expect(scheduleSection.getByRole('button', { name: 'Choose time' })).toBeVisible()
   await expect(scheduleSection.getByLabel('Reserved times')).toHaveCount(0)
+})
+
+// In a real browser, making the page inert takes focus away from the button
+// that opened the dialog, so the dialog must record it beforehand.
+test('the confirmation dialog works with the keyboard alone', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/my-reservations')
+  const cancel = sectionByHeading(page, 'My reservations').getByRole('button', { name: /^Cancel/ })
+  const dialog = page.getByRole('alertdialog')
+
+  await cancel.focus()
+  await page.keyboard.press('Enter')
+
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Keep unchanged' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Cancel reservation' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Keep unchanged' })).toBeFocused()
+
+  await page.keyboard.press('Escape')
+
+  await expect(dialog).toHaveCount(0)
+  await expect(cancel).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByText('Reservation cancelled.')).toBeVisible()
+  // The opener is gone with the reservation's Cancel button, so focus moves
+  // to the main content rather than being lost.
+  await expect(page.getByRole('main')).toBeFocused()
 })
 
 test('an unknown address shows a not-found page', async ({ page }) => {
@@ -595,10 +635,9 @@ function problemResponse(
   }
 }
 
+// Page sections are regions named by their heading.
 function sectionByHeading(page: Page, heading: string) {
-  return page.locator('section.panel-section').filter({
-    has: page.getByRole('heading', { name: heading, exact: true }),
-  }).first()
+  return page.getByRole('region', { name: heading, exact: true })
 }
 
 async function selectRoleTab(page: Page, tabName: string) {
@@ -671,6 +710,8 @@ async function mockApi(
           resourceId: 1,
           resourceName: 'Reserved Test Room',
           userId: options.seededReservationIsOwn ? 2 : 99,
+          userName: options.seededReservationIsOwn ? 'Smoke Test User' : 'Other User',
+          userEmail: options.seededReservationIsOwn ? 'smoke.user@example.com' : 'other@example.com',
           startTime: '2030-01-15T09:00:00',
           endTime: '2030-01-15T11:00:00',
           status: 'Active',
@@ -877,7 +918,7 @@ async function mockApi(
     }
 
     if (request.method() === 'POST' && path === '/reservations') {
-      const body = await request.postDataJSON() as Omit<ReservationResponse, 'id' | 'resourceName' | 'status' | 'userId'>
+      const body = await request.postDataJSON() as Omit<ReservationResponse, 'id' | 'resourceName' | 'status' | 'userId' | 'userName' | 'userEmail'>
       const hasOverlap = reservations.some((reservation) =>
         reservation.resourceId === body.resourceId &&
         reservation.status === 'Active' &&
@@ -900,6 +941,8 @@ async function mockApi(
         resourceId: body.resourceId,
         resourceName: resource?.name ?? '',
         userId: normalUser.id,
+        userName: normalUser.name,
+        userEmail: normalUser.email,
         startTime: body.startTime,
         endTime: body.endTime,
         status: 'Active',
@@ -994,7 +1037,6 @@ function buildResourceSchedule(
       reservation.startTime.slice(0, 10) <= toDate,
     )
     .map((reservation) => ({
-      reservationId: reservation.id,
       startTime: reservation.startTime,
       endTime: reservation.endTime,
     }))

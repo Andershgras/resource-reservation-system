@@ -8,6 +8,7 @@ import * as resourcesApi from '../../api/resourcesApi'
 import type { ReservationResponse } from '../../api/types'
 import { createQueryClient } from '../../app/queryClient'
 import { ConfirmProvider } from '../../components/ConfirmProvider'
+import { expectNoAxeViolations } from '../../test/axe'
 import { AdminReservationsPage } from './AdminReservationsPage'
 
 vi.mock('../../api/reservationsApi')
@@ -19,6 +20,8 @@ function reservation(id: number, resourceId: number, resourceName: string, statu
     resourceId,
     resourceName,
     userId: 2,
+    userName: 'Test User',
+    userEmail: 'user@example.com',
     startTime: '2030-01-15T09:00:00',
     endTime: '2030-01-15T10:00:00',
     status,
@@ -60,7 +63,7 @@ async function shownReservations() {
   const list = await screen.findByRole('list')
 
   return within(list).getAllByRole('listitem').map((item) => within(item).getByRole('strong').textContent
-    + ' ' + item.querySelector('.reservation-status')?.textContent)
+    + ' ' + within(item).getByText(/^(Active|Cancelled)$/).textContent)
 }
 
 describe('AdminReservationsPage', () => {
@@ -68,6 +71,30 @@ describe('AdminReservationsPage', () => {
     renderPage('/admin/reservations')
 
     expect(await shownReservations()).toEqual(['Room A Active', 'Room B Active', 'Room B Cancelled'])
+  })
+
+  // Audit L1: admins saw only a user ID.
+  it('shows who made each reservation', async () => {
+    renderPage('/admin/reservations')
+
+    const [firstReservation] = within(await screen.findByRole('list')).getAllByRole('listitem')
+
+    expect(firstReservation).toHaveTextContent('Test User (user@example.com)')
+    expect(firstReservation).not.toHaveTextContent('User ID')
+  })
+
+  it('has no accessibility violations with filters and reservations shown', async () => {
+    renderPage('/admin/reservations')
+    await shownReservations()
+
+    await expectNoAxeViolations(document.body)
+  })
+
+  it('names each cancel button after its reservation', async () => {
+    renderPage('/admin/reservations')
+    await shownReservations()
+
+    expect(screen.getByRole('button', { name: 'Cancel Room A, Tue 15 Jan 2030, 09:00–10:00' })).toBeInTheDocument()
   })
 
   it('applies the filters in the address', async () => {

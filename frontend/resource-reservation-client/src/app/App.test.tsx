@@ -145,9 +145,12 @@ describe('login screen', () => {
   it('keeps returnTo when switching to registration', async () => {
     renderApp('/login?returnTo=%2Fmy-reservations')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Register' }))
+    expect(screen.getByRole('link', { name: 'Login' })).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Register' }))
 
     expect(currentLocation()).toBe('/register?returnTo=%2Fmy-reservations')
+    expect(screen.getByRole('link', { name: 'Register' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('shows why the session ended', () => {
