@@ -17,6 +17,10 @@ export interface ConfirmDialogProps {
   tone?: 'danger' | 'primary'
   isWorking?: boolean
   error?: string
+  // Where focus goes when the dialog closes: the control that opened it.
+  // The caller records it before the page behind becomes inert, because a
+  // browser blurs an element as soon as it is inside an inert subtree.
+  returnFocusTo: Element | null
   onConfirm: () => void
   onCancel: () => void
 }
@@ -38,6 +42,7 @@ export function ConfirmDialog({
   tone = 'danger',
   isWorking = false,
   error,
+  returnFocusTo,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -47,7 +52,6 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    const previouslyFocused = document.activeElement
     const { overflow } = document.body.style
 
     cancelRef.current?.focus()
@@ -56,13 +60,13 @@ export function ConfirmDialog({
     return () => {
       document.body.style.overflow = overflow
 
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
-        previouslyFocused.focus()
+      if (returnFocusTo instanceof HTMLElement && returnFocusTo.isConnected) {
+        returnFocusTo.focus()
       } else {
         document.getElementById(mainContentId)?.focus()
       }
     }
-  }, [])
+  }, [returnFocusTo])
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape') {

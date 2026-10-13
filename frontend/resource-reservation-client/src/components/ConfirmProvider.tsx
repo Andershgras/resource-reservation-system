@@ -7,6 +7,8 @@ interface OpenRequest {
   // A new request replaces the dialog, rather than reusing its state.
   key: number
   request: ConfirmationRequest
+  // The control that had focus when the dialog was asked for.
+  returnFocusTo: Element | null
 }
 
 // Shows one confirmation dialog at a time for the screens inside it, and makes
@@ -18,7 +20,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState('')
 
   const confirm = useCallback((request: ConfirmationRequest) => {
-    setOpen((current) => ({ key: (current?.key ?? 0) + 1, request }))
+    // Read now, in the event handler: once the page is inert it has no focus.
+    const returnFocusTo = document.activeElement
+    setOpen((current) => ({
+      key: (current?.key ?? 0) + 1,
+      request,
+      returnFocusTo: current?.returnFocusTo ?? returnFocusTo,
+    }))
     setIsWorking(false)
     setError('')
   }, [])
@@ -66,6 +74,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           tone={open.request.tone}
           isWorking={isWorking}
           error={error}
+          returnFocusTo={open.returnFocusTo}
           onConfirm={() => void handleConfirm()}
           onCancel={handleCancel}
         />

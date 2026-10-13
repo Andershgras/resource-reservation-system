@@ -540,6 +540,40 @@ test('cancelling a reservation frees its time in the booking schedule', async ({
   await expect(scheduleSection.getByLabel('Reserved times')).toHaveCount(0)
 })
 
+// In a real browser, making the page inert takes focus away from the button
+// that opened the dialog, so the dialog must record it beforehand.
+test('the confirmation dialog works with the keyboard alone', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/my-reservations')
+  const cancel = sectionByHeading(page, 'My reservations').getByRole('button', { name: /^Cancel/ })
+  const dialog = page.getByRole('alertdialog')
+
+  await cancel.focus()
+  await page.keyboard.press('Enter')
+
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Keep unchanged' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Cancel reservation' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Keep unchanged' })).toBeFocused()
+
+  await page.keyboard.press('Escape')
+
+  await expect(dialog).toHaveCount(0)
+  await expect(cancel).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByText('Reservation cancelled.')).toBeVisible()
+  // The opener is gone with the reservation's Cancel button, so focus moves
+  // to the main content rather than being lost.
+  await expect(page.getByRole('main')).toBeFocused()
+})
+
 test('an unknown address shows a not-found page', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
 

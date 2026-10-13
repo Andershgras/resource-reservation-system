@@ -121,6 +121,34 @@ describe('ConfirmProvider', () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
+  // jsdom doesn't implement inert, so this emulates what a browser does: an
+  // element loses focus when it becomes inert, and can't be focused while inert.
+  // The opener is therefore no longer focused when the dialog's effects run.
+  it('returns focus to the opener even though making the page inert blurs it', async () => {
+    const setAttribute = Element.prototype.setAttribute
+    const focus = HTMLElement.prototype.focus
+    vi.spyOn(Element.prototype, 'setAttribute').mockImplementation(function (this: Element, name, value) {
+      setAttribute.call(this, name, value)
+
+      if (name === 'inert' && this.contains(document.activeElement)) {
+        (document.activeElement as HTMLElement).blur()
+      }
+    })
+    vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (this: HTMLElement, options) {
+      if (!this.closest('[inert]')) {
+        focus.call(this, options)
+      }
+    })
+    renderDialog()
+
+    // Opened with the keyboard: a mouse click would focus the button again.
+    screen.getByRole('button', { name: 'Delete' }).focus()
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
+  })
+
   it('cancels with the cancel button, using its own label when given', async () => {
     renderDialog({ cancelLabel: 'Stay on page' })
 
