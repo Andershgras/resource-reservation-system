@@ -1,3 +1,29 @@
+/*
+ * Styles from before the design system. The aliases below map the old names
+ * to the design tokens. This file goes once every screen uses the shared
+ * components in src/ui/.
+ */
+:root {
+  --text: var(--color-text);
+  --text-soft: var(--color-text-muted);
+  --text-h: var(--color-heading);
+  --bg: var(--color-bg);
+  --panel: var(--color-surface);
+  --muted-bg: var(--color-surface-muted);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-control);
+  --accent: var(--color-primary);
+  --accent-strong: var(--color-primary-hover);
+  --accent-bg: var(--color-primary-soft);
+  --focus: var(--color-focus);
+  --success: var(--color-success-soft-text);
+  --success-strong: var(--color-success-soft-text);
+  --success-border: var(--color-success-border);
+  --success-bg: var(--color-success-soft);
+  --shadow: var(--shadow-lg);
+  --soft-shadow: var(--shadow-sm);
+}
+
 .app-shell {
   min-height: 100svh;
   display: grid;

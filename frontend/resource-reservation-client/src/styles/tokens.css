@@ -1,0 +1,156 @@
+/*
+ * Design tokens. Components use these custom properties rather than raw
+ * values, so light and dark mode, spacing and type stay consistent.
+ *
+ * Text and background pairs meet WCAG AA (4.5:1). Control borders and the
+ * focus ring meet the 3:1 non-text contrast minimum in both themes.
+ */
+:root {
+  /* Surfaces */
+  --color-bg: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f4f8;
+  --color-border: #e3e8ef;
+  --color-border-control: #76829a;
+  --color-overlay: rgb(15 23 42 / 55%);
+
+  /* Text */
+  --color-text: #334155;
+  --color-text-muted: #5a6578;
+  --color-heading: #0f172a;
+
+  /* Brand and actions */
+  --color-primary: #0f766e;
+  --color-primary-hover: #115e59;
+  --color-on-primary: #ffffff;
+  --color-primary-soft: #e7f5f3;
+  --color-primary-soft-text: #115e59;
+  --color-danger: #b42318;
+  --color-danger-hover: #912018;
+  --color-on-danger: #ffffff;
+
+  /* Status */
+  --color-danger-soft: #fef3f2;
+  --color-danger-soft-text: #a31b12;
+  --color-danger-border: #fecdca;
+  --color-success-soft: #ecfdf3;
+  --color-success-soft-text: #05603a;
+  --color-success-border: #abefc6;
+  --color-warning-soft: #fffaeb;
+  --color-warning-soft-text: #8a3a0b;
+  --color-warning-border: #fedf89;
+  --color-info-soft: #eff4ff;
+  --color-info-soft-text: #1d3f8f;
+  --color-info-border: #c7d7fe;
+
+  --color-focus: #2563eb;
+
+  /* Brand panel on the sign-in page, the same in both themes */
+  --brand-gradient: linear-gradient(135deg, #0f172a 0%, #134e4a 60%, #0f766e 100%);
+  --brand-text: #f8fafc;
+  --brand-text-muted: rgb(248 250 252 / 78%);
+
+  /* Type */
+  --font-sans: Inter, ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  /* Spacing, on a 4px grid */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /* Shape and depth */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 6%);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 8%), 0 1px 3px rgb(15 23 42 / 6%);
+  --shadow-lg: 0 24px 48px rgb(15 23 42 / 18%);
+
+  /* Controls */
+  --control-height: 2.5rem;
+  --control-height-sm: 2rem;
+  --focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-focus);
+
+  /* Layout */
+  --content-width: 72rem;
+  --page-gutter: var(--space-6);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --easing: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Stacking */
+  --z-header: 10;
+  --z-dialog: 100;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0b1120;
+    --color-surface: #131b2b;
+    --color-surface-muted: #1a2436;
+    --color-border: #283347;
+    --color-border-control: #64748b;
+    --color-overlay: rgb(2 6 23 / 72%);
+
+    --color-text: #cbd5e1;
+    --color-text-muted: #9aa8bc;
+    --color-heading: #f8fafc;
+
+    --color-primary: #2dd4bf;
+    --color-primary-hover: #5eead4;
+    --color-on-primary: #042f2e;
+    --color-primary-soft: #11302e;
+    --color-primary-soft-text: #6ee7d6;
+    --color-danger: #f97066;
+    --color-danger-hover: #fda29b;
+    --color-on-danger: #2b0a07;
+
+    --color-danger-soft: #341616;
+    --color-danger-soft-text: #fda29b;
+    --color-danger-border: #7a271a;
+    --color-success-soft: #0e2b20;
+    --color-success-soft-text: #75e0a7;
+    --color-success-border: #085d3a;
+    --color-warning-soft: #2f240c;
+    --color-warning-soft-text: #fec84b;
+    --color-warning-border: #93370d;
+    --color-info-soft: #14203d;
+    --color-info-soft-text: #a4bcfd;
+    --color-info-border: #2d4a8a;
+
+    --color-focus: #60a5fa;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 35%), 0 1px 3px rgb(0 0 0 / 30%);
+    --shadow-lg: 0 24px 48px rgb(0 0 0 / 50%);
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --page-gutter: var(--space-4);
+  }
+}
