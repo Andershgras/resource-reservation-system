@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
@@ -183,6 +183,20 @@ describe('BookingPage calendar', () => {
 
     expect(router.state.location.search).toBe('?resource=1&week=2030-01-21')
     expect(resourcesApi.getResourceSchedule).toHaveBeenLastCalledWith(1, '2030-01-21', '2030-01-27')
+  })
+
+  // Choosing a resource and then a date before React re-renders must keep
+  // both, rather than building the second change on the stale selection.
+  it('keeps the resource when a date is chosen straight after it', async () => {
+    const { router } = renderBooking('/book?week=2030-01-14')
+    const viewAvailability = await screen.findByRole('button', { name: 'View availability for Room A' })
+
+    await act(async () => {
+      viewAvailability.click()
+      fireEvent.change(screen.getByLabelText('Go to date'), { target: { value: '2030-01-23' } })
+    })
+
+    expect(router.state.location.search).toBe('?resource=1&week=2030-01-21')
   })
 
   it('asks before leaving with a changed time', async () => {

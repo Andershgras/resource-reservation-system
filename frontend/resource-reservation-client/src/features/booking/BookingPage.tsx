@@ -26,7 +26,7 @@ import { useResources } from '../resources/resourceQueries'
 import { BookingCalendar } from './BookingCalendar'
 import { BookingPanel, type BookingField } from './BookingPanel'
 import { useResourceSchedule } from './bookingQueries'
-import { bookingSelectionFor, toBookingSearch } from './bookingSearch'
+import { bookingSelectionFor, toBookingSearch, type BookingSelection } from './bookingSearch'
 import '../../components/lists.css'
 import './BookingPage.css'
 
@@ -98,8 +98,24 @@ export function BookingPage() {
     setNotice(null)
   }
 
-  function showWeek(weekStart: string, resourceId = selection.resourceId) {
-    navigate({ search: toBookingSearch({ resourceId, weekStart }) })
+  // The selection last navigated to, until the address change renders. Two
+  // quick changes, such as a resource and then a date, build on each other
+  // instead of the second one starting from the stale selection.
+  const pendingSelectionRef = useRef<BookingSelection | null>(null)
+
+  useEffect(() => {
+    pendingSelectionRef.current = null
+  }, [selectionKey])
+
+  function changeSelection(change: (current: BookingSelection) => BookingSelection) {
+    const next = change(pendingSelectionRef.current ?? selection)
+
+    pendingSelectionRef.current = next
+    navigate({ search: toBookingSearch(next) })
+  }
+
+  function showWeek(weekStart: string) {
+    changeSelection((current) => ({ ...current, weekStart }))
   }
 
   function handleSelectSegment(segment: CalendarSegment) {
@@ -224,7 +240,7 @@ export function BookingPage() {
                       size="sm"
                       variant={isSelected ? 'secondary' : 'primary'}
                       aria-label={`View availability for ${resource.name}`}
-                      onClick={() => showWeek(selection.weekStart, resource.id)}
+                      onClick={() => changeSelection((current) => ({ ...current, resourceId: resource.id }))}
                     >
                       View availability
                     </Button>
@@ -251,14 +267,20 @@ export function BookingPage() {
             <Button
               size="sm"
               disabled={selection.weekStart <= thisWeek}
-              onClick={() => showWeek(addDaysToDateKey(selection.weekStart, -7))}
+              onClick={() => changeSelection((current) => ({
+                ...current,
+                weekStart: addDaysToDateKey(current.weekStart, -7),
+              }))}
             >
               Previous week
             </Button>
             <Button size="sm" disabled={selection.weekStart === thisWeek} onClick={() => showWeek(thisWeek)}>
               This week
             </Button>
-            <Button size="sm" onClick={() => showWeek(addDaysToDateKey(selection.weekStart, 7))}>
+            <Button size="sm" onClick={() => changeSelection((current) => ({
+                ...current,
+                weekStart: addDaysToDateKey(current.weekStart, 7),
+              }))}>
               Next week
             </Button>
           </div>
