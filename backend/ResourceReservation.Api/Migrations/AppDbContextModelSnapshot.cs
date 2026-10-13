@@ -81,6 +81,15 @@ namespace ResourceReservation.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("CancelledByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("datetime2");
 
@@ -95,10 +104,21 @@ namespace ResourceReservation.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CancelledByUserId");
 
                     b.HasIndex("UserId");
 
@@ -129,6 +149,18 @@ namespace ResourceReservation.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("MaxAdvanceDays")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MaxDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MinDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MinLeadTimeMinutes")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -136,7 +168,10 @@ namespace ResourceReservation.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Resources");
+                    b.ToTable("Resources", t =>
+                        {
+                            t.HasCheckConstraint("CK_Resources_BookingPolicy", "([MinDurationMinutes] IS NULL OR [MinDurationMinutes] > 0) AND ([MaxDurationMinutes] IS NULL OR [MaxDurationMinutes] > 0) AND ([MinLeadTimeMinutes] IS NULL OR [MinLeadTimeMinutes] >= 0) AND ([MaxAdvanceDays] IS NULL OR [MaxAdvanceDays] > 0) AND ([MinDurationMinutes] IS NULL OR [MaxDurationMinutes] IS NULL OR [MinDurationMinutes] <= [MaxDurationMinutes])");
+                        });
                 });
 
             modelBuilder.Entity("ResourceReservation.Api.Models.User", b =>
@@ -198,6 +233,11 @@ namespace ResourceReservation.Api.Migrations
 
             modelBuilder.Entity("ResourceReservation.Api.Models.Reservation", b =>
                 {
+                    b.HasOne("ResourceReservation.Api.Models.User", "CancelledBy")
+                        .WithMany()
+                        .HasForeignKey("CancelledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ResourceReservation.Api.Models.Resource", "Resource")
                         .WithMany()
                         .HasForeignKey("ResourceId")
@@ -209,6 +249,8 @@ namespace ResourceReservation.Api.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("CancelledBy");
 
                     b.Navigation("Resource");
 

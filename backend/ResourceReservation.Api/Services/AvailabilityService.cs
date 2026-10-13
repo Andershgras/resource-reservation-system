@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -11,19 +13,28 @@ public class AvailabilityService
 
     private readonly AppDbContext _context;
     private readonly SchedulingClock _schedulingClock;
+    private readonly BookingPolicyOptions _bookingPolicyOptions;
 
-    public AvailabilityService(AppDbContext context, SchedulingClock schedulingClock)
+    public AvailabilityService(
+        AppDbContext context,
+        SchedulingClock schedulingClock,
+        IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _schedulingClock = schedulingClock;
+        _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
     // Bookable time for a resource: its merged availability minus active
-    // reservations, without time that has already passed.
+    // reservations, limited to the time its booking policy allows. Periods
+    // shorter than the minimum booking are left out, since nothing fits, and
+    // so is everything when the policy can't be met.
+    // A reservation being moved can be left out, so its own time shows as free.
     public async Task<ServiceResult<ResourceScheduleResponseDto>> GetScheduleAsync(
         int resourceId,
         DateOnly? from,
-        DateOnly? to)
+        DateOnly? to,
+        int? excludedReservationId = null)
     {
         if (from is null || to is null)
         {
@@ -56,13 +67,21 @@ public class AvailabilityService
 
         var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue);
         var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var reservedSlots = await GetReservedSlotsAsync(resourceId, rangeStart, rangeEnd);
+        var reservedSlots = await GetReservedSlotsAsync(resourceId, rangeStart, rangeEnd, excludedReservationId);
         var availabilityIntervals = await GetAvailabilityIntervalsAsync(resourceId, from.Value, to.Value);
-        var bookableSlots = RemoveTimeBefore(
-            SubtractReservedSlots(
-                availabilityIntervals,
-                reservedSlots),
-            GetNextWholeMinute(_schedulingClock.GetLocalNow()));
+        var policy = BookingPolicy.For(resource, _bookingPolicyOptions);
+        var localNow = _schedulingClock.GetLocalNow();
+        var bookableSlots = RemoveTimeAfter(
+                RemoveTimeBefore(
+                    SubtractReservedSlots(
+                        availabilityIntervals,
+                        reservedSlots),
+                    GetNextWholeMinute(policy.GetEarliestStart(localNow))),
+                policy.GetLatestEnd(localNow))
+            .Where(slot =>
+                policy.CanBeMet &&
+                (slot.EndTime - slot.StartTime).TotalMinutes >= policy.MinDurationMinutes)
+            .ToList();
 
         return new ResourceScheduleResponseDto
         {
@@ -70,6 +89,14 @@ public class AvailabilityService
             ResourceName = resource.Name,
             FromDate = from.Value,
             ToDate = to.Value,
+            Policy = new BookingPolicyResponseDto
+            {
+                MinDurationMinutes = policy.MinDurationMinutes,
+                MaxDurationMinutes = policy.MaxDurationMinutes,
+                MinLeadTimeMinutes = policy.MinLeadTimeMinutes,
+                MaxAdvanceDays = policy.MaxAdvanceDays,
+                MaxActiveReservationsPerUser = _bookingPolicyOptions.MaxActiveReservationsPerUser
+            },
             BookableSlots = bookableSlots
                 .Select(slot => new BookableSlotResponseDto
                 {
@@ -188,13 +215,27 @@ public class AvailabilityService
             .ToList();
     }
 
+    public static List<TimeRange> RemoveTimeAfter(
+        IEnumerable<TimeRange> intervals,
+        DateTime cutoff)
+    {
+        return intervals
+            .Where(interval => interval.StartTime < cutoff)
+            .Select(interval => interval.EndTime > cutoff
+                ? interval with { EndTime = cutoff }
+                : interval)
+            .ToList();
+    }
+
     private Task<List<TimeRange>> GetReservedSlotsAsync(
         int resourceId,
         DateTime rangeStart,
-        DateTime rangeEnd)
+        DateTime rangeEnd,
+        int? excludedReservationId)
     {
         return _context.Reservations
             .Where(reservation =>
+                reservation.Id != excludedReservationId &&
                 reservation.ResourceId == resourceId &&
                 reservation.Status == ReservationStatuses.Active &&
                 reservation.StartTime < rangeEnd &&

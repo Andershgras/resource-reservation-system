@@ -4,10 +4,11 @@ import * as resourcesApi from '../../api/resourcesApi'
 import { queryKeys } from '../../lib/queryKeys'
 import { createQueryWrapper } from '../../test/queryWrapper'
 import { useDeleteResource, useResources, useSaveResource } from './resourceQueries'
+import { noRuleOverrides } from '../../test/fixtures'
 
 vi.mock('../../api/resourcesApi')
 
-const room = { id: 1, name: 'Room', description: null, location: null, isActive: true }
+const room = { id: 1, name: 'Room', description: null, location: null, isActive: true, ...noRuleOverrides }
 
 beforeEach(() => {
   vi.mocked(resourcesApi.getResources).mockResolvedValue([room])

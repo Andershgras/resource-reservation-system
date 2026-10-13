@@ -55,7 +55,7 @@ export function AdminReservationsPage() {
         setNotice(null)
 
         try {
-          await cancelReservation.mutateAsync(reservation.id)
+          await cancelReservation.mutateAsync(reservation)
           setNotice({ tone: 'success', text: 'Reservation cancelled.' })
         } catch (error) {
           setNotice({ tone: 'danger', text: getErrorMessage(error) })
@@ -81,7 +81,7 @@ export function AdminReservationsPage() {
         hasFilters ? 'No reservations match the selected filters.' : 'No reservations found.'
       }
       emptyDescription={hasFilters ? 'Try another resource or status, or clear the filters.' : undefined}
-      cancellingReservationId={cancelReservation.isPending ? cancelReservation.variables : null}
+      cancellingReservationId={cancelReservation.isPending ? cancelReservation.variables.id : null}
       onCancelReservation={handleCancel}
     />
   )

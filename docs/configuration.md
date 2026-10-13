@@ -45,7 +45,19 @@ ReverseProxy__KnownProxies__0=10.0.0.5
 | Setting | Required | Default | Notes |
 |---|---|---|---|
 | `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation and availability times ([ADR 0001](adr/0001-time-zone-convention.md)) |
-| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource, 100–60000 ms ([ADR 0002](adr/0002-reservation-concurrency.md)) |
+| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource or user, 100–60000 ms ([ADR 0002](adr/0002-reservation-concurrency.md)) |
+
+### Booking rules
+
+The defaults for every resource. The notice plus the shortest booking must fit within the days ahead, or the API won't start. An admin can override the first four for a single resource, and a resource without its own value follows the default, so changing a default here changes every such resource. The rules apply to every role, and only when a booking is made or moved. Existing bookings aren't re-checked. See [ADR 0008](adr/0008-booking-policies-and-reservation-changes.md).
+
+| Setting | Required | Default | Notes |
+|---|---|---|---|
+| `BookingPolicy:MinDurationMinutes` | No | `15` | Shortest booking, 1–10080 minutes. Can't be more than the maximum. |
+| `BookingPolicy:MaxDurationMinutes` | No | `480` | Longest booking, 1–10080 minutes |
+| `BookingPolicy:MinLeadTimeMinutes` | No | `0` | How long before its start a booking must be made, 0–43200 minutes. 0 allows bookings that start now. |
+| `BookingPolicy:MaxAdvanceDays` | No | `90` | How many days ahead, 1–3650. With 90, a booking can end at the latest at midnight after the day 90 days from today, in Copenhagen time. |
+| `BookingPolicy:MaxActiveReservationsPerUser` | No | `5` | How many upcoming bookings (active and not yet ended) a user can hold across all resources, 1–1000 |
 
 ### Hosting
 

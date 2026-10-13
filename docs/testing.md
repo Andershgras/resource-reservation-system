@@ -40,16 +40,21 @@ npm run test:smoke
 
 These run in about a second, with no external dependencies.
 
-- **Service tests** (`ReservationServiceTests`, `AuthServiceTests`, `AvailabilityServiceTests`) cover the business rules:
+- **Service tests** (`ReservationServiceTests`, `AuthServiceTests`, `AvailabilityServiceTests`, `BookingPolicyTests`) cover the business rules:
   - availability and merged windows
   - bookings in the past
   - overlaps and cancellations
   - ownership
   - the schedule date range
+  - the booking rules: their defaults, resource overrides, the edges of each rule, the cap on upcoming bookings, and how the schedule follows them
+  - moving a booking: its own old time, overlaps, the rules, the cap, cancelled and started bookings, and out-of-date versions
+  - when a booking was made and cancelled, and by whom
+  - existing bookings that break today's rules staying valid
   - registration and login
 - **Controller tests** cover the CRUD controllers for resources, availability windows and weekly rules. `ControllerExtensionsTests` checks how service errors map to HTTP status codes.
 - **Database:** tests use the EF Core in-memory provider. It doesn't enforce constraints, transactions or locks; the integration tests cover those.
 - **Time:** tests that depend on "now" use `TestSchedulingClock`, which wraps a `FakeTimeProvider` with a fixed time in `Europe/Copenhagen`.
+- **Booking rules:** `TestBookingPolicy` gives the production defaults, except that bookings can be made years ahead, because the test bookings are dated 2030 and the test clock is in 2029. Tests of the horizon set their own.
 
 ## Backend integration tests
 
@@ -59,7 +64,11 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
 - **Error format:** ProblemDetails responses, including validation errors and an unhandled 500 that leaks no details.
 - **Concurrency:**
   - 10 parallel identical bookings give one 201 and nine 409s. With the booking lock disabled, all ten succeed.
-  - A held booking lock gives a 503 with `Retry-After`.
+  - 10 parallel bookings by one user across 10 resources give exactly the cap of 5. With the user lock disabled, all ten succeed.
+  - A held resource or user lock gives a 503 with `Retry-After`.
+  - A move and a cancellation of the same booking in parallel: one succeeds and the other gets 409, in every round. Without the `rowversion` check turned into a 409, the loser gets a 500.
+  - Two moves, or a move and a new booking, into the same free time: only one succeeds.
+- **Booking rules and moves:** resource overrides saved and applied to bookings and the schedule, overrides that contradict the defaults rejected beside their field, the real 90-day horizon with dates relative to today, out-of-date versions, and the schedule leaving out a booking being moved only for its owner or an admin.
 - **Registration:** parallel registrations with the same email, and email normalization.
 - **Security configuration:**
   - CORS for configured and unknown origins
@@ -69,7 +78,9 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - health checks
   - expired tokens and the login expiry fields
 - **Startup configuration:** each kind of invalid setting stops the app with a message naming the setting.
-- **Migrations:** they apply to an empty database and match the EF model.
+- **Migrations:** they apply to an empty database and match the EF model. `MigrationDataTests` upgrades a separate database holding data from before Milestone 6, and checks every row survives, with unknown audit times left empty and no booking rule overrides.
+
+The shared test API allows bookings 3650 days ahead, because the test bookings are dated 2030. `BookingPolicyTests` checks the real default with its own API instance.
 
 How the harness works (`Infrastructure/ApiFixture.cs`):
 
@@ -94,8 +105,10 @@ The tests delete all data in this database. To prevent accidents, the harness re
 [Vitest](https://vitest.dev/) runs these in a simulated browser ([jsdom](https://github.com/jsdom/jsdom)), with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for components. They run in a few seconds and need no server.
 
 - **Time zone:** the tests run in `Europe/Copenhagen`, set in `vite.config.ts`, so date handling behaves the same locally and on CI runners that use UTC. The date tests include both summer-time switches.
-- **`src/lib/`:** date formatting and conversion, form validation, the calendar model and error messages. The date and calendar tests cover both summer-time switches, a UTC instant that is already the next day in Copenhagen, periods off the 15-minute grid or shorter than 15 minutes, midnight, and malformed periods.
-- **The booking screen** (`BookingPage.test.tsx`): the week loaded, every day shown including fully booked and closed days, choosing and booking a time, a clash with another booking, a schedule that fails to load, and where the booking form opens on small and wide screens.
+- **`src/lib/`:** date formatting and conversion, form validation including booking rules, the calendar model and its duration limits, the booking rules described in words, and error messages. The date and calendar tests cover both summer-time switches, a UTC instant that is already the next day in Copenhagen, periods off the 15-minute grid or shorter than 15 minutes, midnight, and malformed periods.
+- **The booking screen** (`BookingPage.test.tsx`): the week loaded, every day shown including fully booked and closed days, choosing and booking a time within the booking rules, a clash with another booking, a schedule that fails to load, and where the booking form opens on small and wide screens. In move mode: the booking shown and left out of the schedule, the move sent with its version, the return to ordinary booking, a 409, and bookings that can't be moved.
+- **My reservations** (`MyReservationsPage.test.tsx`): when each booking was made, moved and cancelled, in Copenhagen time; which bookings offer Move; and cancelling with the version.
+- **Admin resources** (`AdminResourcesPage.test.tsx`): the booking rules form, with its defaults, checks, API errors and unsaved changes.
 - **The unsaved-changes guard** (`useUnsavedChangesGuard.test.tsx`): Stay, Discard, Escape, the back button, a quick Stay followed by another navigation, same-screen changes, reloads, logout and session expiry. `src/test/renderScreen.tsx` renders a screen in a data router with a signed-in user, as the app does.
 - **`src/auth/authStorage.ts`:** session expiry, using fake timers. Covered cases:
   - restoring a valid, expired or outdated session
@@ -140,6 +153,7 @@ The smoke tests run the same axe-core in Chromium, where the page is rendered, s
 
 - registration with errors
 - the calendar with a time being chosen
+- moving a booking (light mode)
 - both reservation lists
 - the admin form with errors
 - the confirmation dialog
@@ -171,6 +185,7 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
   - booking links, including invalid ones and the back button
   - tabs remembering their selection
 - cancelling a reservation freeing its time in the booking schedule (audit L2)
+- moving a booking from My reservations to a new time in the calendar
 
 Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.
 

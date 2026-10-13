@@ -6,6 +6,7 @@ import type { ReservationResponse, ResourceScheduleResponse } from '../../api/ty
 import { queryKeys } from '../../lib/queryKeys'
 import { createQueryWrapper } from '../../test/queryWrapper'
 import { useResourceSchedule } from '../booking/bookingQueries'
+import { newReservationFields, testPolicy } from '../../test/fixtures'
 import {
   useAllReservations,
   useCancelReservation,
@@ -26,6 +27,7 @@ const reservation: ReservationResponse = {
   startTime: '2030-01-15T09:00:00',
   endTime: '2030-01-15T10:00:00',
   status: 'Active',
+  ...newReservationFields,
 }
 
 function schedule(reservedSlots: ResourceScheduleResponse['reservedSlots']): ResourceScheduleResponse {
@@ -34,6 +36,7 @@ function schedule(reservedSlots: ResourceScheduleResponse['reservedSlots']): Res
     resourceName: 'Room',
     fromDate: '2030-01-15',
     toDate: '2030-01-15',
+    policy: testPolicy,
     bookableSlots: [],
     reservedSlots,
   }
@@ -62,9 +65,9 @@ describe('useCancelReservation', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     const { result } = renderHook(() => useCancelReservation(), { wrapper })
 
-    await act(() => result.current.mutateAsync(7))
+    await act(() => result.current.mutateAsync(reservation))
 
-    expect(reservationsApi.cancelReservation).toHaveBeenCalledWith(7)
+    expect(reservationsApi.cancelReservation).toHaveBeenCalledWith(7, reservation.version)
     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
       queryKeys.reservations,
       queryKeys.schedules,
@@ -80,7 +83,7 @@ describe('useCancelReservation with a schedule on screen', () => {
     ]))
     const { wrapper } = createQueryWrapper()
     const { result } = renderHook(() => ({
-      schedule: useResourceSchedule({ resourceId: 1, weekStart: '2030-01-14' }),
+      schedule: useResourceSchedule({ resourceId: 1, weekStart: '2030-01-14', moveReservationId: null }),
       mine: useMyReservations(),
       cancel: useCancelReservation(),
     }), { wrapper })
@@ -88,9 +91,9 @@ describe('useCancelReservation with a schedule on screen', () => {
     vi.mocked(resourcesApi.getResourceSchedule).mockResolvedValue(schedule([]))
     vi.mocked(reservationsApi.getMyReservations).mockResolvedValue([{ ...reservation, status: 'Cancelled' }])
 
-    await act(() => result.current.cancel.mutateAsync(7))
+    await act(() => result.current.cancel.mutateAsync(reservation))
 
-    expect(reservationsApi.cancelReservation).toHaveBeenCalledWith(7)
+    expect(reservationsApi.cancelReservation).toHaveBeenCalledWith(7, reservation.version)
     await waitFor(() => expect(result.current.schedule.data?.reservedSlots).toEqual([]))
     await waitFor(() => expect(result.current.mine.data?.[0].status).toBe('Cancelled'))
   })

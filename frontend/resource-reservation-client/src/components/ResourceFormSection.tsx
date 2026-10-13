@@ -1,4 +1,7 @@
 import { useRef, type Dispatch, type FormEvent, type SetStateAction } from 'react'
+import type { BookingPolicyResponse } from '../api/types'
+import type { BookingRuleField, BookingRulesDraft } from '../lib/bookingRules'
+import { formatMinutes } from '../lib/calendar'
 import type { FieldErrors } from '../lib/errors'
 import type { ResourceField } from '../lib/validation'
 import { Alert } from '../ui/Alert'
@@ -18,12 +21,43 @@ interface ResourceFormSectionProps {
   setResourceLocation: Dispatch<SetStateAction<string>>
   resourceIsActive: boolean
   setResourceIsActive: Dispatch<SetStateAction<boolean>>
+  bookingRules: BookingRulesDraft
+  onBookingRuleChange: (field: BookingRuleField, value: string) => void
+  // The defaults, shown beside each rule. Undefined until they load.
+  defaultPolicy: BookingPolicyResponse | undefined
   fieldErrors: FieldErrors<ResourceField>
   formError: string
   isSavingResource: boolean
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onCancelEdit: () => void
 }
+
+const bookingRuleInputs: {
+  field: BookingRuleField
+  label: string
+  defaultOf: (policy: BookingPolicyResponse) => string
+}[] = [
+  {
+    field: 'minDurationMinutes',
+    label: 'Shortest booking, minutes',
+    defaultOf: (policy) => formatMinutes(policy.minDurationMinutes),
+  },
+  {
+    field: 'maxDurationMinutes',
+    label: 'Longest booking, minutes',
+    defaultOf: (policy) => formatMinutes(policy.maxDurationMinutes),
+  },
+  {
+    field: 'minLeadTimeMinutes',
+    label: 'Notice needed, minutes',
+    defaultOf: (policy) => formatMinutes(policy.minLeadTimeMinutes) || 'none',
+  },
+  {
+    field: 'maxAdvanceDays',
+    label: 'Bookable ahead, days',
+    defaultOf: (policy) => `${policy.maxAdvanceDays} days`,
+  },
+]
 
 export function ResourceFormSection({
   editingResourceId,
@@ -35,6 +69,9 @@ export function ResourceFormSection({
   setResourceLocation,
   resourceIsActive,
   setResourceIsActive,
+  bookingRules,
+  onBookingRuleChange,
+  defaultPolicy,
   fieldErrors,
   formError,
   isSavingResource,
@@ -89,6 +126,34 @@ export function ResourceFormSection({
             )}
           </Field>
         </div>
+
+        <fieldset className="form-fieldset">
+          <legend>Booking rules</legend>
+          <p className="form-fieldset-hint">Leave a field empty to use the default.</p>
+          <div className="form-row">
+            {bookingRuleInputs.map(({ field, label, defaultOf }) => (
+              <Field
+                key={field}
+                label={label}
+                optional
+                hint={defaultPolicy && `Default: ${defaultOf(defaultPolicy)}`}
+                error={fieldErrors[field]}
+              >
+                {(props) => (
+                  <Input
+                    {...props}
+                    type="number"
+                    inputMode="numeric"
+                    min={field === 'minLeadTimeMinutes' ? 0 : 1}
+                    step={1}
+                    value={bookingRules[field]}
+                    onChange={(event) => onBookingRuleChange(field, event.target.value)}
+                  />
+                )}
+              </Field>
+            ))}
+          </div>
+        </fieldset>
 
         {editingResourceId && (
           <Checkbox

@@ -10,6 +10,8 @@ namespace ResourceReservation.Api.Tests;
 
 public class ReservationServiceTests
 {
+    private static readonly DateTime DefaultLocalNow = TestSchedulingClock.DefaultLocalNow;
+
     [Fact]
     public async Task CreateReservation_WhenActiveReservationOverlapsSameResource_ReturnsConflict()
     {
@@ -327,6 +329,30 @@ public class ReservationServiceTests
         var cancelledReservation = await context.Reservations.FindAsync(reservation.Id);
         Assert.NotNull(cancelledReservation);
         Assert.Equal(ReservationStatuses.Cancelled, cancelledReservation.Status);
+        Assert.Equal(admin.Id, cancelledReservation.CancelledByUserId);
+        Assert.Equal(ToUtc(DefaultLocalNow), cancelledReservation.CancelledAt);
+    }
+
+    [Fact]
+    public async Task CreateReservation_RecordsCreationTimeInUtc()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        }, user.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ToUtc(DefaultLocalNow), result.Value.CreatedAt);
+        Assert.Equal(TimeSpan.Zero, result.Value.CreatedAt!.Value.Offset);
+        Assert.Null(result.Value.UpdatedAt);
+        Assert.Null(result.Value.CancelledAt);
     }
 
     [Fact]
@@ -431,6 +457,401 @@ public class ReservationServiceTests
         Assert.True(result.IsSuccess);
     }
 
+    [Fact]
+    public async Task CreateReservation_WhenLongerThanTheResourcesMaximum_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        resource.MaxDurationMinutes = 60;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 9, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 10, 30, 0)
+        }, user.Id);
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be at most 1 hour long.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenBeyondTheBookingHorizon_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 1, 12, 0, 0),
+            configurePolicy: policy => policy.MaxAdvanceDays = 13);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        }, user.Id);
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be made up to 13 days ahead.");
+    }
+
+    [Fact]
+    public async Task ExistingReservation_ThatBreaksTodaysPolicies_StaysActiveAndCanBeCancelled()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        // Ten hours, longer than the eight-hour maximum. Made before the rule existed.
+        var reservation = await SeedReservationAsync(
+            context,
+            resource.Id,
+            user.Id,
+            new DateTime(2030, 1, 15, 8, 0, 0),
+            new DateTime(2030, 1, 15, 18, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var listed = Assert.Single(await service.GetForUserAsync(user.Id));
+        Assert.Equal(ReservationStatuses.Active, listed.Status);
+
+        var result = await service.CancelAsync(reservation.Id, new CurrentUser(user.Id, false));
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenUserHasTheMostUpcomingBookings_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 9, 30, 0),
+            ReservationStatuses.Active);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 30, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context, configurePolicy: policy => policy.MaxActiveReservationsPerUser = 2);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 11, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
+        }, user.Id);
+
+        AssertError(
+            result,
+            ServiceErrorKind.Validation,
+            "You already have 2 upcoming bookings, the most allowed. Cancel one before booking another.");
+    }
+
+    [Fact]
+    public async Task CreateReservation_DoesNotCountCancelledOrFinishedBookingsTowardsTheCap()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var otherUser = await SeedUserAsync(context);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Cancelled);
+        // Ended before the test clock's "now" of 15 January 2030, 10:00.
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 14, 9, 0, 0), new DateTime(2030, 1, 14, 10, 0, 0),
+            ReservationStatuses.Active);
+        await SeedReservationAsync(
+            context, resource.Id, otherUser.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0), new DateTime(2030, 1, 15, 10, 30, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 15, 10, 0, 0),
+            configurePolicy: policy => policy.MaxActiveReservationsPerUser = 1);
+
+        var result = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 11, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 12, 0, 0)
+        }, user.Id);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_MovesItAndRecordsWhen()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 10, 0, 0), new DateTime(2030, 1, 15, 11, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        // Overlaps its own old time, which is allowed.
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 10, 30, 0), new DateTime(2030, 1, 15, 11, 30, 0)),
+            new CurrentUser(user.Id, false));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            (new DateTime(2030, 1, 15, 10, 30, 0), new DateTime(2030, 1, 15, 11, 30, 0)),
+            (result.Value.StartTime, result.Value.EndTime));
+        Assert.Equal(ToUtc(DefaultLocalNow), result.Value.UpdatedAt);
+        Assert.Equal(ReservationStatuses.Active, result.Value.Status);
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_WhenNewTimeOverlapsAnotherBooking_ReturnsConflict()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 10, 30, 0), new DateTime(2030, 1, 15, 11, 30, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Conflict, "Resource is already reserved in this time period.");
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_FollowsTheBookingPolicy()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        resource.MaxDurationMinutes = 60;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 11, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be at most 1 hour long.");
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_WhenUserIsAtTheCap_StillMoves()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context, configurePolicy: policy => policy.MaxActiveReservationsPerUser = 1);
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(ReservationStatuses.Cancelled, 10, "Cancelled reservations can't be moved.")]
+    [InlineData(ReservationStatuses.Active, 9, "Reservations that have started can't be moved.")]
+    public async Task RescheduleReservation_WhenCancelledOrStarted_ReturnsValidationError(
+        string status,
+        int startHour,
+        string expectedMessage)
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, startHour, 0, 0), new DateTime(2030, 1, 15, 11, 0, 0),
+            status);
+        var service = CreateService(context, localNow: new DateTime(2030, 1, 15, 9, 30, 0));
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Validation, expectedMessage);
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_WhenReservationBelongsToAnotherUser_ReturnsForbiddenError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var owner = await SeedUserAsync(context);
+        var otherUser = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, owner.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0)),
+            new CurrentUser(otherUser.Id, false));
+
+        AssertError(result, ServiceErrorKind.Forbidden, "You do not have permission to access this resource.");
+    }
+
+    [Theory]
+    [InlineData("AAAAAAAAB9E=")]
+    [InlineData("not base64")]
+    public async Task RescheduleAndCancel_WhenVersionIsOutOfDate_ReturnConflict(string staleVersion)
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+        var currentUser = new CurrentUser(user.Id, false);
+
+        var rescheduleResult = await service.RescheduleAsync(
+            reservation.Id,
+            new RescheduleReservationDto
+            {
+                StartTime = new DateTime(2030, 1, 15, 11, 0, 0),
+                EndTime = new DateTime(2030, 1, 15, 12, 0, 0),
+                Version = staleVersion
+            },
+            currentUser);
+        var cancelResult = await service.CancelAsync(reservation.Id, currentUser, staleVersion);
+
+        AssertError(rescheduleResult, ServiceErrorKind.Conflict, ReservationService.ReservationChangedMessage);
+        AssertError(cancelResult, ServiceErrorKind.Conflict, ReservationService.ReservationChangedMessage);
+        Assert.Equal(ReservationStatuses.Active, (await context.Reservations.FindAsync(reservation.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task CreateAndReschedule_WhenTheResourcesRulesCantBeMet_ExplainWhy()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        // Longer than the default maximum of 8 hours, as after a default was lowered.
+        resource.MinDurationMinutes = 600;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(context);
+
+        var createResult = await service.CreateAsync(new CreateReservationDto
+        {
+            ResourceId = resource.Id,
+            StartTime = new DateTime(2030, 1, 15, 10, 0, 0),
+            EndTime = new DateTime(2030, 1, 15, 11, 0, 0)
+        }, user.Id);
+        var rescheduleResult = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(createResult, ServiceErrorKind.Validation, BookingPolicy.CantBeMetMessage);
+        AssertError(rescheduleResult, ServiceErrorKind.Validation, BookingPolicy.CantBeMetMessage);
+    }
+
+    [Theory]
+    [InlineData(10, 0, 11, 0, "Bookings must be made at least 2 hours in advance.")]
+    [InlineData(11, 0, 11, 10, "Bookings must be at least 15 minutes long.")]
+    [InlineData(12, 0, 13, 0, "Resource is not available in this time period.")]
+    public async Task RescheduleReservation_FollowsNoticeDurationAndAvailability(
+        int startHour,
+        int startMinute,
+        int endHour,
+        int endMinute,
+        string expectedMessage)
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        resource.MinLeadTimeMinutes = 120;
+        await context.SaveChangesAsync();
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 11, 0, 0), new DateTime(2030, 1, 15, 12, 0, 0),
+            ReservationStatuses.Active);
+        // 08:30, so a booking at 10:00 is inside the two-hour notice period.
+        var service = CreateService(context, localNow: new DateTime(2030, 1, 15, 8, 30, 0));
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(
+                reservation,
+                new DateTime(2030, 1, 15, startHour, startMinute, 0),
+                new DateTime(2030, 1, 15, endHour, endMinute, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Validation, expectedMessage);
+    }
+
+    [Fact]
+    public async Task RescheduleReservation_BeyondTheBookingHorizon_ReturnsValidationError()
+    {
+        await using var context = CreateContext();
+        var resource = await SeedResourceWithAvailabilityAsync(context);
+        var user = await SeedUserAsync(context);
+        var reservation = await SeedReservationAsync(
+            context, resource.Id, user.Id,
+            new DateTime(2030, 1, 15, 9, 0, 0), new DateTime(2030, 1, 15, 10, 0, 0),
+            ReservationStatuses.Active);
+        var service = CreateService(
+            context,
+            localNow: new DateTime(2030, 1, 1, 12, 0, 0),
+            configurePolicy: policy => policy.MaxAdvanceDays = 13);
+
+        var result = await service.RescheduleAsync(
+            reservation.Id,
+            Move(reservation, new DateTime(2030, 1, 15, 10, 0, 0), new DateTime(2030, 1, 15, 11, 0, 0)),
+            new CurrentUser(user.Id, false));
+
+        AssertError(result, ServiceErrorKind.Validation, "Bookings can be made up to 13 days ahead.");
+    }
+
+    private static RescheduleReservationDto Move(Reservation reservation, DateTime startTime, DateTime endTime)
+    {
+        return new RescheduleReservationDto
+        {
+            StartTime = startTime,
+            EndTime = endTime,
+            Version = Convert.ToBase64String(reservation.Version)
+        };
+    }
+
     private static async Task<Resource> SeedResourceAsync(AppDbContext context)
     {
         var resource = new Resource
@@ -462,6 +883,13 @@ public class ReservationServiceTests
         await context.SaveChangesAsync();
     }
 
+    private static DateTimeOffset ToUtc(DateTime localNow)
+    {
+        return new DateTimeOffset(
+            TimeZoneInfo.ConvertTimeToUtc(localNow, TestSchedulingClock.TimeZone),
+            TimeSpan.Zero);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -471,15 +899,20 @@ public class ReservationServiceTests
         return new AppDbContext(options);
     }
 
-    private static ReservationService CreateService(AppDbContext context, DateTime? localNow = null)
+    private static ReservationService CreateService(
+        AppDbContext context,
+        DateTime? localNow = null,
+        Action<BookingPolicyOptions>? configurePolicy = null)
     {
         var clock = TestSchedulingClock.Create(localNow);
+        var bookingPolicy = TestBookingPolicy.Create(configurePolicy);
 
         return new ReservationService(
             context,
-            new AvailabilityService(context, clock),
+            new AvailabilityService(context, clock, bookingPolicy),
             clock,
-            Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }));
+            Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" }),
+            bookingPolicy);
     }
 
     private static void AssertError<T>(ServiceResult<T> result, ServiceErrorKind kind, string message)

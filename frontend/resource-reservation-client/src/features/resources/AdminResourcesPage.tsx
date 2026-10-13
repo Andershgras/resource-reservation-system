@@ -5,6 +5,14 @@ import { ResourceFormSection } from '../../components/ResourceFormSection'
 import { ResourcesSection } from '../../components/ResourcesSection'
 import { useUnsavedChangesGuard } from '../../components/useUnsavedChangesGuard'
 import {
+  bookingRuleFields,
+  emptyBookingRules,
+  toBookingRuleOverrides,
+  toBookingRulesDraft,
+  type BookingRuleField,
+  type BookingRulesDraft,
+} from '../../lib/bookingRules'
+import {
   errorNotice,
   getErrorMessage,
   getFormErrors,
@@ -14,15 +22,22 @@ import {
 import { emptyToNull } from '../../lib/text'
 import { validateResourceForm, type ResourceField } from '../../lib/validation'
 import type { Notice } from '../../ui/Alert'
-import { useDeleteResource, useResources, useSaveResource } from './resourceQueries'
+import { useBookingPolicy, useDeleteResource, useResources, useSaveResource } from './resourceQueries'
 
-const resourceFields: readonly ResourceField[] = ['name', 'description', 'location']
+const resourceFields: readonly ResourceField[] = ['name', 'description', 'location', ...bookingRuleFields]
 
-const emptyResource = { name: '', description: '', location: '', isActive: true }
+const emptyResource = {
+  name: '',
+  description: '',
+  location: '',
+  isActive: true,
+  bookingRules: emptyBookingRules,
+}
 
 // /admin/resources: create, edit and delete resources.
 export function AdminResourcesPage() {
   const resourcesQuery = useResources()
+  const bookingPolicyQuery = useBookingPolicy()
   const saveResource = useSaveResource()
   const deleteResource = useDeleteResource()
   const confirm = useConfirm()
@@ -32,6 +47,7 @@ export function AdminResourcesPage() {
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [bookingRules, setBookingRules] = useState<BookingRulesDraft>(emptyBookingRules)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<ResourceField>>({})
   const [formError, setFormError] = useState('')
   // The values the form started from, empty or the resource being edited.
@@ -40,7 +56,8 @@ export function AdminResourcesPage() {
     name !== savedValues.name ||
     description !== savedValues.description ||
     location !== savedValues.location ||
-    isActive !== savedValues.isActive
+    isActive !== savedValues.isActive ||
+    bookingRuleFields.some((field) => bookingRules[field] !== savedValues.bookingRules[field])
 
   useUnsavedChangesGuard(hasUnsavedChanges)
 
@@ -50,6 +67,7 @@ export function AdminResourcesPage() {
     setDescription('')
     setLocation('')
     setIsActive(true)
+    setBookingRules(emptyBookingRules)
     setSavedValues(emptyResource)
     setFieldErrors({})
     setFormError('')
@@ -60,7 +78,7 @@ export function AdminResourcesPage() {
     setNotice(null)
     setFormError('')
 
-    const validationErrors = validateResourceForm(name)
+    const validationErrors = validateResourceForm(name, bookingRules, bookingPolicyQuery.data)
     setFieldErrors(validationErrors)
 
     if (hasFieldErrors(validationErrors)) {
@@ -76,6 +94,7 @@ export function AdminResourcesPage() {
             description: emptyToNull(description),
             location: emptyToNull(location),
             isActive,
+            ...toBookingRuleOverrides(bookingRules),
           },
         })
       } else {
@@ -85,6 +104,7 @@ export function AdminResourcesPage() {
             name: name.trim(),
             description: emptyToNull(description),
             location: emptyToNull(location),
+            ...toBookingRuleOverrides(bookingRules),
           },
         })
       }
@@ -104,11 +124,13 @@ export function AdminResourcesPage() {
     setDescription(resource.description ?? '')
     setLocation(resource.location ?? '')
     setIsActive(resource.isActive)
+    setBookingRules(toBookingRulesDraft(resource))
     setSavedValues({
       name: resource.name,
       description: resource.description ?? '',
       location: resource.location ?? '',
       isActive: resource.isActive,
+      bookingRules: toBookingRulesDraft(resource),
     })
     setNotice(null)
     setFieldErrors({})
@@ -150,6 +172,10 @@ export function AdminResourcesPage() {
         setResourceLocation={setLocation}
         resourceIsActive={isActive}
         setResourceIsActive={setIsActive}
+        bookingRules={bookingRules}
+        onBookingRuleChange={(field: BookingRuleField, value: string) =>
+          setBookingRules((current) => ({ ...current, [field]: value }))}
+        defaultPolicy={bookingPolicyQuery.data}
         fieldErrors={fieldErrors}
         formError={formError}
         isSavingResource={saveResource.isPending}

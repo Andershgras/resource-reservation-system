@@ -6,6 +6,7 @@ public class ResourceScheduleResponseDto
     public string ResourceName { get; set; } = string.Empty;
     public DateOnly FromDate { get; set; }
     public DateOnly ToDate { get; set; }
+    public BookingPolicyResponseDto Policy { get; set; } = new();
     public List<BookableSlotResponseDto> BookableSlots { get; set; } = [];
     public List<ReservedSlotResponseDto> ReservedSlots { get; set; } = [];
 }

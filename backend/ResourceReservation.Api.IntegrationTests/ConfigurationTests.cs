@@ -23,6 +23,11 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("ReverseProxy:KnownNetworks:0", "10.0.0.0", "ReverseProxy:KnownNetworks entry '10.0.0.0' is not a CIDR range")]
     [InlineData("RateLimiting:Auth:PermitLimit", "0", "RateLimiting:Auth:PermitLimit must be between 1 and 10000.")]
     [InlineData("RateLimiting:Auth:WindowSeconds", "0", "RateLimiting:Auth:WindowSeconds must be between 1 and 3600.")]
+    [InlineData("BookingPolicy:MinDurationMinutes", "0", "BookingPolicy:MinDurationMinutes must be between 1 and 10080.")]
+    [InlineData("BookingPolicy:MinDurationMinutes", "600", "BookingPolicy:MinDurationMinutes cannot be greater than BookingPolicy:MaxDurationMinutes.")]
+    [InlineData("BookingPolicy:MinLeadTimeMinutes", "-1", "BookingPolicy:MinLeadTimeMinutes must be between 0 and 43200.")]
+    [InlineData("BookingPolicy:MaxAdvanceDays", "0", "BookingPolicy:MaxAdvanceDays must be between 1 and 3650.")]
+    [InlineData("BookingPolicy:MaxActiveReservationsPerUser", "0", "BookingPolicy:MaxActiveReservationsPerUser must be between 1 and 1000.")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
         string key,
@@ -36,6 +41,24 @@ public class ConfigurationTests : ApiTestBase
         var exception = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
 
         Assert.Contains(expectedMessage, exception.ToString());
+    }
+
+    [Fact]
+    public void Startup_WithBookingRulesNoBookingCouldMeet_Fails()
+    {
+        using var factory = new ApiFactory(
+            Fixture.ConnectionString,
+            new Dictionary<string, string>
+            {
+                ["BookingPolicy:MinLeadTimeMinutes"] = "2880",
+                ["BookingPolicy:MaxAdvanceDays"] = "1"
+            });
+
+        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+
+        Assert.Contains(
+            "BookingPolicy:MinLeadTimeMinutes plus BookingPolicy:MinDurationMinutes must fit within BookingPolicy:MaxAdvanceDays.",
+            exception.ToString());
     }
 
     [Fact]

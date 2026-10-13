@@ -5,6 +5,8 @@ import {
   validateAvailabilityRuleForm,
   validateResourceForm,
 } from './validation'
+import { emptyBookingRules } from './bookingRules'
+import { testPolicy } from '../test/fixtures'
 
 describe('validateAuthForm', () => {
   it('reports every missing field at once when registering', () => {
@@ -34,9 +36,39 @@ describe('validateAuthForm', () => {
 })
 
 describe('validateResourceForm', () => {
+  const rules = { ...emptyBookingRules }
+
   it('requires a name that is not only spaces', () => {
     expect(validateResourceForm('  ')).toEqual({ name: 'Enter a resource name.' })
     expect(validateResourceForm('Room A')).toEqual({})
+  })
+
+  it('accepts empty booking rules, which mean the defaults', () => {
+    expect(validateResourceForm('Room A', rules, testPolicy)).toEqual({})
+  })
+
+  it('reports booking rules outside what the API accepts', () => {
+    expect(validateResourceForm('Room A', {
+      minDurationMinutes: '0',
+      maxDurationMinutes: '1.5',
+      minLeadTimeMinutes: '-5',
+      maxAdvanceDays: '4000',
+    })).toEqual({
+      minDurationMinutes: 'Enter a minimum duration between 1 and 10080 minutes.',
+      maxDurationMinutes: 'Enter a maximum duration between 1 and 10080 minutes.',
+      minLeadTimeMinutes: 'Enter a notice period between 0 and 43200 minutes.',
+      maxAdvanceDays: 'Enter a number of days between 1 and 3650.',
+    })
+  })
+
+  it('compares the minimum with the maximum in force, as the API does', () => {
+    expect(validateResourceForm('Room A', { ...rules, minDurationMinutes: '60', maxDurationMinutes: '30' }))
+      .toEqual({ maxDurationMinutes: "The maximum duration can't be shorter than the minimum duration." })
+    expect(validateResourceForm('Room A', { ...rules, minDurationMinutes: '600' }, testPolicy)).toEqual({
+      minDurationMinutes: "The minimum duration can't be longer than the default maximum of 480 minutes.",
+    })
+    // Without the defaults, the API checks it instead.
+    expect(validateResourceForm('Room A', { ...rules, minDurationMinutes: '600' })).toEqual({})
   })
 })
 

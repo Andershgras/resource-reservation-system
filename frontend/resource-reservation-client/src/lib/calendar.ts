@@ -1,4 +1,4 @@
-import type { BookableSlotResponse, ResourceScheduleResponse } from '../api/types'
+import type { BookableSlotResponse, BookingPolicyResponse, ResourceScheduleResponse } from '../api/types'
 import { addDaysToDateKey, formatDateHeading, formatTime, getDateKey } from './dates'
 
 // The weekly booking calendar's model. Times are the API's wall-clock times
@@ -154,6 +154,20 @@ export function visibleHours(days: CalendarDay[]) {
   return { firstHour, lastHour: Math.max(lastHour, firstHour + 1) }
 }
 
+// How long a booking may be, from the resource's booking rules.
+export interface DurationLimits {
+  minMinutes: number
+  maxMinutes: number
+}
+
+const noDurationLimits: DurationLimits = { minMinutes: 1, maxMinutes: Number.POSITIVE_INFINITY }
+
+export function durationLimitsFor(policy: BookingPolicyResponse | undefined): DurationLimits {
+  return policy
+    ? { minMinutes: policy.minDurationMinutes, maxMinutes: policy.maxDurationMinutes }
+    : noDurationLimits
+}
+
 export interface TimeOption {
   value: string
   label: string
@@ -176,8 +190,12 @@ function nextStep(minutes: number) {
 
 // Start times inside a bookable period: its own start, then every quarter
 // hour before its end. An existing reservation can end at any minute, so the
-// period's exact start is always offered.
-export function startOptions(interval: BookableSlotResponse): TimeOption[] {
+// period's exact start is always offered. Starts that leave no end the
+// duration limits allow are left out.
+export function startOptions(
+  interval: BookableSlotResponse,
+  limits: DurationLimits = noDurationLimits,
+): TimeOption[] {
   const start = toWallClockMinutes(interval.startTime)
   const end = toWallClockMinutes(interval.endTime)
   const intervalDate = getDateKey(interval.startTime)
@@ -192,12 +210,16 @@ export function startOptions(interval: BookableSlotResponse): TimeOption[] {
     options.push(toOption(minutes, intervalDate))
   }
 
-  return options
+  return options.filter((option) => endOptions(interval, option.value, limits).length > 0)
 }
 
-// End times after a start: every quarter hour up to the period's end, and the
-// period's exact end.
-export function endOptions(interval: BookableSlotResponse, startTime: string): TimeOption[] {
+// End times after a start, within the duration limits: every quarter hour up
+// to the period's end, and the period's exact end.
+export function endOptions(
+  interval: BookableSlotResponse,
+  startTime: string,
+  limits: DurationLimits = noDurationLimits,
+): TimeOption[] {
   const start = toWallClockMinutes(startTime)
   const end = toWallClockMinutes(interval.endTime)
   const intervalDate = getDateKey(interval.startTime)
@@ -206,22 +228,32 @@ export function endOptions(interval: BookableSlotResponse, startTime: string): T
     return []
   }
 
+  const earliest = start + limits.minMinutes
+  const latest = start + limits.maxMinutes
   const options: TimeOption[] = []
 
-  for (let minutes = nextStep(start); minutes < end; minutes += slotStepMinutes) {
-    options.push(toOption(minutes, intervalDate))
+  for (let minutes = nextStep(start); minutes < end && minutes <= latest; minutes += slotStepMinutes) {
+    if (minutes >= earliest) {
+      options.push(toOption(minutes, intervalDate))
+    }
   }
 
-  options.push(toOption(end, intervalDate))
+  if (end >= earliest && end <= latest) {
+    options.push(toOption(end, intervalDate))
+  }
 
   return options
 }
 
-// One hour after the start, or the nearest end before that when the period is
-// shorter.
-export function defaultEndTime(interval: BookableSlotResponse, startTime: string) {
+// One hour after the start, or the nearest allowed end before that. When the
+// shortest allowed booking is longer, its earliest end.
+export function defaultEndTime(
+  interval: BookableSlotResponse,
+  startTime: string,
+  limits: DurationLimits = noDurationLimits,
+) {
   const target = toWallClockMinutes(startTime) + 60
-  const options = endOptions(interval, startTime)
+  const options = endOptions(interval, startTime, limits)
   const fitting = options.filter((option) => toWallClockMinutes(option.value) <= target)
 
   return (fitting.at(-1) ?? options[0])?.value ?? ''
@@ -243,8 +275,11 @@ export function isWithinInterval(interval: BookableSlotResponse, startTime: stri
 
 // "45 min", "1 h", "1 h 30 min".
 export function formatDuration(startTime: string, endTime: string) {
-  const minutes = toWallClockMinutes(endTime) - toWallClockMinutes(startTime)
+  return formatMinutes(toWallClockMinutes(endTime) - toWallClockMinutes(startTime))
+}
 
+// "45 min", "1 h", "1 h 30 min", or "" for no time.
+export function formatMinutes(minutes: number) {
   if (!Number.isFinite(minutes) || minutes <= 0) {
     return ''
   }

@@ -15,21 +15,27 @@ public class ReservationService
     public const string ResourceBusyMessage =
         "The resource is busy right now. Please try again in a moment.";
 
+    public const string ReservationChangedMessage =
+        "This reservation was changed by someone else. Reload it and try again.";
+
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
     private readonly SchedulingClock _schedulingClock;
     private readonly SchedulingOptions _schedulingOptions;
+    private readonly BookingPolicyOptions _bookingPolicyOptions;
 
     public ReservationService(
         AppDbContext context,
         AvailabilityService availabilityService,
         SchedulingClock schedulingClock,
-        IOptions<SchedulingOptions> schedulingOptions)
+        IOptions<SchedulingOptions> schedulingOptions,
+        IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
         _schedulingClock = schedulingClock;
         _schedulingOptions = schedulingOptions.Value;
+        _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
     public Task<List<ReservationResponseDto>> GetAllAsync()
@@ -57,6 +63,7 @@ public class ReservationService
         var reservation = await _context.Reservations
             .Include(reservation => reservation.Resource)
             .Include(reservation => reservation.User)
+            .Include(reservation => reservation.CancelledBy)
             .FirstOrDefaultAsync(reservation => reservation.Id == id);
 
         if (reservation is null)
@@ -101,9 +108,12 @@ public class ReservationService
             return ServiceError.Validation("EndTime must be after StartTime.");
         }
 
-        if (request.StartTime < _schedulingClock.GetLocalNow())
+        var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)
+            .Check(request.StartTime, request.EndTime, _schedulingClock.GetLocalNow());
+
+        if (policyError is not null)
         {
-            return ServiceError.Validation("Reservations must start in the future.");
+            return policyError;
         }
 
         var isWithinAvailability = await _availabilityService.IsWithinAvailabilityAsync(
@@ -116,9 +126,9 @@ public class ReservationService
             return ServiceError.Validation("Resource is not available in this time period.");
         }
 
-        // Serialize bookings per resource so the overlap check and the insert
-        // cannot interleave with another request for the same resource (ADR 0002).
-        var bookingLock = await AcquireResourceBookingLockAsync(request.ResourceId);
+        // Serialize bookings per user and per resource, so neither the cap check
+        // nor the overlap check can interleave with another booking (ADR 0002).
+        var bookingLock = await AcquireBookingLocksAsync(userId, request.ResourceId);
 
         if (!bookingLock.Acquired)
         {
@@ -126,6 +136,21 @@ public class ReservationService
         }
 
         await using var transaction = bookingLock.Transaction;
+
+        var localNow = _schedulingClock.GetLocalNow();
+        var maxActiveReservations = _bookingPolicyOptions.MaxActiveReservationsPerUser;
+        var activeReservationCount = await _context.Reservations
+            .CountAsync(reservation =>
+                reservation.UserId == userId &&
+                reservation.Status == ReservationStatuses.Active &&
+                reservation.EndTime > localNow);
+
+        if (activeReservationCount >= maxActiveReservations)
+        {
+            return ServiceError.Validation(
+                $"You already have {maxActiveReservations} upcoming bookings, the most allowed. " +
+                "Cancel one before booking another.");
+        }
 
         var overlapsExistingReservation = await _context.Reservations
             .AnyAsync(reservation =>
@@ -146,6 +171,7 @@ public class ReservationService
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             Status = ReservationStatuses.Active,
+            CreatedAt = _schedulingClock.GetUtcNow(),
             Resource = resource,
             User = user
         };
@@ -161,7 +187,9 @@ public class ReservationService
         return ToResponseDto(reservation);
     }
 
-    public async Task<ServiceResult> CancelAsync(int id, CurrentUser currentUser)
+    // Without a version, the cancellation is still rejected if the reservation
+    // changes between reading and saving it.
+    public async Task<ServiceResult> CancelAsync(int id, CurrentUser currentUser, string? version = null)
     {
         var reservation = await _context.Reservations.FindAsync(id);
 
@@ -175,18 +203,141 @@ public class ReservationService
             return ServiceError.Forbidden();
         }
 
+        if (version is not null && !MatchesVersion(reservation, version))
+        {
+            return ServiceError.Conflict(ReservationChangedMessage);
+        }
+
         if (reservation.Status == ReservationStatuses.Cancelled)
         {
             return ServiceError.Validation("Reservation is already cancelled.");
         }
 
         reservation.Status = ReservationStatuses.Cancelled;
-        await _context.SaveChangesAsync();
+        reservation.CancelledAt = _schedulingClock.GetUtcNow();
+        reservation.CancelledByUserId = currentUser.UserId;
 
-        return ServiceResult.Success;
+        return await TrySaveChangesAsync()
+            ? ServiceResult.Success
+            : ServiceError.Conflict(ReservationChangedMessage);
     }
 
-    private async Task<BookingLock> AcquireResourceBookingLockAsync(int resourceId)
+    // Moves an upcoming reservation to a new time on the same resource. The new
+    // time is checked like a new booking, except that the reservation doesn't
+    // overlap itself and doesn't count again towards the user's cap.
+    public async Task<ServiceResult<ReservationResponseDto>> RescheduleAsync(
+        int id,
+        RescheduleReservationDto request,
+        CurrentUser currentUser)
+    {
+        var reservation = await _context.Reservations
+            .Include(reservation => reservation.Resource)
+            .Include(reservation => reservation.User)
+            .Include(reservation => reservation.CancelledBy)
+            .FirstOrDefaultAsync(reservation => reservation.Id == id);
+
+        if (reservation is null)
+        {
+            return ServiceError.NotFound("Reservation not found.");
+        }
+
+        if (!CanAccess(reservation, currentUser))
+        {
+            return ServiceError.Forbidden();
+        }
+
+        if (!MatchesVersion(reservation, request.Version))
+        {
+            return ServiceError.Conflict(ReservationChangedMessage);
+        }
+
+        if (reservation.Status == ReservationStatuses.Cancelled)
+        {
+            return ServiceError.Validation("Cancelled reservations can't be moved.");
+        }
+
+        var localNow = _schedulingClock.GetLocalNow();
+
+        if (reservation.StartTime <= localNow)
+        {
+            return ServiceError.Validation("Reservations that have started can't be moved.");
+        }
+
+        var resource = reservation.Resource!;
+
+        if (!resource.IsActive)
+        {
+            return ServiceError.Validation("Resource is not active.");
+        }
+
+        if (request.EndTime <= request.StartTime)
+        {
+            return ServiceError.Validation("EndTime must be after StartTime.");
+        }
+
+        var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)
+            .Check(request.StartTime, request.EndTime, localNow);
+
+        if (policyError is not null)
+        {
+            return policyError;
+        }
+
+        var isWithinAvailability = await _availabilityService.IsWithinAvailabilityAsync(
+            reservation.ResourceId,
+            request.StartTime,
+            request.EndTime);
+
+        if (!isWithinAvailability)
+        {
+            return ServiceError.Validation("Resource is not available in this time period.");
+        }
+
+        // Moving doesn't change how many bookings the user holds, so only the
+        // resource is locked.
+        var bookingLock = await AcquireBookingLocksAsync(null, reservation.ResourceId);
+
+        if (!bookingLock.Acquired)
+        {
+            return ServiceError.Unavailable(ResourceBusyMessage);
+        }
+
+        await using var transaction = bookingLock.Transaction;
+
+        var overlapsAnotherReservation = await _context.Reservations
+            .AnyAsync(other =>
+                other.Id != reservation.Id &&
+                other.ResourceId == reservation.ResourceId &&
+                other.Status == ReservationStatuses.Active &&
+                request.StartTime < other.EndTime &&
+                request.EndTime > other.StartTime);
+
+        if (overlapsAnotherReservation)
+        {
+            return ServiceError.Conflict("Resource is already reserved in this time period.");
+        }
+
+        reservation.StartTime = request.StartTime;
+        reservation.EndTime = request.EndTime;
+        reservation.UpdatedAt = _schedulingClock.GetUtcNow();
+
+        if (!await TrySaveChangesAsync())
+        {
+            return ServiceError.Conflict(ReservationChangedMessage);
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
+
+        return ToResponseDto(reservation);
+    }
+
+    // Locks are always taken in the same order, the user's before the resource's,
+    // so two requests can never each hold one lock while waiting for the other.
+    // Pass a null user when only the resource needs locking.
+    private async Task<BookingLock> AcquireBookingLocksAsync(int? userId, int resourceId)
     {
         // The in-memory test provider has no transactions or locks.
         if (!_context.Database.IsRelational())
@@ -195,12 +346,39 @@ public class ReservationService
         }
 
         var transaction = await _context.Database.BeginTransactionAsync();
+        var lockNames = userId is null
+            ? [$"reservation:resource:{resourceId}"]
+            : new[] { $"reservation:user:{userId}", $"reservation:resource:{resourceId}" };
+
+        try
+        {
+            foreach (var lockName in lockNames)
+            {
+                if (!await TryAcquireLockAsync(lockName))
+                {
+                    await transaction.DisposeAsync();
+
+                    return new BookingLock(false, null);
+                }
+            }
+        }
+        catch
+        {
+            await transaction.DisposeAsync();
+            throw;
+        }
+
+        return new BookingLock(true, transaction);
+    }
+
+    // The lock is owned by the transaction and released on commit or rollback.
+    private async Task<bool> TryAcquireLockAsync(string lockName)
+    {
         var lockResult = new SqlParameter("@result", SqlDbType.Int)
         {
             Direction = ParameterDirection.Output
         };
 
-        // The lock is owned by the transaction and released on commit or rollback.
         await _context.Database.ExecuteSqlRawAsync(
             """
             EXEC @result = sp_getapplock
@@ -209,7 +387,7 @@ public class ReservationService
                 @LockOwner = 'Transaction',
                 @LockTimeout = @timeout;
             """,
-            new SqlParameter("@resource", $"reservation:resource:{resourceId}"),
+            new SqlParameter("@resource", lockName),
             new SqlParameter("@timeout", _schedulingOptions.BookingLockTimeoutMilliseconds),
             lockResult);
 
@@ -219,18 +397,16 @@ public class ReservationService
 
         if (resultCode >= 0)
         {
-            return new BookingLock(true, transaction);
+            return true;
         }
-
-        await transaction.DisposeAsync();
 
         if (resultCode is -1 or -3)
         {
-            return new BookingLock(false, null);
+            return false;
         }
 
         throw new InvalidOperationException(
-            $"sp_getapplock failed for resource {resourceId} with result code {resultCode}.");
+            $"sp_getapplock failed for '{lockName}' with result code {resultCode}.");
     }
 
     private IQueryable<ReservationResponseDto> QueryReservations(
@@ -239,6 +415,7 @@ public class ReservationService
         var reservations = _context.Reservations
             .Include(reservation => reservation.Resource)
             .Include(reservation => reservation.User)
+            .Include(reservation => reservation.CancelledBy)
             .AsQueryable();
 
         if (filter is not null)
@@ -247,6 +424,30 @@ public class ReservationService
         }
 
         return reservations.Select(reservation => ToResponseDto(reservation));
+    }
+
+    private static bool MatchesVersion(Reservation reservation, string version)
+    {
+        var buffer = new byte[version.Length];
+
+        return Convert.TryFromBase64String(version, buffer, out var length) &&
+            buffer.AsSpan(0, length).SequenceEqual(reservation.Version);
+    }
+
+    // The rowversion read with the reservation is part of the UPDATE's WHERE
+    // clause, so a change saved by someone else in between makes this fail.
+    private async Task<bool> TrySaveChangesAsync()
+    {
+        try
+        {
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
     }
 
     private static bool CanAccess(Reservation reservation, CurrentUser currentUser)
@@ -266,7 +467,13 @@ public class ReservationService
             UserEmail = reservation.User?.Email ?? string.Empty,
             StartTime = reservation.StartTime,
             EndTime = reservation.EndTime,
-            Status = reservation.Status
+            Status = reservation.Status,
+            CreatedAt = reservation.CreatedAt,
+            UpdatedAt = reservation.UpdatedAt,
+            CancelledAt = reservation.CancelledAt,
+            CancelledByUserId = reservation.CancelledByUserId,
+            CancelledByName = reservation.CancelledBy?.Name,
+            Version = Convert.ToBase64String(reservation.Version)
         };
     }
 

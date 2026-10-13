@@ -43,6 +43,11 @@
   width: min(100%, 11rem);
 }
 
+.booking-rules {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .booking-notice:focus {
   outline: none;
 }

@@ -27,3 +27,7 @@ Until now that worked by accident, because the browser, the server and the peopl
 - A local time that falls in the spring-forward gap, or occurs twice in the autumn fall-back hour, isn't treated specially. For a booking system with daytime opening hours, that's acceptable.
 - The system serves resources in **one** time zone. Supporting several sites in different zones would mean storing a time zone per resource, or moving to `DateTimeOffset`. That change should get its own ADR.
 - API clients must send local times with no offset. A value ending in `Z` would be read as a local wall-clock time.
+
+## Updates
+
+- **Milestone 6:** reservation audit times (`CreatedAt`, `UpdatedAt`, `CancelledAt`) are UTC `datetimeoffset` instants, not wall-clock times. They record when something happened, rather than when a booking is for. `SchedulingClock.GetUtcNow()` provides them, through the same `TimeProvider`. See [ADR 0008](0008-booking-policies-and-reservation-changes.md).

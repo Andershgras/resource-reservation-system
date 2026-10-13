@@ -11,12 +11,42 @@ interface UserResponse {
   role: UserRole
 }
 
-interface ResourceResponse {
+interface BookingRuleOverrides {
+  minDurationMinutes: number | null
+  maxDurationMinutes: number | null
+  minLeadTimeMinutes: number | null
+  maxAdvanceDays: number | null
+}
+
+interface ResourceResponse extends BookingRuleOverrides {
   id: number
   name: string
   description: string | null
   location: string | null
   isActive: boolean
+}
+
+interface BookingPolicyResponse {
+  minDurationMinutes: number
+  maxDurationMinutes: number
+  minLeadTimeMinutes: number
+  maxAdvanceDays: number
+  maxActiveReservationsPerUser: number
+}
+
+const defaultPolicy: BookingPolicyResponse = {
+  minDurationMinutes: 15,
+  maxDurationMinutes: 480,
+  minLeadTimeMinutes: 0,
+  maxAdvanceDays: 90,
+  maxActiveReservationsPerUser: 5,
+}
+
+const noRuleOverrides: BookingRuleOverrides = {
+  minDurationMinutes: null,
+  maxDurationMinutes: null,
+  minLeadTimeMinutes: null,
+  maxAdvanceDays: null,
 }
 
 interface AvailabilityResponse {
@@ -52,6 +82,7 @@ interface ResourceScheduleResponse {
   resourceName: string
   fromDate: string
   toDate: string
+  policy: BookingPolicyResponse
   bookableSlots: BookableSlotResponse[]
   reservedSlots: ReservedSlotResponse[]
 }
@@ -66,7 +97,27 @@ interface ReservationResponse {
   startTime: string
   endTime: string
   status: ReservationStatus
+  createdAt: string | null
+  updatedAt: string | null
+  cancelledAt: string | null
+  cancelledByUserId: number | null
+  cancelledByName: string | null
+  version: string
 }
+
+// The fields of a reservation that was just made, with a fresh version.
+function newReservationFields(version: number) {
+  return {
+    createdAt: '2030-01-10T08:00:00+00:00',
+    updatedAt: null,
+    cancelledAt: null,
+    cancelledByUserId: null,
+    cancelledByName: null,
+    version: `v${version}`,
+  }
+}
+
+let nextVersion = 100
 
 test('main frontend reservation flow', async ({ page }) => {
   await mockApi(page)
@@ -560,6 +611,35 @@ test('cancelling a reservation frees its time in the booking schedule', async ({
   await expect(tuesday.getByText('Fully booked')).toHaveCount(0)
 })
 
+test('a booking can be moved to a new time in the calendar', async ({ page }) => {
+  await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
+  await storeSession(page, Date.now() + 60 * 60_000)
+  await page.goto('/my-reservations')
+
+  await sectionByHeading(page, 'My reservations').getByRole('link', { name: /^Move Reserved Test Room/ }).click()
+
+  await expect(page).toHaveURL('/book?resource=1&week=2030-01-14&move=1')
+  await expect(page.getByRole('heading', { name: 'Move a booking' })).toBeVisible()
+  const scheduleSection = sectionByHeading(page, 'Resource schedule')
+  // The booking's own time shows as free while it is being moved.
+  const tuesday = scheduleSection.getByRole('region', { name: 'Tue 15 Jan' })
+  await expect(tuesday.getByRole('button', { name: /^Available Tue 15 Jan 2030, 09:00–11:00/ })).toBeVisible()
+  await expectNoAccessibilityViolations(page, 'moving a booking')
+
+  await scheduleSection.getByRole('button', { name: /^Available Wed 16 Jan 2030/ }).click()
+  await scheduleSection.getByLabel('Start', { exact: true }).selectOption({ label: '10:00' })
+  await scheduleSection.getByLabel('End', { exact: true }).selectOption({ label: '11:00' })
+  await scheduleSection.getByRole('button', { name: 'Move booking' }).click()
+
+  await expect(page.getByText('Booking moved to Wed 16 Jan 2030, 10:00–11:00.')).toBeVisible()
+  await expect(page).toHaveURL('/book?resource=1&week=2030-01-14')
+  await expect(scheduleSection.getByRole('region', { name: 'Wed 16 Jan' }).getByText('Reserved')).toBeVisible()
+  await expect(tuesday.getByText('Reserved')).toHaveCount(0)
+
+  await selectRoleTab(page, 'My reservations')
+  await expect(sectionByHeading(page, 'My reservations').getByText('Moved')).toBeVisible()
+})
+
 // In a real browser, making the page inert takes focus away from the button
 // that opened the dialog, so the dialog must record it beforehand.
 test('the confirmation dialog works with the keyboard alone', async ({ page }) => {
@@ -844,6 +924,7 @@ async function mockApi(
           description: 'Already reserved in the smoke test.',
           location: 'Test floor',
           isActive: true,
+          ...noRuleOverrides,
         },
       ]
     : []
@@ -883,6 +964,7 @@ async function mockApi(
           startTime: '2030-01-15T09:00:00',
           endTime: '2030-01-15T11:00:00',
           status: 'Active',
+          ...newReservationFields(1),
         },
       ]
     : []
@@ -908,6 +990,11 @@ async function mockApi(
       return
     }
 
+    if (request.method() === 'GET' && path === '/bookingpolicy') {
+      await route.fulfill({ status: 200, json: defaultPolicy })
+      return
+    }
+
     if (request.method() === 'GET' && path === '/resources') {
       await route.fulfill({ status: 200, json: resources })
       return
@@ -918,6 +1005,7 @@ async function mockApi(
       const resourceId = Number(resourceScheduleMatch[1])
       const fromDate = url.searchParams.get('from') ?? ''
       const toDate = url.searchParams.get('to') ?? ''
+      const excludedId = Number(url.searchParams.get('excludeReservationId') ?? 0)
 
       await route.fulfill({
         status: 200,
@@ -928,7 +1016,7 @@ async function mockApi(
           resources,
           availabilities,
           availabilityRules,
-          reservations,
+          reservations.filter((reservation) => reservation.id !== excludedId),
           options.showReservedSlotAsBookable ?? false,
         ),
       })
@@ -943,6 +1031,9 @@ async function mockApi(
         description: body.description,
         location: body.location,
         isActive: true,
+        ...noRuleOverrides,
+        ...body,
+        id: nextResourceId,
       }
 
       nextResourceId += 1
@@ -1114,6 +1205,7 @@ async function mockApi(
         startTime: body.startTime,
         endTime: body.endTime,
         status: 'Active',
+        ...newReservationFields(nextVersion++),
       }
 
       nextReservationId += 1
@@ -1122,12 +1214,55 @@ async function mockApi(
       return
     }
 
+    const reservationMatch = path.match(/^\/reservations\/(\d+)$/)
+    if (reservationMatch && request.method() === 'GET') {
+      const reservation = reservations.find((item) => item.id === Number(reservationMatch[1]))
+
+      await route.fulfill(reservation
+        ? { status: 200, json: reservation }
+        : problemResponse(404, 'Not Found', 'Reservation not found.'))
+      return
+    }
+
+    if (reservationMatch && request.method() === 'PUT') {
+      const reservationId = Number(reservationMatch[1])
+      const body = await request.postDataJSON() as { startTime: string; endTime: string; version: string }
+      const current = reservations.find((item) => item.id === reservationId)
+
+      if (!current || current.version !== body.version) {
+        await route.fulfill(problemResponse(
+          409,
+          'Conflict',
+          'This reservation was changed by someone else. Reload it and try again.',
+        ))
+        return
+      }
+
+      const moved: ReservationResponse = {
+        ...current,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        updatedAt: '2030-01-11T08:00:00+00:00',
+        version: `v${nextVersion++}`,
+      }
+      reservations = reservations.map((item) => (item.id === reservationId ? moved : item))
+      await route.fulfill({ status: 200, json: moved })
+      return
+    }
+
     const reservationCancelMatch = path.match(/^\/reservations\/(\d+)\/cancel$/)
     if (reservationCancelMatch && request.method() === 'PUT') {
       const reservationId = Number(reservationCancelMatch[1])
       reservations = reservations.map((reservation) =>
         reservation.id === reservationId
-          ? { ...reservation, status: 'Cancelled' }
+          ? {
+              ...reservation,
+              status: 'Cancelled',
+              cancelledAt: '2030-01-11T08:00:00+00:00',
+              cancelledByUserId: currentUser.id,
+              cancelledByName: currentUser.name,
+              version: `v${nextVersion++}`,
+            }
           : reservation,
       )
       await route.fulfill({ status: 204 })
@@ -1214,6 +1349,7 @@ function buildResourceSchedule(
     resourceName: resource?.name ?? '',
     fromDate,
     toDate,
+    policy: { ...defaultPolicy, ...withoutNulls(resource ?? noRuleOverrides) },
     bookableSlots: showReservedSlotAsBookable
       ? [...availabilitySlots, ...ruleSlots]
       : [...availabilitySlots, ...ruleSlots].filter(
@@ -1226,6 +1362,18 @@ function buildResourceSchedule(
         ),
     reservedSlots,
   }
+}
+
+// A resource's own rules, leaving out the ones it takes from the defaults.
+function withoutNulls(overrides: BookingRuleOverrides) {
+  return Object.fromEntries(
+    Object.entries({
+      minDurationMinutes: overrides.minDurationMinutes,
+      maxDurationMinutes: overrides.maxDurationMinutes,
+      minLeadTimeMinutes: overrides.minLeadTimeMinutes,
+      maxAdvanceDays: overrides.maxAdvanceDays,
+    }).filter(([, value]) => value !== null),
+  )
 }
 
 function buildRuleSlots(

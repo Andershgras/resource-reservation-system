@@ -10,6 +10,27 @@
   gap: var(--space-4);
 }
 
+/* A group of related, optional fields, such as a resource's booking rules. */
+.form-fieldset {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.form-fieldset legend {
+  padding: 0;
+  color: var(--color-heading);
+  font-weight: var(--weight-semibold);
+}
+
+.form-fieldset-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .form-actions {
   display: flex;
   flex-wrap: wrap;

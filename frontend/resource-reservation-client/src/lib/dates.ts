@@ -126,21 +126,46 @@ export function getDateKey(value: string) {
   return value.slice(0, 10)
 }
 
-const schedulingDateFormat = new Intl.DateTimeFormat('en-CA', {
+const schedulingClockFormat = new Intl.DateTimeFormat('en-CA', {
   timeZone: schedulingTimeZone,
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
 })
+
+// An instant as wall-clock time in the scheduling time zone, such as
+// "2030-01-15T09:00:00", in the same form as the API's times.
+export function toSchedulingWallClock(instant: Date) {
+  const parts = schedulingClockFormat.formatToParts(instant)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
+}
+
+// Now as wall-clock time in the scheduling time zone, for comparing with the
+// API's times.
+export function nowInSchedulingZone(now = new Date()) {
+  return toSchedulingWallClock(now)
+}
 
 // Today's date in the scheduling time zone, as "2030-01-15", whatever the
 // browser's own time zone is.
 export function todayInSchedulingZone(now = new Date()) {
-  const parts = schedulingDateFormat.formatToParts(now)
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? ''
+  return getDateKey(toSchedulingWallClock(now))
+}
 
-  return `${part('year')}-${part('month')}-${part('day')}`
+// "Tue 15 Jan 2030, 10:00" for a moment recorded by the API, such as when a
+// booking was made. These are UTC instants with an offset, unlike booking
+// times, and are shown in Copenhagen time.
+export function formatInstant(value: string) {
+  const instant = new Date(value)
+
+  return Number.isNaN(instant.getTime()) ? value : formatDateTime(toSchedulingWallClock(instant))
 }
 
 // Adds calendar days to a "2030-01-15" date. Summer time can't shift the

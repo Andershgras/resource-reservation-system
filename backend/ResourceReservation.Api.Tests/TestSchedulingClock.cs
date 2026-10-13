@@ -8,9 +8,11 @@ internal static class TestSchedulingClock
     public static readonly TimeZoneInfo TimeZone =
         TimeZoneInfo.FindSystemTimeZoneById("Europe/Copenhagen");
 
+    public static readonly DateTime DefaultLocalNow = new(2029, 1, 1, 12, 0, 0);
+
     public static SchedulingClock Create(DateTime? localNow = null)
     {
-        var now = localNow ?? new DateTime(2029, 1, 1, 12, 0, 0);
+        var now = localNow ?? DefaultLocalNow;
         var utcNow = TimeZoneInfo.ConvertTimeToUtc(now, TimeZone);
 
         return new SchedulingClock(

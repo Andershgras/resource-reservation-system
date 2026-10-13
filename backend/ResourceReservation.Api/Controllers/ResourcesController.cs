@@ -3,6 +3,8 @@ using ResourceReservation.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Services;
 
@@ -14,11 +16,19 @@ public class ResourcesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
+    private readonly ReservationService _reservationService;
+    private readonly BookingPolicyOptions _bookingPolicyOptions;
 
-    public ResourcesController(AppDbContext context, AvailabilityService availabilityService)
+    public ResourcesController(
+        AppDbContext context,
+        AvailabilityService availabilityService,
+        ReservationService reservationService,
+        IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
+        _reservationService = reservationService;
+        _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
     [HttpGet]
@@ -42,13 +52,36 @@ public class ResourcesController : ControllerBase
         return Ok(ToResourceResponseDto(resource));
     }
 
+    // Anonymous, except that leaving out a reservation that is being moved
+    // needs its owner or an admin.
     [HttpGet("{id}/schedule")]
     public async Task<ActionResult<ResourceScheduleResponseDto>> GetResourceSchedule(
         int id,
         [FromQuery] DateOnly? from,
-        [FromQuery] DateOnly? to)
+        [FromQuery] DateOnly? to,
+        [FromQuery] int? excludeReservationId)
     {
-        var result = await _availabilityService.GetScheduleAsync(id, from, to);
+        if (excludeReservationId is not null)
+        {
+            if (User.GetCurrentUser() is not { } currentUser)
+            {
+                return this.AuthenticationRequired();
+            }
+
+            var reservation = await _reservationService.GetAsync(excludeReservationId.Value, currentUser);
+
+            if (!reservation.IsSuccess)
+            {
+                return this.ToErrorResult(reservation.Error);
+            }
+
+            if (reservation.Value.ResourceId != id)
+            {
+                return this.ToErrorResult(ServiceError.Validation("The reservation is for a different resource."));
+            }
+        }
+
+        var result = await _availabilityService.GetScheduleAsync(id, from, to, excludeReservationId);
 
         return result.IsSuccess ? Ok(result.Value) : this.ToErrorResult(result.Error);
     }
@@ -67,8 +100,17 @@ public class ResourcesController : ControllerBase
             Name = createResourceDto.Name.Trim(),
             Description = NormalizeOptionalText(createResourceDto.Description),
             Location = NormalizeOptionalText(createResourceDto.Location),
-            IsActive = true
+            IsActive = true,
+            MinDurationMinutes = createResourceDto.MinDurationMinutes,
+            MaxDurationMinutes = createResourceDto.MaxDurationMinutes,
+            MinLeadTimeMinutes = createResourceDto.MinLeadTimeMinutes,
+            MaxAdvanceDays = createResourceDto.MaxAdvanceDays
         };
+
+        if (!HasRulesThatCanBeMet(resource))
+        {
+            return ValidationProblem();
+        }
 
         _context.Resources.Add(resource);
         await _context.SaveChangesAsync();
@@ -99,6 +141,15 @@ public class ResourcesController : ControllerBase
         resource.Description = NormalizeOptionalText(updateResourceDto.Description);
         resource.Location = NormalizeOptionalText(updateResourceDto.Location);
         resource.IsActive = updateResourceDto.IsActive;
+        resource.MinDurationMinutes = updateResourceDto.MinDurationMinutes;
+        resource.MaxDurationMinutes = updateResourceDto.MaxDurationMinutes;
+        resource.MinLeadTimeMinutes = updateResourceDto.MinLeadTimeMinutes;
+        resource.MaxAdvanceDays = updateResourceDto.MaxAdvanceDays;
+
+        if (!HasRulesThatCanBeMet(resource))
+        {
+            return ValidationProblem();
+        }
 
         await _context.SaveChangesAsync();
 
@@ -139,8 +190,46 @@ public class ResourcesController : ControllerBase
             Name = resource.Name,
             Description = resource.Description,
             Location = resource.Location,
-            IsActive = resource.IsActive
+            IsActive = resource.IsActive,
+            MinDurationMinutes = resource.MinDurationMinutes,
+            MaxDurationMinutes = resource.MaxDurationMinutes,
+            MinLeadTimeMinutes = resource.MinLeadTimeMinutes,
+            MaxAdvanceDays = resource.MaxAdvanceDays
         };
+    }
+
+    // Checks the rules in force, so an override can't contradict a default or
+    // leave a resource that nothing could ever be booked on.
+    private bool HasRulesThatCanBeMet(Resource resource)
+    {
+        var policy = BookingPolicy.For(resource, _bookingPolicyOptions);
+
+        if (policy.CanBeMet)
+        {
+            return true;
+        }
+
+        if (policy.MinDurationMinutes <= policy.MaxDurationMinutes)
+        {
+            // The notice and the shortest booking don't fit within the days ahead.
+            var field = resource.MaxAdvanceDays is not null
+                ? nameof(Resource.MaxAdvanceDays)
+                : resource.MinLeadTimeMinutes is not null
+                    ? nameof(Resource.MinLeadTimeMinutes)
+                    : nameof(Resource.MinDurationMinutes);
+            ModelState.AddModelError(field, "Allow more days ahead, or less notice, so the shortest booking fits.");
+
+            return false;
+        }
+
+        var message = resource.MaxDurationMinutes is null
+            ? $"The minimum duration can't be longer than the default maximum of {policy.MaxDurationMinutes} minutes."
+            : "The maximum duration can't be shorter than the minimum duration.";
+        ModelState.AddModelError(
+            resource.MaxDurationMinutes is null ? nameof(Resource.MinDurationMinutes) : nameof(Resource.MaxDurationMinutes),
+            message);
+
+        return false;
     }
 
     private static string? NormalizeOptionalText(string? value)

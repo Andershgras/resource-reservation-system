@@ -18,4 +18,10 @@ public class SchedulingClock
     {
         return TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), _timeZone).DateTime;
     }
+
+    // For audit timestamps, which record an instant rather than a wall-clock time.
+    public DateTimeOffset GetUtcNow()
+    {
+        return _timeProvider.GetUtcNow();
+    }
 }

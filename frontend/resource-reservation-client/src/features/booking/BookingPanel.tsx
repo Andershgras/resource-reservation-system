@@ -1,6 +1,6 @@
 import { useEffect, useRef, type FormEvent } from 'react'
 import type { BookableSlotResponse } from '../../api/types'
-import { endOptions, formatDuration, startOptions } from '../../lib/calendar'
+import { endOptions, formatDuration, startOptions, type DurationLimits } from '../../lib/calendar'
 import { formatDateTimeRange } from '../../lib/dates'
 import type { FieldErrors } from '../../lib/errors'
 import { Alert } from '../../ui/Alert'
@@ -11,8 +11,12 @@ import './BookingPanel.css'
 export type BookingField = 'startTime' | 'endTime'
 
 interface BookingPanelProps {
+  // Booking a new time, or moving an existing booking to it.
+  mode: 'book' | 'move'
   resourceName: string
   interval: BookableSlotResponse
+  // How long a booking may be, from the resource's booking rules.
+  limits: DurationLimits
   startTime: string
   endTime: string
   onStartTimeChange: (value: string) => void
@@ -27,8 +31,10 @@ interface BookingPanelProps {
 // Chooses a start and end inside one free period, in 15-minute steps, and books
 // it. Focus moves to the start time when the panel opens.
 export function BookingPanel({
+  mode,
   resourceName,
   interval,
+  limits,
   startTime,
   endTime,
   onStartTimeChange,
@@ -56,7 +62,9 @@ export function BookingPanel({
     <form className="booking-panel" onSubmit={handleSubmit} noValidate>
       <fieldset>
         <legend>
-          <span className="booking-panel-title">Book {resourceName}</span>{' '}
+          <span className="booking-panel-title">
+            {mode === 'move' ? `Move to ${resourceName}` : `Book ${resourceName}`}
+          </span>{' '}
           <span className="booking-panel-period">Free {period}</span>
         </legend>
 
@@ -69,7 +77,7 @@ export function BookingPanel({
                 value={startTime}
                 onChange={(event) => onStartTimeChange(event.target.value)}
               >
-                {startOptions(interval).map((option) => (
+                {startOptions(interval, limits).map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </Select>
@@ -82,7 +90,7 @@ export function BookingPanel({
                 value={endTime}
                 onChange={(event) => onEndTimeChange(event.target.value)}
               >
-                {endOptions(interval, startTime).map((option) => (
+                {endOptions(interval, startTime, limits).map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </Select>
@@ -99,7 +107,9 @@ export function BookingPanel({
       <div className="booking-panel-actions">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button type="submit" variant="primary" disabled={isReserving}>
-          {isReserving ? 'Reserving...' : 'Reserve'}
+          {mode === 'move'
+            ? isReserving ? 'Moving...' : 'Move booking'
+            : isReserving ? 'Reserving...' : 'Reserve'}
         </Button>
       </div>
     </form>

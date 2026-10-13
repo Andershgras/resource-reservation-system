@@ -131,6 +131,45 @@ public class ReservationTests : ApiTestBase
     }
 
     [Fact]
+    public async Task ReservationAudit_RecordsWhenItWasCreatedAndWhoCancelledIt()
+    {
+        var adminClient = await CreateAdminClientAsync();
+        var resourceId = await CreateResourceWithWeeklyRuleAsync(
+            adminClient,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var userClient = await CreateUserClientAsync();
+        var beforeCreate = DateTimeOffset.UtcNow.AddSeconds(-1);
+
+        var createResponse = await userClient.PostAsJsonAsync("/api/reservations", new CreateReservationDto
+        {
+            ResourceId = resourceId,
+            StartTime = BookingDay.AddHours(9),
+            EndTime = BookingDay.AddHours(10)
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<ReservationResponseDto>();
+
+        Assert.NotNull(created!.CreatedAt);
+        Assert.InRange(created.CreatedAt.Value, beforeCreate, DateTimeOffset.UtcNow.AddSeconds(1));
+        Assert.Equal(TimeSpan.Zero, created.CreatedAt.Value.Offset);
+        Assert.Null(created.UpdatedAt);
+        Assert.Null(created.CancelledAt);
+        Assert.NotEmpty(created.Version);
+
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await adminClient.PutAsync($"/api/reservations/{created.Id}/cancel", null)).StatusCode);
+
+        var cancelled = Assert.Single((await userClient
+            .GetFromJsonAsync<List<ReservationResponseDto>>("/api/reservations/me"))!);
+        Assert.Equal(ReservationStatuses.Cancelled, cancelled.Status);
+        Assert.Equal(created.CreatedAt, cancelled.CreatedAt);
+        Assert.NotNull(cancelled.CancelledAt);
+        Assert.Equal("Integration Admin", cancelled.CancelledByName);
+        Assert.NotEqual(created.Version, cancelled.Version);
+    }
+
+    [Fact]
     public async Task CreateReservation_WhenSameSlotIsBookedInParallel_OnlyOneSucceeds()
     {
         const int parallelRequests = 10;
@@ -158,6 +197,86 @@ public class ReservationTests : ApiTestBase
         Assert.Equal(1, await context.Reservations.CountAsync(reservation =>
             reservation.ResourceId == resourceId &&
             reservation.Status == ReservationStatuses.Active));
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenUserBooksManyResourcesInParallel_StopsAtTheCap()
+    {
+        const int parallelRequests = 10;
+        const int cap = 5;
+        var adminClient = await CreateAdminClientAsync();
+        var resourceIds = new List<int>();
+
+        for (var i = 0; i < parallelRequests; i++)
+        {
+            resourceIds.Add(await CreateResourceWithWeeklyRuleAsync(
+                adminClient,
+                new TimeOnly(8, 0),
+                new TimeOnly(16, 0)));
+        }
+
+        var userClient = await CreateUserClientAsync();
+
+        // Different resources, so only the per-user lock keeps the cap check and
+        // the inserts from interleaving.
+        var responses = await Task.WhenAll(resourceIds.Select(resourceId =>
+            userClient.PostAsJsonAsync("/api/reservations", new CreateReservationDto
+            {
+                ResourceId = resourceId,
+                StartTime = BookingDay.AddHours(9),
+                EndTime = BookingDay.AddHours(10)
+            })));
+
+        var statusCodes = responses.Select(response => response.StatusCode).ToList();
+        Assert.Equal(cap, statusCodes.Count(status => status == HttpStatusCode.Created));
+        Assert.Equal(parallelRequests - cap, statusCodes.Count(status => status == HttpStatusCode.BadRequest));
+
+        await using var context = Fixture.CreateDbContext();
+        Assert.Equal(cap, await context.Reservations.CountAsync(reservation =>
+            reservation.Status == ReservationStatuses.Active));
+    }
+
+    [Fact]
+    public async Task CreateReservation_WhenUserLockIsHeld_ReturnsServiceUnavailable()
+    {
+        var adminClient = await CreateAdminClientAsync();
+        var resourceId = await CreateResourceWithWeeklyRuleAsync(
+            adminClient,
+            new TimeOnly(8, 0),
+            new TimeOnly(16, 0));
+        var userClient = await CreateUserClientAsync();
+        await using var context = Fixture.CreateDbContext();
+        var userId = (await context.Users.SingleAsync(user => user.Email == "user@integration.test")).Id;
+        await using var shortTimeoutFactory = new ApiFactory(
+            Fixture.ConnectionString,
+            new Dictionary<string, string> { ["Scheduling:BookingLockTimeoutMilliseconds"] = "500" });
+        var client = shortTimeoutFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = userClient.DefaultRequestHeaders.Authorization;
+
+        await using var connection = new SqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync();
+        var transaction = connection.BeginTransaction();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText =
+                $"EXEC sp_getapplock @Resource = 'reservation:user:{userId}', " +
+                "@LockMode = 'Exclusive', @LockOwner = 'Transaction';";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var busyResponse = await client.PostAsJsonAsync("/api/reservations", new CreateReservationDto
+        {
+            ResourceId = resourceId,
+            StartTime = BookingDay.AddHours(9),
+            EndTime = BookingDay.AddHours(10)
+        });
+        transaction.Rollback();
+
+        await ProblemAssert.IsProblemAsync(
+            busyResponse,
+            HttpStatusCode.ServiceUnavailable,
+            ReservationService.ResourceBusyMessage);
     }
 
     [Fact]

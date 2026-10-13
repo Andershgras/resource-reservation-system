@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ResourceResponse } from '../../api/types'
+import { noRuleOverrides } from '../../test/fixtures'
 import {
   bookingSelectionFor,
   currentWeekStart,
@@ -33,6 +34,7 @@ describe('parseBookingSearch', () => {
     expect(parseBookingSearch('?resource=3&week=2030-01-21', now)).toEqual({
       resourceId: 3,
       weekStart: '2030-01-21',
+      moveReservationId: null,
     })
   })
 
@@ -44,11 +46,12 @@ describe('parseBookingSearch', () => {
     expect(parseBookingSearch('?resource=3&from=2030-01-15&to=2030-01-17', now)).toEqual({
       resourceId: 3,
       weekStart: '2030-01-14',
+      moveReservationId: null,
     })
   })
 
   it('uses this week when there is no selection', () => {
-    expect(parseBookingSearch('', now)).toEqual({ resourceId: null, weekStart: '2030-01-14' })
+    expect(parseBookingSearch('', now)).toEqual({ resourceId: null, weekStart: '2030-01-14', moveReservationId: null })
   })
 
   it.each([['abc'], ['0'], ['-3'], ['1.5'], ['12345678901']])('ignores the resource %j', (resource) => {
@@ -59,6 +62,7 @@ describe('parseBookingSearch', () => {
     expect(parseBookingSearch(`?resource=3&week=${week}`, now)).toEqual({
       resourceId: 3,
       weekStart: '2030-01-14',
+      moveReservationId: null,
     })
   })
 
@@ -69,17 +73,30 @@ describe('parseBookingSearch', () => {
 
 describe('toBookingSearch', () => {
   it('writes the selection back in the same form', () => {
-    const search = toBookingSearch({ resourceId: 3, weekStart: '2030-01-21' })
+    const search = toBookingSearch({ resourceId: 3, weekStart: '2030-01-21', moveReservationId: null })
 
     expect(search).toBe('?resource=3&week=2030-01-21')
-    expect(parseBookingSearch(search, now)).toEqual({ resourceId: 3, weekStart: '2030-01-21' })
+    expect(parseBookingSearch(search, now)).toEqual({
+      resourceId: 3,
+      weekStart: '2030-01-21',
+      moveReservationId: null,
+    })
+  })
+
+  it('keeps the booking being moved', () => {
+    const search = toBookingSearch({ resourceId: 3, weekStart: '2030-01-21', moveReservationId: 42 })
+
+    expect(search).toBe('?resource=3&week=2030-01-21&move=42')
+    expect(parseBookingSearch(search, now).moveReservationId).toBe(42)
+    expect(parseBookingSearch('?move=0', now).moveReservationId).toBeNull()
+    expect(parseBookingSearch('?move=abc', now).moveReservationId).toBeNull()
   })
 })
 
 describe('bookingSelectionFor', () => {
   const resources: ResourceResponse[] = [
-    { id: 1, name: 'Open', description: null, location: null, isActive: true },
-    { id: 2, name: 'Closed', description: null, location: null, isActive: false },
+    { id: 1, name: 'Open', description: null, location: null, isActive: true, ...noRuleOverrides },
+    { id: 2, name: 'Closed', description: null, location: null, isActive: false, ...noRuleOverrides },
   ]
 
   it('keeps an active resource', () => {

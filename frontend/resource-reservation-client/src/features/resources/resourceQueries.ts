@@ -1,11 +1,22 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { createResource, deleteResource, getResources, updateResource } from '../../api/resourcesApi'
+import {
+  createResource,
+  deleteResource,
+  getBookingPolicy,
+  getResources,
+  updateResource,
+} from '../../api/resourcesApi'
 import type { CreateResourceRequest, UpdateResourceRequest } from '../../api/types'
 import { queryKeys } from '../../lib/queryKeys'
 import { useInvalidateQueries } from '../../lib/useInvalidateQueries'
 
 export function useResources() {
   return useQuery({ queryKey: queryKeys.resources, queryFn: getResources })
+}
+
+// The default booking rules, which come from the API's configuration.
+export function useBookingPolicy() {
+  return useQuery({ queryKey: queryKeys.bookingPolicy, queryFn: getBookingPolicy, staleTime: Infinity })
 }
 
 export type SaveResourceInput =

@@ -14,10 +14,12 @@ The application supports the core flow for a generic resource reservation system
 - Admins define one-off availability windows
 - Admins define weekly availability rules, such as Monday to Friday from 08:00 to 16:00
 - Users choose a resource first, then view generated bookable times
-- Users create and cancel their own reservations
+- Users create, move and cancel their own reservations
 - Admins view and manage all reservations
 - The backend prevents overlapping active reservations
 - Cancelled reservations no longer block new reservations
+- Booking rules: shortest and longest booking, notice needed, how far ahead, and how many upcoming bookings each user can hold, with per-resource overrides
+- Reservations record when they were made, moved and cancelled, and who cancelled them
 
 The project intentionally stays generic. A resource can represent a meeting room, workspace, vehicle, sports court, equipment item, or another shared asset.
 
@@ -65,9 +67,10 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 
 - Create, edit, and delete resources
 - Mark resources active or inactive
+- Give a resource its own booking rules, or leave it on the defaults
 - Create, edit, and delete one-off availability windows
 - Create, edit, and delete weekly availability rules
-- View all reservations
+- View all reservations, with when each was made, moved and cancelled, and by whom
 - Filter reservations by resource and status
 - Cancel any active reservation
 
@@ -76,22 +79,26 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 - View active resources
 - Select a resource before choosing a reservation time
 - See a weekly calendar of free and reserved time, Monday to Sunday, including fully booked and closed days
-- Choose a start and end inside a free period, in 15-minute steps
+- Choose a start and end inside a free period, in 15-minute steps, within the resource's shortest and longest booking
 - Move between weeks, or jump to a date. The address keeps the resource and week, so a link opens the same view.
 - Create reservations
-- View own reservations
+- View own reservations, with when each was made, moved and cancelled
+- Move an upcoming reservation to another free time on the same resource, in the same calendar
 - Cancel own active reservations
 
 ### Backend Rules
 
 - Reservations require an active resource
 - Reservation end time must be after start time
-- Reservations must start in the future
+- Reservations must start in the future, and follow the booking rules: shortest and longest booking, notice needed and how many days ahead. Resources can override each rule.
+- Each user can hold at most 5 upcoming bookings by default, across all resources, even when booking in parallel
+- The same rules apply to admins
+- Moving a booking follows the same rules as a new one. Moves and cancellations based on an out-of-date copy are rejected with `409 Conflict` (see [ADR 0008](docs/adr/0008-booking-policies-and-reservation-changes.md)).
 - Reservations must fit inside the resource's availability, which is its one-off windows and weekly rules merged together. A booking can span adjacent windows, as long as it doesn't cross a gap.
 - Active overlapping reservations are rejected with `409 Conflict`, including when the requests arrive at the same moment (see [ADR 0002](docs/adr/0002-reservation-concurrency.md))
 - Cancelled reservations do not block new reservations
 - Resources with reservation history cannot be deleted and should be marked inactive instead. The database enforces this too.
-- Generated schedules cover at most 62 days per request and never offer time that has already passed
+- Generated schedules cover at most 62 days per request, and only offer time that the booking rules allow
 - All times are wall-clock times in one configured time zone, `Europe/Copenhagen` by default (see [ADR 0001](docs/adr/0001-time-zone-convention.md))
 
 ### Interface
@@ -226,9 +233,14 @@ GET    /api/resources/{id}/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD   max 62 days
 POST   /api/resources        Admin only
 PUT    /api/resources/{id}   Admin only
 DELETE /api/resources/{id}   Admin only
+GET    /api/bookingpolicy    Logged-in user: the default booking rules
 ```
 
-The schedule is public. It lists bookable and reserved times, but nothing that identifies a reservation or who made it.
+The schedule is public. It lists bookable and reserved times, but nothing that identifies a reservation or who made it. It only offers time the resource's booking rules allow, and includes those rules as `policy`.
+
+Adding `&excludeReservationId={id}` leaves that reservation out, so its own time shows as free while it is being moved. That needs the reservation's owner or an admin.
+
+Resources have four optional booking rule overrides: `minDurationMinutes`, `maxDurationMinutes`, `minLeadTimeMinutes` and `maxAdvanceDays`. `null` means the resource uses the default from [configuration](docs/configuration.md#booking-rules).
 
 ### Availability Windows
 
@@ -257,12 +269,19 @@ GET /api/reservations                    Admin only
 GET /api/reservations/{id}               Owner or Admin
 GET /api/reservations/me                 Logged-in user
 POST /api/reservations                   Logged-in user
+PUT /api/reservations/{id}               Owner or Admin: move to a new time
 PUT /api/reservations/{id}/cancel        Owner or Admin
 GET /api/reservations/resource/{id}      Admin only
 GET /api/reservations/user/{id}          Admin only
 ```
 
 Reservation responses include the owner's `userName` and `userEmail`. Every reservation endpoint is limited to the owner or an admin.
+
+They also include:
+- `createdAt`, `updatedAt`, `cancelledAt` and `cancelledByName`: UTC times with an offset, or `null` for reservations made before they were recorded.
+- `version`: send it back when moving (`{ startTime, endTime, version }`, required) or cancelling (`{ version }`, optional). If the reservation changed in the meantime, the API returns `409 Conflict` instead of overwriting the change.
+
+A booking can only be moved on its own resource, before it starts. The new time follows the same rules as a new booking. See [ADR 0008](docs/adr/0008-booking-policies-and-reservation-changes.md).
 
 ### Errors
 
@@ -393,7 +412,7 @@ npm run build
 npm run test:smoke
 ```
 
-The Playwright smoke tests cover the main browser flow: Admin login, resource management, weekly schedule management, availability management, User registration/login, resource-first booking, reservation cancellation, and overlap error handling.
+The Playwright smoke tests cover the main browser flow: Admin login, resource management, weekly schedule management, availability management, User registration/login, resource-first booking, moving a booking, reservation cancellation, and overlap error handling.
 
 ## Continuous Integration
 
@@ -418,6 +437,9 @@ The API checks its settings at startup and stops with a message naming any setti
 | `Jwt:ExpiryMinutes` | No | `120` |
 | `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` |
 | `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` |
+| `BookingPolicy:MinDurationMinutes`, `BookingPolicy:MaxDurationMinutes` | No | `15`, `480` |
+| `BookingPolicy:MinLeadTimeMinutes`, `BookingPolicy:MaxAdvanceDays` | No | `0`, `90` |
+| `BookingPolicy:MaxActiveReservationsPerUser` | No | `5` |
 | `Cors:AllowedOrigins` | No | None |
 | `ReverseProxy:KnownProxies`, `ReverseProxy:KnownNetworks` | No | None |
 | `RateLimiting:Auth:PermitLimit`, `RateLimiting:Auth:WindowSeconds` | No | `10`, `60` |

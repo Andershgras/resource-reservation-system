@@ -200,8 +200,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
-| M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done, awaiting review |
-| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
+| M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
+| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 of 4 awaiting review |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
 
 ### M1: Booking Correctness And Data Integrity
@@ -362,6 +362,75 @@ Follow-ups carried over from earlier milestones, and where they are handled:
 - **Fully booked days in the schedule (audit L3):** done in PR 2.
 - **Identical ternary branches in the booking section (audit L4):** done in PR 1, while restyling the booking section.
 
+### M6: Real-World Features
+
+Agreed decisions:
+- Four pull requests, each reviewed and merged before the next one starts.
+- Booking rules have configurable defaults: bookings last 15 minutes to 8 hours, need no notice, can be made up to 90 days ahead, and each user can hold 5 upcoming bookings.
+- Each resource can override the duration, notice and horizon rules with nullable values, where null means the resource uses the default.
+- The same rules apply to admins, with no implicit exemptions.
+- Per-user and per-resource application locks, always taken in the same order.
+- Bookings can only be moved to another time on the same resource, for now.
+- Audit times are stored in UTC as `datetimeoffset`. Unknown historical times stay null rather than being invented.
+- Deactivating a user keeps their reservations.
+- Email works through an `IEmailSender` abstraction with a development-only sender. A real provider is configured in M7.
+- A Light/Dark/System theme switch, saved in the browser. Dates stay in `en-GB`, and full localisation is deferred.
+- Resource categories and advanced reservation-history filters are deferred.
+
+PR 1: reservation lifecycle ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md))
+
+- [x] Audit fields on reservations: created, updated, cancelled, and who cancelled (audit L7). Existing rows keep their data, with unknown times left empty.
+- [x] Booking rules with defaults from configuration, per-resource overrides, and a check constraint
+- [x] A cap on upcoming bookings per user, kept under a per-user lock taken before the resource lock
+- [x] Moving a booking, with the same checks as a new one, and the schedule leaving out the booking being moved
+- [x] `rowversion` on reservations. Moves and cancellations based on an out-of-date copy return a consistent 409.
+- [x] Development demo data gets weekday opening hours, because its 2030 windows are past the 90-day horizon. A resource that already has weekly rules keeps them.
+- [x] Frontend: the calendar follows the rules, users move bookings in the calendar, the lists show each booking's history, and admins set a resource's rules
+- [x] Tests:
+  - a migration test with existing data
+  - concurrent bookings, moves and cancellations against SQL Server
+  - startup validation of the rules
+  - unit, page and smoke tests, with axe on the move screen
+- [x] Docs: ADR 0008, updates to ADRs 0001 and 0002, README, architecture, configuration, security and testing
+
+Changes in behaviour in PR 1:
+- New: bookings must be 15 minutes to 8 hours long and end within 90 days. Each user can hold at most 5 upcoming bookings. Existing bookings aren't re-checked.
+- New: the schedule only offers time the rules allow, leaves out free periods shorter than the shortest booking, and returns the rules as `policy`. The calendar offers only allowed start and end times, and describes the rules.
+- New: `PUT /api/reservations/{id}` moves a booking. Users move their own upcoming bookings from My reservations, in the booking calendar.
+- New: reservation responses include `createdAt`, `updatedAt`, `cancelledAt`, `cancelledByUserId`, `cancelledByName` and `version`. Both reservation lists show them.
+- New: `GET /api/bookingpolicy` returns the defaults. Resources gain four optional booking rule fields.
+- Changed: cancelling accepts an optional `{ version }` body. The frontend sends it, and reloads its lists after a failed cancel too.
+- Changed: 409 now also means "changed by someone else". The calendar reloads for either kind.
+- Changed: in Development, the demo resources open Monday to Friday (Meeting Room A 08:00–16:00, Projector 09:00–15:00), unless they already have weekly rules.
+
+Follow-ups noticed during PR 1:
+- Admins can move any booking through the API, but not yet in the browser, because `/book` is for users. The admin calendar in PR 2 adds it.
+- Changing a default in configuration can make an existing resource override contradict it, such as a minimum longer than a lowered maximum. Such a resource offers no time and says why when booked, until an admin fixes the override ([ADR 0008](adr/0008-booking-policies-and-reservation-changes.md)).
+
+PR 2: availability exceptions and the admin calendar
+
+- [ ] Closures for holidays and maintenance, taken out of the shared availability calculation so the calendar and booking checks can't disagree
+- [ ] Before a closure is confirmed, admins see which existing reservations it affects. Reservations are never cancelled automatically.
+- [ ] A weekly calendar for admins, built on the booking calendar, showing bookings with user names, including moving a booking
+- [ ] Calendars refresh when the window regains focus, and every 60 seconds while visible
+- [ ] Light/Dark/System theme switch, saved in the browser, keeping system theme support
+
+PR 3: user management and account security
+
+- [ ] Admin user list with role changes and deactivation
+- [ ] The last active admin can't be removed or deactivated, even by concurrent requests
+- [ ] Role changes and deactivation take effect on existing tokens immediately
+- [ ] Temporary per-account lockout that doesn't reveal whether an account exists
+- [ ] Re-hash passwords on login when the hasher asks for it (from M3)
+
+PR 4: email flows
+
+- [ ] `IEmailSender` with a development-only sender, testable without a paid provider
+- [ ] Email verification, which allows a generic registration response (from M3)
+- [ ] Password reset that ends existing sessions
+- [ ] Tokens that are random, expiring and single use, stored only as hashes and never written to normal logs
+- [ ] Booking confirmation and cancellation emails, with an `.ics` attachment
+
 ### M7: Deployment
 
 Tracked so far:
@@ -373,10 +442,11 @@ Tracked so far:
 
 ## Later Ideas
 
-These are tracked as part of milestones M5–M7 above:
+Availability exceptions, email notifications and calendar export are planned in M6 above.
+
+Deferred, with no milestone yet:
 
 - Resource categories
-- Reservation history filters
-- Availability exceptions
-- Email notifications
-- Calendar export
+- Advanced reservation history filters
+- Full localisation, beyond the fixed `en-GB` format
+- Moving a booking to another resource

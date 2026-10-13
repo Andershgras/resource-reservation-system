@@ -1,11 +1,18 @@
 import type { ComponentProps } from 'react'
+import { Link, type LinkProps } from 'react-router'
 import './Button.css'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
+type ButtonSize = 'md' | 'sm'
+
 interface ButtonProps extends ComponentProps<'button'> {
   variant?: ButtonVariant
-  size?: 'md' | 'sm'
+  size?: ButtonSize
+}
+
+function buttonClasses(variant: ButtonVariant, size: ButtonSize, className: string | undefined) {
+  return ['button', `button-${variant}`, `button-${size}`, className].filter(Boolean).join(' ')
 }
 
 // A button is type="button" unless it says otherwise, so it never submits a
@@ -17,9 +24,15 @@ export function Button({
   className,
   ...props
 }: ButtonProps) {
-  const classes = ['button', `button-${variant}`, `button-${size}`, className]
-    .filter(Boolean)
-    .join(' ')
+  return <button type={type} className={buttonClasses(variant, size, className)} {...props} />
+}
 
-  return <button type={type} className={classes} {...props} />
+interface ButtonLinkProps extends LinkProps {
+  variant?: ButtonVariant
+  size?: ButtonSize
+}
+
+// A link that looks like a button, for actions that go to another page.
+export function ButtonLink({ variant = 'secondary', size = 'md', className, ...props }: ButtonLinkProps) {
+  return <Link className={buttonClasses(variant, size, className)} {...props} />
 }

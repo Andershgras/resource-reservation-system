@@ -3,10 +3,10 @@ import type {
   ReservationStatus,
   ResourceResponse,
 } from '../api/types'
-import { formatDateTimeRange } from '../lib/dates'
+import { formatDateTimeRange, formatInstant } from '../lib/dates'
 import { Alert, type Notice } from '../ui/Alert'
 import { Badge } from '../ui/Badge'
-import { Button } from '../ui/Button'
+import { Button, ButtonLink } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Field, Select } from '../ui/Field'
 import { EmptyState, LoadingState } from '../ui/States'
@@ -28,6 +28,8 @@ interface ReservationsSectionProps {
   emptyDescription?: string
   cancellingReservationId: number | null
   onCancelReservation: (reservation: ReservationResponse) => void
+  // Where to move a reservation to a new time, or null when it can't be moved.
+  moveLinkFor?: (reservation: ReservationResponse) => string | null
 }
 
 export function ReservationsSection({
@@ -46,6 +48,7 @@ export function ReservationsSection({
   emptyDescription,
   cancellingReservationId,
   onCancelReservation,
+  moveLinkFor,
 }: ReservationsSectionProps) {
   const showFilters =
     filterResources &&
@@ -107,6 +110,7 @@ export function ReservationsSection({
           {reservations.map((reservation) => {
             const isActive = reservation.status === 'Active'
             const period = formatDateTimeRange(reservation.startTime, reservation.endTime)
+            const moveLink = isActive ? moveLinkFor?.(reservation) ?? null : null
 
             return (
               <li key={reservation.id} className={isActive ? 'item' : 'item item-muted'}>
@@ -126,10 +130,21 @@ export function ReservationsSection({
                         <dd>{reservation.userName} ({reservation.userEmail})</dd>
                       </div>
                     )}
+                    <ReservationHistory reservation={reservation} />
                   </dl>
                 </div>
                 {isActive && (
                   <div className="item-actions">
+                    {moveLink && (
+                      <ButtonLink
+                        size="sm"
+                        variant="ghost"
+                        to={moveLink}
+                        aria-label={`Move ${reservation.resourceName}, ${period}`}
+                      >
+                        Move
+                      </ButtonLink>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -147,5 +162,36 @@ export function ReservationsSection({
         </ul>
       )}
     </Card>
+  )
+}
+
+// When the reservation was made, moved and cancelled. Times that weren't
+// recorded, for reservations from before they were, are left out.
+function ReservationHistory({ reservation }: { reservation: ReservationResponse }) {
+  const cancelledBy = reservation.cancelledByName && reservation.cancelledByUserId !== reservation.userId
+    ? ` by ${reservation.cancelledByName}`
+    : ''
+
+  return (
+    <>
+      {reservation.createdAt && (
+        <div>
+          <dt>Booked</dt>
+          <dd>{formatInstant(reservation.createdAt)}</dd>
+        </div>
+      )}
+      {reservation.updatedAt && (
+        <div>
+          <dt>Moved</dt>
+          <dd>{formatInstant(reservation.updatedAt)}</dd>
+        </div>
+      )}
+      {reservation.cancelledAt && (
+        <div>
+          <dt>Cancelled</dt>
+          <dd>{formatInstant(reservation.cancelledAt)}{cancelledBy}</dd>
+        </div>
+      )}
+    </>
   )
 }

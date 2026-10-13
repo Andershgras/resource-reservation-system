@@ -31,6 +31,16 @@ public class AppDbContext : DbContext
             resource.Property(r => r.Name).HasMaxLength(100);
             resource.Property(r => r.Description).HasMaxLength(500);
             resource.Property(r => r.Location).HasMaxLength(200);
+
+            // Booking rule overrides are optional, but must make sense when set.
+            resource.ToTable(table => table.HasCheckConstraint(
+                "CK_Resources_BookingPolicy",
+                "([MinDurationMinutes] IS NULL OR [MinDurationMinutes] > 0) AND " +
+                "([MaxDurationMinutes] IS NULL OR [MaxDurationMinutes] > 0) AND " +
+                "([MinLeadTimeMinutes] IS NULL OR [MinLeadTimeMinutes] >= 0) AND " +
+                "([MaxAdvanceDays] IS NULL OR [MaxAdvanceDays] > 0) AND " +
+                "([MinDurationMinutes] IS NULL OR [MaxDurationMinutes] IS NULL OR " +
+                "[MinDurationMinutes] <= [MaxDurationMinutes])"));
         });
 
         modelBuilder.Entity<Reservation>(reservation =>
@@ -52,6 +62,12 @@ public class AppDbContext : DbContext
                 .WithMany(u => u.Reservations)
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            reservation.HasOne(r => r.CancelledBy)
+                .WithMany()
+                .HasForeignKey(r => r.CancelledByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            reservation.Property(r => r.Version).IsRowVersion();
         });
     }
 }
