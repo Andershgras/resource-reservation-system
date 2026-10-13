@@ -35,6 +35,7 @@ public class AuthorizationTests : ApiTestBase
     {
         { "GET", "/api/reservations" },
         { "GET", "/api/reservations/resource/1" },
+        { "GET", "/api/reservations/resource/1?from=2030-01-14&to=2030-01-20" },
         { "GET", "/api/reservations/user/1" },
         { "POST", "/api/resources" },
         { "PUT", "/api/resources/1" },

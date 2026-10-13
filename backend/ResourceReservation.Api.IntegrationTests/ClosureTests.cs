@@ -66,6 +66,40 @@ public class ClosureTests : ApiTestBase
         Assert.Equal(ReservationStatuses.Active, stillActive!.Status);
     }
 
+    // A booking a closure covers stays where admins and its owner can see it,
+    // and only an admin's explicit cancellation removes it.
+    [Fact]
+    public async Task BookingInsideANewClosure_StaysVisible_AndAnAdminCanCancelIt()
+    {
+        var (adminClient, resourceId, userClient) = await SetUpAsync();
+        var reservation = await BookAsync(userClient, resourceId, 10, 11);
+        var day = DateOnly.FromDateTime(BookingDay).ToString("yyyy-MM-dd");
+        var create = await adminClient.PostAsJsonAsync("/api/availabilityexceptions", Closure(resourceId, 9, 12));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+
+        var adminWeek = await adminClient.GetFromJsonAsync<List<ReservationResponseDto>>(
+            $"/api/reservations/resource/{resourceId}?from={day}&to={day}");
+        var mine = await userClient.GetFromJsonAsync<List<ReservationResponseDto>>("/api/reservations/me");
+        var schedule = await userClient.GetFromJsonAsync<ResourceScheduleResponseDto>(ScheduleUrl(resourceId));
+
+        Assert.Equal(ReservationStatuses.Active, Assert.Single(adminWeek!).Status);
+        Assert.Equal(ReservationStatuses.Active, Assert.Single(mine!).Status);
+        Assert.Equal((BookingDay.AddHours(10), BookingDay.AddHours(11)),
+            (Assert.Single(schedule!.ReservedSlots).StartTime, schedule.ReservedSlots[0].EndTime));
+        Assert.Single(schedule.ClosedSlots);
+
+        var cancel = await adminClient.PutAsJsonAsync(
+            $"/api/reservations/{reservation.Id}/cancel",
+            new CancelReservationDto { Version = adminWeek![0].Version });
+
+        Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
+        var cancelled = Assert.Single((await userClient.GetFromJsonAsync<List<ReservationResponseDto>>("/api/reservations/me"))!);
+        Assert.Equal((ReservationStatuses.Cancelled, "Integration Admin"), (cancelled.Status, cancelled.CancelledByName));
+        var after = await userClient.GetFromJsonAsync<ResourceScheduleResponseDto>(ScheduleUrl(resourceId));
+        Assert.Empty(after!.ReservedSlots);
+        Assert.Single(after.ClosedSlots);
+    }
+
     [Fact]
     public async Task Create_ListsReservationsMadeAfterThePreview()
     {
