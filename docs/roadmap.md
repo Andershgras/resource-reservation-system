@@ -199,8 +199,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M1 | Booking correctness and data integrity | Done ([#52](https://github.com/Andershgras/resource-reservation-system/pull/52)) |
 | M2 | Backend structure (service layer, ProblemDetails, options validation) and integration tests on real SQL Server | Done ([#53](https://github.com/Andershgras/resource-reservation-system/pull/53)) |
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
-| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done, awaiting review |
-| M5 | UI/UX modernisation (design system, week calendar, accessibility) | Not started |
+| M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
+| M5 | UI/UX modernisation (design system, week calendar, accessibility) | In progress |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management) | Not started |
 | M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
 
@@ -307,17 +307,41 @@ Follow-ups noticed during M4:
 
 ### M5: UI/UX Modernisation
 
-Not started. Follow-ups carried over from earlier milestones:
+Agreed decisions:
+- Plain CSS with design tokens and a stylesheet next to each component. No CSS framework or CSS-in-JS.
+- React Router's data router (`createBrowserRouter`), so leaving a form with unsaved changes can be blocked. Data still loads through TanStack Query, not route loaders.
+- Booking start and end times are chosen in 15-minute steps.
+- Dates and times are shown in `en-GB` format with a 24-hour clock. Times stay wall-clock times in `Europe/Copenhagen` ([ADR 0001](adr/0001-time-zone-convention.md)), whatever the viewer's own time zone.
+- The anonymous schedule no longer returns `reservationId`.
+- Reservation responses, which only the owner or an admin can read, include `userName` and `userEmail`.
+- The milestone is delivered as two pull requests that can be reviewed on their own.
 
-- **Unsaved form drafts (from M4).** Since M4, each screen is its own route, so a half-filled form is lost when the user switches tabs. Address this in the UI, not with shared global state. For example:
-  - warn before leaving a form with unsaved changes
-  - make create and edit forms smaller steps, such as an edit dialog on the list screen, so less is typed before saving
+PR 1: foundation
 
-  Keep drafts local to their page. Filters and the booking selection already survive in the address.
-- Friendly validation messages on the request DTOs (from M2).
-- Show user names, not IDs, to admins (audit L1).
-- Show fully booked days in the schedule (audit L3). A unit test pins the current behaviour, so the change is deliberate.
-- Remove the identical ternary branches in the booking section (audit L4).
+- [ ] Backend: remove `reservationId` from the schedule, and add `userName` and `userEmail` to reservation responses (audit L1)
+- [ ] Backend: friendly validation messages on the request DTOs (from M2)
+- [ ] Date and time formatting in `en-GB`, 24-hour, independent of the browser's time zone
+- [ ] Design tokens and CSS structure, keeping light and dark mode
+- [ ] Shared UI components, with accessibility tests
+- [ ] API validation errors shown beside their fields
+- [ ] Accessible confirmation dialog, with accessibility and keyboard tests
+- [ ] Screens moved to the shared components and the new layout
+- [ ] Docs
+
+PR 2: booking calendar and navigation
+
+- [ ] Weekly booking calendar: available and reserved periods, fully booked days still shown (audit L3), start and end chosen inside an available interval, works on desktop and mobile
+- [ ] Unsaved-changes guard on forms, which never blocks automatic session expiry
+- [ ] Remaining accessibility and keyboard tests, including daylight-saving transitions and slot boundaries in the calendar
+- [ ] Screenshots and documentation
+
+Follow-ups carried over from earlier milestones, and where they are handled:
+
+- **Unsaved form drafts (from M4):** PR 2 warns before leaving a form with unsaved changes. Drafts stay local to their page, with no shared global state.
+- **Friendly validation messages on the request DTOs (from M2):** PR 1.
+- **User names instead of IDs for admins (audit L1):** PR 1.
+- **Fully booked days in the schedule (audit L3):** PR 2. A unit test pins the current behaviour, so the change is deliberate.
+- **Identical ternary branches in the booking section (audit L4):** PR 2, where the booking section is replaced by the calendar.
 
 ### M7: Deployment
 
