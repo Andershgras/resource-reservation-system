@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 
 namespace ResourceReservation.Api.Models;
 
@@ -28,6 +28,13 @@ public class User
 
     // Null for accounts created before it was recorded.
     public DateTimeOffset? CreatedAt { get; set; }
+
+    // New accounts can't sign in until the owner of the address confirms it
+    // (ADR 0011). Accounts from before verification existed count as confirmed.
+    public bool IsEmailConfirmed { get; set; }
+
+    // Null for accounts confirmed before it was recorded, and unconfirmed ones.
+    public DateTimeOffset? EmailConfirmedAt { get; set; }
 
     // Failed sign-ins since the last success or lockout. Reaching the limit
     // locks the account until LockoutEndsAt and starts the count again.

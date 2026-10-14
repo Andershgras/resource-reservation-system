@@ -22,6 +22,23 @@ namespace ResourceReservation.Api.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("ResourceReservation.Api.Models.AccountEmailCooldown", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTimeOffset>("LastSentAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("UserId", "Purpose");
+
+                    b.ToTable("AccountEmailCooldowns");
+                });
+
             modelBuilder.Entity("ResourceReservation.Api.Models.Availability", b =>
                 {
                     b.Property<int>("Id")
@@ -113,6 +130,82 @@ namespace ResourceReservation.Api.Migrations
                     b.ToTable("AvailabilityRules");
                 });
 
+            modelBuilder.Entity("ResourceReservation.Api.Models.BookingNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CalendarSequence")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ChangedByAdmin")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("RecipientName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("ReservationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ResourceLocation")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ResourceName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReservationId");
+
+                    b.HasIndex("NextAttemptAt", "Id")
+                        .HasFilter("[SentAt] IS NULL AND [FailedAt] IS NULL");
+
+                    b.ToTable("BookingNotifications");
+                });
+
             modelBuilder.Entity("ResourceReservation.Api.Models.Reservation", b =>
                 {
                     b.Property<int>("Id")
@@ -120,6 +213,9 @@ namespace ResourceReservation.Api.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CalendarSequence")
+                        .HasColumnType("int");
 
                     b.Property<DateTimeOffset?>("CancelledAt")
                         .HasColumnType("datetimeoffset");
@@ -230,10 +326,16 @@ namespace ResourceReservation.Api.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<DateTimeOffset?>("EmailConfirmedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<int>("FailedLoginCount")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsEmailConfirmed")
                         .HasColumnType("bit");
 
                     b.Property<DateTimeOffset?>("LockoutEndsAt")
@@ -267,6 +369,56 @@ namespace ResourceReservation.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("ResourceReservation.Api.Models.UserToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Purpose");
+
+                    b.ToTable("UserTokens");
+                });
+
+            modelBuilder.Entity("ResourceReservation.Api.Models.AccountEmailCooldown", b =>
+                {
+                    b.HasOne("ResourceReservation.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ResourceReservation.Api.Models.Availability", b =>
@@ -309,6 +461,17 @@ namespace ResourceReservation.Api.Migrations
                     b.Navigation("Resource");
                 });
 
+            modelBuilder.Entity("ResourceReservation.Api.Models.BookingNotification", b =>
+                {
+                    b.HasOne("ResourceReservation.Api.Models.Reservation", "Reservation")
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Reservation");
+                });
+
             modelBuilder.Entity("ResourceReservation.Api.Models.Reservation", b =>
                 {
                     b.HasOne("ResourceReservation.Api.Models.User", "CancelledBy")
@@ -331,6 +494,17 @@ namespace ResourceReservation.Api.Migrations
                     b.Navigation("CancelledBy");
 
                     b.Navigation("Resource");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ResourceReservation.Api.Models.UserToken", b =>
+                {
+                    b.HasOne("ResourceReservation.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });
