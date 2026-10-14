@@ -18,8 +18,6 @@ public class CalendarInviteTests
     // Spring forward on Sunday 31 March 2030: 02:00 becomes 03:00.
     [InlineData("2030-03-31T01:59", "2030-03-31T00:59")]
     [InlineData("2030-03-31T03:00", "2030-03-31T01:00")]
-    // 02:30 doesn't exist that night; it lands where the clock jumps to, 03:30 summer time.
-    [InlineData("2030-03-31T02:30", "2030-03-31T01:30")]
     // Fall back on Sunday 27 October 2030: 03:00 summer time becomes 02:00 winter time.
     [InlineData("2030-10-27T01:59", "2030-10-26T23:59")]
     [InlineData("2030-10-27T03:00", "2030-10-27T02:00")]
@@ -31,6 +29,48 @@ public class CalendarInviteTests
 
         Assert.Equal(DateTime.Parse(expectedUtc), utc);
         Assert.Equal(DateTimeKind.Utc, utc.Kind);
+    }
+
+    // 02:00–02:59 never happens that night. Such times are rejected when they
+    // are entered, and converting one fails rather than moving it silently.
+    [Theory]
+    [InlineData("2030-03-31T02:00")]
+    [InlineData("2030-03-31T02:30")]
+    [InlineData("2030-03-31T02:59")]
+    public void ATimeThatNeverHappens_IsReportedAndHasNoInstant(string wallClock)
+    {
+        var clock = TestSchedulingClock.Create();
+        var time = DateTime.Parse(wallClock);
+
+        Assert.True(clock.IsNonexistent(time));
+        Assert.NotNull(clock.CheckTimesExist(new DateTime(2030, 3, 31, 1, 0, 0), time));
+        Assert.NotNull(clock.CheckTimesExist(time, new DateTime(2030, 3, 31, 4, 0, 0)));
+        Assert.Throws<ArgumentException>(() => clock.ToUtc(time));
+    }
+
+    [Theory]
+    [InlineData("2030-03-31T01:59")]
+    [InlineData("2030-03-31T03:00")]
+    // Happens twice, but happens.
+    [InlineData("2030-10-27T02:30")]
+    public void TimesThatHappen_AreAccepted(string wallClock)
+    {
+        var clock = TestSchedulingClock.Create();
+
+        Assert.False(clock.IsNonexistent(DateTime.Parse(wallClock)));
+    }
+
+    // A booking across the skipped hour starts and ends at real times, so it
+    // is allowed. It lasts one real hour.
+    [Fact]
+    public void ABookingAcrossTheSpringChange_IsAllowed_AndLastsItsRealLength()
+    {
+        var clock = TestSchedulingClock.Create();
+        var start = new DateTime(2030, 3, 31, 1, 30, 0);
+        var end = new DateTime(2030, 3, 31, 3, 30, 0);
+
+        Assert.Null(clock.CheckTimesExist(start, end));
+        Assert.Equal(TimeSpan.FromHours(1), clock.ToUtc(end) - clock.ToUtc(start));
     }
 
     [Fact]

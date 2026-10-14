@@ -14,7 +14,7 @@ public class AvailabilitiesControllerTests
     public async Task CreateAvailability_WhenResourceDoesNotExist_ReturnsBadRequest()
     {
         await using var context = CreateContext();
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -37,7 +37,7 @@ public class AvailabilitiesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -54,7 +54,7 @@ public class AvailabilitiesControllerTests
     {
         await using var context = CreateContext();
         var resource = await SeedResourceAsync(context);
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -79,7 +79,7 @@ public class AvailabilitiesControllerTests
             resource.Id,
             new DateTime(2030, 1, 15, 9, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0));
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -102,7 +102,7 @@ public class AvailabilitiesControllerTests
             resource.Id,
             new DateTime(2030, 1, 15, 9, 0, 0),
             new DateTime(2030, 1, 15, 10, 0, 0));
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -126,7 +126,7 @@ public class AvailabilitiesControllerTests
             firstResource.Id,
             new DateTime(2030, 1, 15, 9, 0, 0),
             new DateTime(2030, 1, 15, 11, 0, 0));
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.CreateAvailability(new CreateAvailabilityDto
         {
@@ -154,7 +154,7 @@ public class AvailabilitiesControllerTests
             resource.Id,
             new DateTime(2030, 1, 15, 12, 0, 0),
             new DateTime(2030, 1, 15, 13, 0, 0));
-        var controller = new AvailabilitiesController(context).WithHttpContext();
+        var controller = new AvailabilitiesController(context, TestSchedulingClock.Create()).WithHttpContext();
 
         var result = await controller.UpdateAvailability(
             availabilityToUpdate.Id,

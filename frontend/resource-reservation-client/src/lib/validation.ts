@@ -5,6 +5,7 @@ import {
   type BookingRuleField,
   type BookingRulesDraft,
 } from './bookingRules'
+import { isNonexistentWallClock, nonexistentTimeMessage } from './dates'
 import type { FieldErrors } from './errors'
 
 // Client-side checks that run before a form is sent. Each returns the errors
@@ -141,12 +142,16 @@ export function validateAvailabilityForm(
 
   if (!startTime) {
     errors.startTime = 'Enter a start time.'
+  } else if (isNonexistentWallClock(startTime)) {
+    errors.startTime = nonexistentTimeMessage
   }
 
   if (!endTime) {
     errors.endTime = 'Enter an end time.'
   } else if (startTime && endTime <= startTime) {
     errors.endTime = 'End time must be after start time.'
+  } else if (isNonexistentWallClock(endTime)) {
+    errors.endTime = nonexistentTimeMessage
   }
 
   return errors

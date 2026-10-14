@@ -3,6 +3,7 @@ import {
   validateAuthForm,
   validateAvailabilityForm,
   validateAvailabilityRuleForm,
+  validateClosureForm,
   validateResourceForm,
 } from './validation'
 import { emptyBookingRules } from './bookingRules'
@@ -97,6 +98,16 @@ describe('validateAvailabilityForm', () => {
 
   it('accepts a complete window', () => {
     expect(validateAvailabilityForm('1', '2030-01-15T09:00', '2030-01-15T10:00')).toEqual({})
+  })
+})
+
+describe('times summer time skips', () => {
+  it('are refused for windows and closures, beside the field', () => {
+    const message = "That time doesn't exist: the clocks skip it when summer time starts. Choose a time outside the skipped hour."
+
+    expect(validateAvailabilityForm('1', '2030-03-31T02:30', '2030-03-31T04:00').startTime).toBe(message)
+    expect(validateClosureForm('1', '2030-03-31T01:00', '2030-03-31T02:15', 'Works').endTime).toBe(message)
+    expect(validateClosureForm('1', '2030-03-31T01:00', '2030-03-31T04:00', 'Works')).toEqual({})
   })
 })
 

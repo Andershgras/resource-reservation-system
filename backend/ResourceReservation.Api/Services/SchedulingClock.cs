@@ -25,19 +25,45 @@ public class SchedulingClock
         return _timeProvider.GetUtcNow();
     }
 
+    public const string NonexistentTimeMessage =
+        "That time doesn't exist: the clocks skip it when summer time starts. Choose a time outside the skipped hour.";
+
+    // True for a wall-clock time that never happens in the scheduling time
+    // zone: the hour skipped when summer time starts, 02:00–02:59 in
+    // Copenhagen on the last Sunday of March. Bookings, moves, closures and
+    // one-off windows can't start or end at such a time (ADR 0001).
+    public bool IsNonexistent(DateTime wallClock)
+    {
+        return _timeZone.IsInvalidTime(DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified));
+    }
+
+    // A validation error if the start or end of a period never happens.
+    public ServiceError? CheckTimesExist(DateTime startTime, DateTime endTime)
+    {
+        return IsNonexistent(startTime) || IsNonexistent(endTime)
+            ? ServiceError.Validation(NonexistentTimeMessage)
+            : null;
+    }
+
     // The UTC instant of a wall-clock time in the scheduling time zone, for
-    // calendar invitations. A time in the spring-forward gap doesn't exist, so
-    // it is read with the offset from before the gap, which lands it where the
-    // clock jumps to: 02:30 becomes 03:30 summer time. A time in the repeated
-    // autumn hour is read as its first occurrence, in summer time.
+    // calendar invitations. A time that never happens has no instant and
+    // throws, rather than being moved silently; such times are rejected when
+    // they are entered. A time in the repeated autumn hour happens twice and
+    // is read as its first occurrence, in summer time.
     public DateTime ToUtc(DateTime wallClock)
     {
         var local = DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified);
-        var offset = _timeZone.IsInvalidTime(local)
-            ? _timeZone.GetUtcOffset(local.AddHours(-3))
-            : _timeZone.IsAmbiguousTime(local)
-                ? _timeZone.GetAmbiguousTimeOffsets(local).Max()
-                : _timeZone.GetUtcOffset(local);
+
+        if (_timeZone.IsInvalidTime(local))
+        {
+            throw new ArgumentException(
+                $"{local:yyyy-MM-dd HH:mm} doesn't exist in the scheduling time zone.",
+                nameof(wallClock));
+        }
+
+        var offset = _timeZone.IsAmbiguousTime(local)
+            ? _timeZone.GetAmbiguousTimeOffsets(local).Max()
+            : _timeZone.GetUtcOffset(local);
 
         return DateTime.SpecifyKind(local - offset, DateTimeKind.Utc);
     }

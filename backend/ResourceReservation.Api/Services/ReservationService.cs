@@ -144,6 +144,11 @@ public class ReservationService
             return ServiceError.Validation("EndTime must be after StartTime.");
         }
 
+        if (_schedulingClock.CheckTimesExist(request.StartTime, request.EndTime) is { } timeError)
+        {
+            return timeError;
+        }
+
         var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)
             .Check(request.StartTime, request.EndTime, _schedulingClock.GetLocalNow());
 
@@ -317,6 +322,11 @@ public class ReservationService
         if (request.EndTime <= request.StartTime)
         {
             return ServiceError.Validation("EndTime must be after StartTime.");
+        }
+
+        if (_schedulingClock.CheckTimesExist(request.StartTime, request.EndTime) is { } timeError)
+        {
+            return timeError;
         }
 
         var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)

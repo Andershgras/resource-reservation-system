@@ -4,7 +4,7 @@ import type {
   ReservationResponse,
   ResourceScheduleResponse,
 } from '../api/types'
-import { addDaysToDateKey, formatDateHeading, formatTime, getDateKey } from './dates'
+import { addDaysToDateKey, formatDateHeading, formatTime, getDateKey, isNonexistentWallClock } from './dates'
 
 // The weekly booking calendar's model. Times are the API's wall-clock times
 // (ADR 0001), and all arithmetic is on wall-clock minutes: a booking across
@@ -246,7 +246,8 @@ export function startOptions(
     options.push(toOption(minutes, intervalDate))
   }
 
-  return options.filter((option) => endOptions(interval, option.value, limits).length > 0)
+  return options.filter((option) =>
+    !isNonexistentWallClock(option.value) && endOptions(interval, option.value, limits).length > 0)
 }
 
 // End times after a start, within the duration limits: every quarter hour up
@@ -278,7 +279,8 @@ export function endOptions(
     options.push(toOption(end, intervalDate))
   }
 
-  return options
+  // The API rejects a booking that ends in the hour skipped by summer time.
+  return options.filter((option) => !isNonexistentWallClock(option.value))
 }
 
 // One hour after the start, or the nearest allowed end before that. When the

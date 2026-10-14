@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.Models;
@@ -13,10 +13,12 @@ namespace ResourceReservation.Api.Controllers;
 public class AvailabilitiesController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly SchedulingClock _schedulingClock;
 
-    public AvailabilitiesController(AppDbContext context)
+    public AvailabilitiesController(AppDbContext context, SchedulingClock schedulingClock)
     {
         _context = context;
+        _schedulingClock = schedulingClock;
     }
 
     [HttpGet]
@@ -58,6 +60,11 @@ public class AvailabilitiesController : ControllerBase
         if (createAvailabilityDto.EndTime <= createAvailabilityDto.StartTime)
         {
             return this.ToErrorResult(ServiceError.Validation("EndTime must be after StartTime."));
+        }
+
+        if (_schedulingClock.CheckTimesExist(createAvailabilityDto.StartTime, createAvailabilityDto.EndTime) is { } createTimeError)
+        {
+            return this.ToErrorResult(createTimeError);
         }
 
         if (await HasOverlappingAvailability(
@@ -108,6 +115,11 @@ public class AvailabilitiesController : ControllerBase
         if (updateAvailabilityDto.EndTime <= updateAvailabilityDto.StartTime)
         {
             return this.ToErrorResult(ServiceError.Validation("EndTime must be after StartTime."));
+        }
+
+        if (_schedulingClock.CheckTimesExist(updateAvailabilityDto.StartTime, updateAvailabilityDto.EndTime) is { } updateTimeError)
+        {
+            return this.ToErrorResult(updateTimeError);
         }
 
         if (await HasOverlappingAvailability(

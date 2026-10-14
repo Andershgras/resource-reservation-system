@@ -147,6 +147,43 @@ export function toSchedulingWallClock(instant: Date) {
   return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
 }
 
+const clockTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+
+const dayInMilliseconds = 24 * 60 * 60_000
+
+// The wall-clock time an instant shows, as if it were UTC, in milliseconds.
+function wallClockAsUtc(instant: number) {
+  const match = clockTimePattern.exec(toSchedulingWallClock(new Date(instant)))!
+  const [, year, month, day, hour, minute] = match.map(Number)
+
+  return Date.UTC(year, month - 1, day, hour, minute)
+}
+
+// True for a wall-clock time that never happens in the scheduling time zone:
+// the hour skipped when summer time starts, 02:00–02:59 in Copenhagen on the
+// last Sunday of March. The API rejects bookings, closures and windows that
+// start or end then (ADR 0001). A time exists if reading it with the zone's
+// offset from a day before or a day after gives back the same clock time.
+export function isNonexistentWallClock(value: string) {
+  const match = clockTimePattern.exec(value)
+
+  if (!match) {
+    return false
+  }
+
+  const [, year, month, day, hour, minute] = match.map(Number)
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute)
+
+  return [asUtc - dayInMilliseconds, asUtc + dayInMilliseconds].every((nearby) => {
+    const offset = wallClockAsUtc(nearby) - nearby
+
+    return wallClockAsUtc(asUtc - offset) !== asUtc
+  })
+}
+
+export const nonexistentTimeMessage =
+  "That time doesn't exist: the clocks skip it when summer time starts. Choose a time outside the skipped hour."
+
 // Now as wall-clock time in the scheduling time zone, for comparing with the
 // API's times.
 export function nowInSchedulingZone(now = new Date()) {
