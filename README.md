@@ -62,7 +62,9 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 
 ### Authentication And Authorization
 
-- User registration
+- User registration, confirmed through an emailed link before the account can sign in
+- Registration and password reset answer the same whether or not an address has an account
+- Password reset from an emailed link, which signs out every device
 - User login
 - JWT-based authentication
 - Session expiry: the frontend returns to the login screen when the token expires or the API rejects it
@@ -98,6 +100,7 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 - View own reservations, with when each was made, moved and cancelled
 - Move an upcoming reservation to another free time on the same resource, in the same calendar
 - Cancel own active reservations
+- An email when a booking is made, moved or cancelled, with a calendar invitation that adds, updates or removes the event
 
 ### Backend Rules
 
@@ -217,17 +220,26 @@ The frontend provides role-based workflows. Admin users manage the booking setup
 ### Auth
 
 ```text
-POST /api/auth/register
+POST /api/auth/register                202, the same answer for every address
 POST /api/auth/login
+POST /api/auth/resend-verification     202, the same answer for every address
+POST /api/auth/verify-email            { token, password }
+POST /api/auth/forgot-password         202, the same answer for every address
+POST /api/auth/reset-password/check    { token }: whether the link still works
+POST /api/auth/reset-password          { token, password, name? }
 ```
+
+Registration creates an unconfirmed account and emails a link, or emails a notice if the address already has an account. An unconfirmed account can't sign in (`403` after the right password) until `verify-email` is called with the link's token and the account's password. A password reset ends every session. Links work once and expire after 24 hours (verification) or 1 hour (reset). See [ADR 0011](docs/adr/0011-email-flows.md).
 
 Login returns the token, `expiresAt` (UTC) and `expiresInSeconds`. Clients should time the session from `expiresInSeconds`, because their own clock may be wrong.
 
-Login and registration share a rate limit per client IP address, using a token bucket:
+Login, verification and reset share a rate limit per client IP address, using a token bucket:
 - A client starts with 10 attempts, then gets one more every 6 seconds, up to 10. That allows 10 attempts per minute sustained, with a burst of up to about 20 in the first minute.
 - Over the limit, the API returns `429` with `Retry-After: 6`, the refill interval. That isn't the time left, so the next attempt may be allowed sooner.
 
 Five failed sign-ins in a row lock the account for 15 minutes. Every failure, including an unknown email or a locked account, returns the same `401` and message. A deactivated account gets `403` only after the right password. Every authenticated request checks that the token's user is still active, with the same role and security stamp ([ADR 0010](docs/adr/0010-user-management-and-account-security.md)).
+
+Registration, resend-verification and forgot-password share a stricter limit of their own: 5 requests, then one every 3 minutes. Each account also gets at most one email of each kind every 2 minutes.
 
 See [security](docs/security.md#brute-force-protection).
 
@@ -392,6 +404,12 @@ The development Admin user is seeded from `appsettings.Development.json`:
 }
 ```
 
+### Emails In Development
+
+In Development, emails aren't sent. Each one is written as an `.eml` file to `backend/ResourceReservation.Api/.dev-emails/`, which git ignores. Open a file in any mail client, or as text, to follow a verification or reset link, or to see a booking email and its calendar invitation. The links point at `http://localhost:5173`, set by `Frontend:BaseUrl`.
+
+The seeded admin and accounts that existed before email verification are already confirmed.
+
 ### Frontend
 
 Start the backend first. Then run:
@@ -510,8 +528,6 @@ These are intentionally outside the finished MVP, but would make good future iss
 - Resource categories and filtering
 - Better calendar controls for week/month navigation
 - Admin analytics or utilization overview
-- Calendar export
-- Email notifications
 - Docker setup
 - Production deployment
 - Multi-tenant organization support

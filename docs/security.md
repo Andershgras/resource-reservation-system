@@ -12,6 +12,19 @@ This page describes how the application protects accounts and data, and lists th
 - **Deactivated accounts** never get a token. They are told "This account has been deactivated." only after the right password.
 - **Old password hashes are upgraded.** When the hasher reports an old format or work factor, the password is re-hashed at sign-in, but only if the stored hash is still the one that was verified.
 - **Registration** always creates a `User`. The client can't choose a role. The first Admin comes from the `SeedAdmin` settings.
+- **Email verification:** new accounts can't sign in, get a token or book until the address is confirmed. Confirming needs the emailed link and the account's password, so a link sent to someone who didn't register can't activate the account ([ADR 0011](adr/0011-email-flows.md)). Accounts from before verification existed count as confirmed.
+- **Password reset** sets a new security stamp, which ends every session, clears any lockout and cancels the user's other links. Resetting an unconfirmed account sets it up again for the owner of the address, with nothing kept from whoever registered it.
+
+## Email links
+
+Verification and reset links ([ADR 0011](adr/0011-email-flows.md)):
+
+- **Tokens:** 256 random bits from the cryptographic random number generator, stored only as a SHA-256 hash.
+- **Expiry:** 24 hours for verification and 1 hour for a reset, both configurable.
+- **Single use:** a token is used up by one conditional `UPDATE`, so two requests with the same link can't both succeed. A newer link of the same kind cancels older ones.
+- **Kept out of logs and history:** the token travels in the URL fragment, which browsers never send to a server. The page removes it from the address before drawing, and only posts it when the form is submitted, so a mail scanner opening the link can't use it up.
+- **Never logged:** account emails are queued in memory only, and logged by kind and user ID. A test captures every log level through registration, verification and reset, and checks that no token, hash or link appears.
+- **Throttled:** each account gets at most one email of each kind every 2 minutes, claimed atomically. The requests that send email also share a stricter per-IP rate limit.
 
 ## Authorization
 
@@ -43,7 +56,8 @@ The frontend keeps the token in `localStorage` ([ADR 0004](adr/0004-token-storag
 
 ## Brute-force protection
 
-- **Rate limit:** login and registration share one rate limit per client IP address. It uses ASP.NET Core's token bucket limiter, which works like this with the default settings (behaviour measured against the running API):
+- **Email rate limit:** registration, resending a verification link and asking for a reset share a separate, stricter limit per client IP address: 5 requests, then one every 3 minutes (`RateLimiting:Email`). It stops one client mailing many addresses; the per-account cooldown stops repeated emails to one address.
+- **Rate limit:** login, email verification and password resets share one rate limit per client IP address. It uses ASP.NET Core's token bucket limiter, which works like this with the default settings (behaviour measured against the running API):
   - **Burst:** each client starts with a full bucket of 10 tokens. Each attempt, successful or not, uses one, so 10 attempts in a row are allowed.
   - **Refill:** one token is added every 6 seconds (`WindowSeconds / PermitLimit`), up to 10. The limiter's internal timer adds them, so in practice a token arrives about every 6.1 seconds.
   - **Rate:** the sustained rate is about 10 attempts per minute. Because the bucket starts full, up to about 20 are possible in the first minute: the burst of 10, plus about 10 refills.
@@ -104,13 +118,16 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 
 | Limitation | Effect | Plan |
 |---|---|---|
-| **Registration reveals existing accounts.** Registering an existing email returns "Email is already registered." | Anyone can check whether an email has an account, at the rate limit's pace | See [account enumeration](#account-enumeration) below |
 | **Login timing is reduced, not constant** | Small timing differences remain, such as the database lookup | See [login timing](#login-timing) below |
 | **Lockout can be used against a user.** Anyone who knows an email can lock that account for 15 minutes at a time | The real user can't sign in during the lockout | Attempts during a lockout don't extend it, and the per-IP rate limit slows the attack. Admins can't unlock accounts by hand yet. |
 | No server-side logout | A stolen token works until it expires, unless its user's role or status changes | Short token lifetime for now. Revisit with the cookie review in Milestone 7. |
 | Token in `localStorage` | Readable by any script that runs on the frontend's origin | Cookie review before public deployment (Milestone 7) |
 | Rate limit counters are per API instance | With several instances, each one counts separately | A shared store such as Redis if the API is scaled out |
-| No password reset or email verification | Users who forget their password need an Admin | Milestone 6 |
+| **Account emails are queued in memory** | A verification or reset email still queued when the API restarts is lost | The user asks for another. Booking emails use a database outbox and survive restarts. |
+| **The response time floor has limits** | Under heavy load, registration and reset requests can take longer than 250 ms, and small timing differences could show again | Raise `AccountTokens:MinimumResponseMilliseconds` if needed |
+| **Development email only** | Emails are written as files, not sent | A real provider in Milestone 7 |
+
+Fixed in Milestone 6 PR 4: registration no longer reveals existing accounts, and users can reset a forgotten password themselves.
 
 Fixed in Milestone 6 PR 3: per-account lockout, revocation of tokens when a role or status changes, and re-hashing of old password hashes.
 
@@ -118,17 +135,22 @@ Fixed in Milestone 5: the anonymous schedule no longer returns reservation IDs (
 
 ### Account enumeration
 
-A registration response that doesn't reveal whether an email already exists isn't possible without email verification:
+**Resolved in Milestone 6 PR 4** ([ADR 0011](adr/0011-email-flows.md)). Until then, registration answered "Email is already registered", because a generic answer isn't possible without email verification. The interim approach was to keep that answer, rely on the rate limit, and reduce the login timing difference.
 
-- **Return "account created" for existing emails as well:** that would mislead users. The person registering would believe they have an account, but their password wouldn't work, and the real owner would never hear about it.
-- **Return a generic error for every failure:** new emails would still succeed and existing ones would still fail, so the response would still reveal the answer.
+Now every request that could reveal an account gives one answer:
 
-The clean solution is email verification. Registration would always answer "Check your inbox to continue", and the email would either confirm the new account or tell the existing owner that someone tried to register. That needs an email service, planned for Milestone 6.
+| Request | Answer for any valid address | What happens behind it |
+|---|---|---|
+| Register | `202` "Check your inbox to finish creating your account…" | A new address gets an unconfirmed account and a link. An address with an account gets a notice, and the account is unchanged. |
+| Resend verification | `202` "If that address has an account waiting to be confirmed, we've sent it a new link." | Only an unconfirmed, active account gets an email |
+| Forgot password | `202` "If that address has an account, we've sent it a link to reset the password." | Only an active account gets an email |
+| Sign in | The same `401` for every failure | A deactivated or unconfirmed account is only told so after the right password |
 
-**Interim approach (approved):**
-- Keep the current registration response until email verification arrives in Milestone 6, so the API contract doesn't change.
-- Rely on the rate limit to slow enumeration.
-- Reduce the login timing difference ([login timing](#login-timing)).
+These requests also take about the same time:
+- **Similar work:** registration hashes the password either way. An unknown or ineligible address runs a database statement that matches nothing, in place of the cooldown claim.
+- **A minimum response time:** the three requests that may send email answer no sooner than 250 ms. Measured against the running API, forgot-password took 5.1 ms for an unknown address and 8.3 ms for an account before the floor. With it, all four cases measured (new and existing, for registration and forgot-password) had a median of about 262 ms, within 1 ms of each other.
+
+Invalid input is still answered straight away, because it says nothing about accounts.
 
 ### Login timing
 
@@ -158,4 +180,4 @@ The 10th–90th percentile range of each was within about 49–54 ms.
 - A wrong password updates one row and an unknown email updates none. Both are one indexed statement, so the difference is small compared with the hash.
 - The first unknown-email login after the API starts also creates the reusable hash, so it takes about twice as long. This happens once per process.
 - An email that isn't a valid address is rejected before any lookup. That only reveals the address's format, not whether an account exists.
-- Registration still reveals existing emails directly ([account enumeration](#account-enumeration)), so this fix protects login, not the system as a whole.
+- Registration and password reset have their own protection ([account enumeration](#account-enumeration)).

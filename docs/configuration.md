@@ -61,6 +61,27 @@ The defaults for every resource. The notice plus the shortest booking must fit w
 | `BookingPolicy:MaxAdvanceDays` | No | `90` | How many days ahead, 1–3650. With 90, a booking can end at the latest at midnight after the day 90 days from today, in Copenhagen time. |
 | `BookingPolicy:MaxActiveReservationsPerUser` | No | `5` | How many upcoming bookings (active and not yet ended) a user can hold across all resources, 1–1000 |
 
+### Email
+
+Emails are verification and reset links, account notices and booking emails ([ADR 0011](adr/0011-email-flows.md)). `Email:Delivery` has no default, so the API won't start until it is set: outside Development, emails can't silently go nowhere.
+
+| Setting | Required | Default | Notes |
+|---|---|---|---|
+| `Email:Delivery` | Yes | None | How emails are delivered. Only `PickupDirectory` exists for now, which writes each email as an `.eml` file instead of sending it. Development sets it. A real provider comes in Milestone 7. |
+| `Email:PickupDirectory` | With `PickupDirectory` | None | The folder for the `.eml` files, relative to the API's folder. Development uses `.dev-emails`, which git ignores, because the files hold working links. |
+| `Email:FromAddress` | Yes | None | The sender address. Its domain also names calendar invitations, as in `reservation-42@example.com`. |
+| `Email:FromName` | No | `Resource Reservation` | |
+| `Frontend:BaseUrl` | Yes | None | Where the frontend runs, such as `https://app.example.com`, for the links in emails. Development uses `http://localhost:5173`. |
+| `AccountTokens:EmailVerificationHours` | No | `24` | 1–168. How long a verification link works. |
+| `AccountTokens:PasswordResetMinutes` | No | `60` | 5–1440. How long a reset link works. |
+| `AccountTokens:EmailCooldownSeconds` | No | `120` | 0–3600. At most one email of each kind per account in this time. Extra requests get the usual answer and send nothing. |
+| `AccountTokens:MinimumResponseMilliseconds` | No | `250` | 0–5000. Registration, resending a verification link and asking for a reset answer no sooner than this, so their timing doesn't reveal whether an address has an account. |
+| `EmailOutbox:PollIntervalMilliseconds` | No | `5000` | 100–300000. How often the worker looks for booking emails to send. |
+| `EmailOutbox:MaxAttempts` | No | `6` | 1–20. Attempts before a booking email is given up, recorded and logged as an error. |
+| `EmailOutbox:FirstRetryDelaySeconds` | No | `30` | 1–3600. The wait after the first failure. Each later wait is four times longer, up to an hour. |
+| `RateLimiting:Email:PermitLimit` | No | `5` | 1–10000. Requests that send email that a client IP address can make in a row. |
+| `RateLimiting:Email:WindowSeconds` | No | `900` | 1–86400. One more such request is allowed every `WindowSeconds / PermitLimit` seconds. |
+
 ### Hosting
 
 | Setting | Required | Default | Notes |

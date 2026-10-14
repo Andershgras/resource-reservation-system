@@ -31,6 +31,6 @@ The cookie option was deferred, not rejected. It is a much larger change, and it
 ## Consequences
 
 - **XSS still exposes the token.** Any script running on the frontend's origin can read it. The API's security headers don't protect the frontend's JavaScript. React's escaping and the short token lifetime reduce the risk, but don't remove it. **Before public deployment, review httpOnly cookies and a strict Content-Security-Policy for the frontend.** This is tracked in the roadmap for Milestone 7.
-- **Logout is client-side only.** A copied token stays valid until it expires. Since Milestone 6 PR 3, a role change or deactivation revokes the user's tokens, because every request checks the token's security stamp against the database ([ADR 0010](0010-user-management-and-account-security.md)). The frontend's handling of a `401` signs such users out.
+- **Logout is client-side only.** A copied token stays valid until it expires. Since Milestone 6 PR 3, a role change or deactivation revokes the user's tokens, and since PR 4 so does a password reset, because every request checks the token's security stamp against the database ([ADR 0010](0010-user-management-and-account-security.md)). The frontend's handling of a `401` signs such users out.
 - **Everyone logs in once more:** existing stored sessions have no expiry time, so they are discarded after this change.
 - **Third-party clients** can use `expiresInSeconds` or `expiresAt` to know when to log in again. Both fields are additions, so existing clients aren't affected.

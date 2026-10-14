@@ -98,4 +98,4 @@ WHERE Email = @email AND (LockoutEndsAt IS NULL OR LockoutEndsAt <= @now)
 - **A concurrent change can turn the right password into the generic 401,** for example when a role changes during sign-in. That only happens in a narrow race, and signing in again works.
 - **Sign-in tests moved to SQL Server integration tests,** because `ExecuteUpdate` doesn't run on EF's in-memory provider. Registration tests stay as unit tests.
 - **`BookingLocks` became `ApplicationLocks`**, with the same booking lock names, order and timeout. `Scheduling:BookingLockTimeoutMilliseconds` is also how long an account change waits for its lock.
-- **Registration still reveals existing emails** until email verification in PR 4 ([security](../security.md#account-enumeration)).
+- **Registration still reveals existing emails** until email verification in PR 4 ([security](../security.md#account-enumeration)). Done: see [ADR 0011](0011-email-flows.md), which also makes password resets rotate the stamp, and stops unconfirmed accounts being made admins or counting as active admins.
