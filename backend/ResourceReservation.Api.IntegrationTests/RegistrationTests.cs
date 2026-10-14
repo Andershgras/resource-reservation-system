@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -142,6 +142,38 @@ public class RegistrationTests : ApiTestBase
         await LoadUserAsync("mixed.case@integration.test");
         await ConfirmEmailAsync("mixed.case@integration.test");
         Assert.Equal(HttpStatusCode.OK, (await SignInAsync("MIXED.CASE@integration.test", Password)).StatusCode);
+    }
+
+    // Whether an address has an account changes the database work by a few
+    // milliseconds. Every request that may send an email takes at least the
+    // minimum, which hides that.
+    [Fact]
+    public async Task RequestsThatMaySendEmail_AnswerNoSoonerThanTheMinimum()
+    {
+        await SeedConfirmedUserAsync(Email, "Owner");
+        await using var factory = new ApiFactory(Fixture.ConnectionString, new Dictionary<string, string>
+        {
+            ["AccountTokens:MinimumResponseMilliseconds"] = "300"
+        });
+        var client = factory.CreateClient();
+        var requests = new (string Path, object Body)[]
+        {
+            ("/api/auth/register", new RegisterUserDto { Name = "A", Email = Email, Password = Password }),
+            ("/api/auth/register", new RegisterUserDto { Name = "B", Email = "brand-new@integration.test", Password = Password }),
+            ("/api/auth/forgot-password", new AccountEmailRequestDto { Email = Email }),
+            ("/api/auth/forgot-password", new AccountEmailRequestDto { Email = "nobody@integration.test" }),
+            ("/api/auth/resend-verification", new AccountEmailRequestDto { Email = "brand-new@integration.test" }),
+            ("/api/auth/resend-verification", new AccountEmailRequestDto { Email = "nobody@integration.test" })
+        };
+
+        foreach (var (path, body) in requests)
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var response = await client.PostAsJsonAsync(path, body);
+
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            Assert.True(started.ElapsedMilliseconds >= 300, $"{path} answered after {started.ElapsedMilliseconds} ms.");
+        }
     }
 
     private Task<HttpResponseMessage> RegisterAsync(string email, string name, string password)

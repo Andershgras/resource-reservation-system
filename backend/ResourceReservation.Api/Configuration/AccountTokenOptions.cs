@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace ResourceReservation.Api.Configuration;
 
@@ -18,4 +18,11 @@ public class AccountTokenOptions
     // account get the usual answer but send nothing.
     [Range(0, 3600, ErrorMessage = "AccountTokens:EmailCooldownSeconds must be between 0 and 3600.")]
     public int EmailCooldownSeconds { get; set; } = 120;
+
+    // Registration, resending a verification link and asking for a reset
+    // answer no sooner than this. Whether an address has an account changes
+    // how much database work a request does, by a few milliseconds; the floor
+    // hides that difference as long as the work fits inside it. 0 turns it off.
+    [Range(0, 5000, ErrorMessage = "AccountTokens:MinimumResponseMilliseconds must be between 0 and 5000.")]
+    public int MinimumResponseMilliseconds { get; set; } = 250;
 }

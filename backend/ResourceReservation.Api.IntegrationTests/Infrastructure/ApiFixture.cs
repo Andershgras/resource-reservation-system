@@ -179,6 +179,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Email:PickupDirectory", Path.Combine(Path.GetTempPath(), "rr-integration-emails"));
         builder.UseSetting("Email:FromAddress", "no-reply@integration.test");
         builder.UseSetting("Frontend:BaseUrl", "https://app.integration.test");
+        // RegistrationTests checks the minimum response time with its own host.
+        builder.UseSetting("AccountTokens:MinimumResponseMilliseconds", "0");
         builder.UseSetting("EmailOutbox:PollIntervalMilliseconds", "100");
         // Every host's worker may pick up any email, so all retry quickly.
         builder.UseSetting("EmailOutbox:MaxAttempts", "3");

@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -8,9 +10,10 @@ namespace ResourceReservation.Api.Services;
 
 // Registration, email verification and password reset (ADR 0011).
 //
-// Requests that may send an email always give the same answer and do about
-// the same work, so they never reveal whether an address has an account.
-// Emails are queued, never sent during the request.
+// Requests that may send an email always give the same answer, do about the
+// same work and answer no sooner than a minimum time, so they never reveal
+// whether an address has an account. Emails are queued, never sent during the
+// request.
 public class AccountService
 {
     public const string RegistrationAcceptedMessage =
@@ -40,6 +43,7 @@ public class AccountService
     private readonly AccountEmailQueue _emailQueue;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly TimeProvider _timeProvider;
+    private readonly AccountTokenOptions _tokenOptions;
 
     public AccountService(
         AppDbContext context,
@@ -48,7 +52,8 @@ public class AccountService
         AccountEmails emails,
         AccountEmailQueue emailQueue,
         IPasswordHasher<User> passwordHasher,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IOptions<AccountTokenOptions> tokenOptions)
     {
         _context = context;
         _authService = authService;
@@ -57,11 +62,13 @@ public class AccountService
         _emailQueue = emailQueue;
         _passwordHasher = passwordHasher;
         _timeProvider = timeProvider;
+        _tokenOptions = tokenOptions.Value;
     }
 
     // A new address gets an unconfirmed account and a verification link. An
     // address that already has an account gets a notice instead, and the
     // account isn't changed. Both answer the same and hash the password.
+    // Answers about invalid input at once: that reveals nothing about accounts.
     public async Task<ServiceResult<AcceptedMessageDto>> RegisterAsync(RegisterUserDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -79,6 +86,15 @@ public class AccountService
             return ServiceError.Validation("Password must be at least 8 characters.");
         }
 
+        var startedAt = _timeProvider.GetTimestamp();
+        await RegisterValidRequestAsync(request, normalizedEmail);
+        await WaitForMinimumResponseTimeAsync(startedAt);
+
+        return Accepted(RegistrationAcceptedMessage);
+    }
+
+    private async Task RegisterValidRequestAsync(RegisterUserDto request, string normalizedEmail)
+    {
         var existing = await FindByEmailAsync(normalizedEmail);
 
         if (existing is null)
@@ -113,7 +129,7 @@ public class AccountService
                 var token = await _tokens.IssueAsync(user.Id, UserTokenPurposes.EmailVerification);
                 _emailQueue.Enqueue(_emails.Verification(user, token));
 
-                return Accepted(RegistrationAcceptedMessage);
+                return;
             }
         }
         else
@@ -126,12 +142,11 @@ public class AccountService
         {
             _emailQueue.Enqueue(_emails.ExistingAccount(existing));
         }
-
-        return Accepted(RegistrationAcceptedMessage);
     }
 
     public async Task<AcceptedMessageDto> ResendVerificationAsync(AccountEmailRequestDto request)
     {
+        var startedAt = _timeProvider.GetTimestamp();
         var user = await FindByEmailAsync(request.Email);
 
         if (user is not { IsActive: true, IsEmailConfirmed: false })
@@ -143,6 +158,8 @@ public class AccountService
             var token = await _tokens.IssueAsync(user.Id, UserTokenPurposes.EmailVerification);
             _emailQueue.Enqueue(_emails.Verification(user, token));
         }
+
+        await WaitForMinimumResponseTimeAsync(startedAt);
 
         return Accepted(VerificationRequestedMessage);
     }
@@ -196,6 +213,7 @@ public class AccountService
     // Any active account, confirmed or not, can be sent a reset link.
     public async Task<AcceptedMessageDto> ForgotPasswordAsync(AccountEmailRequestDto request)
     {
+        var startedAt = _timeProvider.GetTimestamp();
         var user = await FindByEmailAsync(request.Email);
 
         if (user is not { IsActive: true })
@@ -207,6 +225,8 @@ public class AccountService
             var token = await _tokens.IssueAsync(user.Id, UserTokenPurposes.PasswordReset);
             _emailQueue.Enqueue(_emails.PasswordReset(user, token));
         }
+
+        await WaitForMinimumResponseTimeAsync(startedAt);
 
         return Accepted(PasswordResetRequestedMessage);
     }
@@ -287,6 +307,17 @@ public class AccountService
         }
 
         return await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Email == normalizedEmail);
+    }
+
+    private async Task WaitForMinimumResponseTimeAsync(long startedAt)
+    {
+        var remaining = TimeSpan.FromMilliseconds(_tokenOptions.MinimumResponseMilliseconds) -
+            _timeProvider.GetElapsedTime(startedAt);
+
+        if (remaining > TimeSpan.Zero)
+        {
+            await Task.Delay(remaining, _timeProvider);
+        }
     }
 
     private static AcceptedMessageDto Accepted(string message) => new() { Message = message };
