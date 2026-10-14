@@ -11,18 +11,18 @@ public class AvailabilityExceptionService
 {
     private readonly AppDbContext _context;
     private readonly ReservationService _reservationService;
-    private readonly BookingLocks _bookingLocks;
+    private readonly ApplicationLocks _locks;
     private readonly SchedulingClock _schedulingClock;
 
     public AvailabilityExceptionService(
         AppDbContext context,
         ReservationService reservationService,
-        BookingLocks bookingLocks,
+        ApplicationLocks locks,
         SchedulingClock schedulingClock)
     {
         _context = context;
         _reservationService = reservationService;
-        _bookingLocks = bookingLocks;
+        _locks = locks;
         _schedulingClock = schedulingClock;
     }
 
@@ -71,7 +71,7 @@ public class AvailabilityExceptionService
             return error;
         }
 
-        var bookingLock = await _bookingLocks.AcquireAsync(null, request.ResourceId);
+        var bookingLock = await _locks.AcquireAsync(null, request.ResourceId);
 
         if (!bookingLock.Acquired)
         {
