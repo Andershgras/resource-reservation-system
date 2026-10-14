@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# The workflow's token can only read the repository.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend tests
@@ -164,3 +168,38 @@ jobs:
           name: frontend-smoke-results
           path: frontend/resource-reservation-client/test-results
           retention-days: 7
+
+  # Builds the three images and runs the whole stack as docker compose would in
+  # production, then checks it from outside through nginx. See
+  # docs/deployment.md. Images are only built here, never published.
+  containers:
+    name: Container stack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Throwaway secrets for this run only.
+      - name: Create .env and a localhost certificate
+        run: |
+          secret() { echo "Ci1-$(openssl rand -base64 24 | tr -d '/+=')"; }
+          sed             -e "s|^MSSQL_SA_PASSWORD=.*|MSSQL_SA_PASSWORD=$(secret)|"             -e "s|^APP_DB_PASSWORD=.*|APP_DB_PASSWORD=$(secret)|"             -e "s|^JWT_KEY=.*|JWT_KEY=$(openssl rand -base64 48 | tr -d '/+=')|"             -e "s|^SEED_ADMIN_EMAIL=.*|SEED_ADMIN_EMAIL=admin@example.com|"             -e "s|^SEED_ADMIN_PASSWORD=.*|SEED_ADMIN_PASSWORD=$(secret)|"             .env.example > .env
+          sh deploy/create-dev-certificate.sh
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start the stack
+        run: docker compose up --detach --wait --wait-timeout 300
+
+      - name: Smoke test through nginx
+        run: sh deploy/smoke-test.sh
+
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down --volumes
