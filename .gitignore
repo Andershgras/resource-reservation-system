@@ -431,3 +431,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Emails written by the development email sender. They hold working sign-in links.
+.dev-emails/

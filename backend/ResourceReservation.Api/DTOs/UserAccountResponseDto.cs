@@ -1,4 +1,4 @@
-namespace ResourceReservation.Api.DTOs;
+﻿namespace ResourceReservation.Api.DTOs;
 
 // A user account as admins see it. Never includes the password hash, the
 // security stamp or the lockout state.
@@ -13,6 +13,9 @@ public class UserAccountResponseDto
     public string Role { get; set; } = string.Empty;
 
     public bool IsActive { get; set; }
+
+    // False until the owner confirms the address. Such accounts can't sign in.
+    public bool IsEmailConfirmed { get; set; }
 
     // Null for accounts created before it was recorded.
     public DateTimeOffset? CreatedAt { get; set; }

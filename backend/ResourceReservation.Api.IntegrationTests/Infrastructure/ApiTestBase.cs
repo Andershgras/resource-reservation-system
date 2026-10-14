@@ -1,6 +1,7 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.DTOs;
 
 namespace ResourceReservation.Api.IntegrationTests.Infrastructure;
@@ -49,7 +50,8 @@ public abstract class ApiTestBase : IAsyncLifetime
             Password = password
         });
 
-        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, registerResponse.StatusCode);
+        await ConfirmEmailAsync(email);
 
         return await CreateAuthenticatedClientAsync(email, password);
     }
@@ -76,6 +78,16 @@ public abstract class ApiTestBase : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, ruleResponse.StatusCode);
 
         return resource.Id;
+    }
+
+    // Marks a registered address as confirmed, as following its link would.
+    protected async Task ConfirmEmailAsync(string email)
+    {
+        await using var context = Fixture.CreateDbContext();
+        var user = await context.Users.SingleAsync(user => user.Email == email);
+        user.IsEmailConfirmed = true;
+        user.EmailConfirmedAt = DateTimeOffset.UtcNow;
+        await context.SaveChangesAsync();
     }
 
     private async Task<HttpClient> CreateAuthenticatedClientAsync(string email, string password)
