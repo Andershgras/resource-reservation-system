@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using System.Net;
 using System.Text;
@@ -58,6 +58,7 @@ builder.Services.AddScoped<ReservationService>();
 builder.Services.AddScoped<AvailabilityExceptionService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UserSessionValidator>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // Settings are validated when the app starts, so bad configuration never serves a request.
@@ -83,6 +84,10 @@ builder.Services.AddOptions<ReverseProxyOptions>()
     .ValidateOnStart();
 builder.Services.AddOptions<AuthRateLimitOptions>()
     .Bind(builder.Configuration.GetSection(AuthRateLimitOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<AccountLockoutOptions>()
+    .Bind(builder.Configuration.GetSection(AccountLockoutOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
@@ -140,6 +145,17 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
         options.Events = new JwtBearerEvents
         {
+            // A valid signature isn't enough: the user must still be active, with
+            // the same role and security stamp as when the token was issued.
+            OnTokenValidated = async context =>
+            {
+                var validator = context.HttpContext.RequestServices.GetRequiredService<UserSessionValidator>();
+
+                if (!await validator.IsCurrentAsync(context.Principal!))
+                {
+                    context.Fail("The token's user is no longer active or has changed.");
+                }
+            },
             OnChallenge = context =>
             {
                 context.HandleResponse();
@@ -199,13 +215,14 @@ using (var scope = app.Services.CreateScope())
 
     if (seedAdmin.IsConfigured &&
         !await context.Users.AnyAsync(user => user.Email == adminEmail) &&
-        !await context.Users.AnyAsync(user => user.Role == "Admin"))
+        !await context.Users.AnyAsync(user => user.Role == UserRoles.Admin))
     {
         var adminUser = new User
         {
             Name = string.IsNullOrWhiteSpace(adminName) ? "Admin" : adminName,
             Email = adminEmail,
-            Role = "Admin"
+            Role = UserRoles.Admin,
+            CreatedAt = DateTimeOffset.UtcNow
         };
 
         var passwordHasher = new PasswordHasher<User>();

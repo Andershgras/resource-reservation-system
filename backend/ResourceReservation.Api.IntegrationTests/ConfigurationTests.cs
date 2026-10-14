@@ -1,4 +1,4 @@
-using ResourceReservation.Api.IntegrationTests.Infrastructure;
+﻿using ResourceReservation.Api.IntegrationTests.Infrastructure;
 
 namespace ResourceReservation.Api.IntegrationTests;
 
@@ -28,6 +28,8 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("BookingPolicy:MinLeadTimeMinutes", "-1", "BookingPolicy:MinLeadTimeMinutes must be between 0 and 43200.")]
     [InlineData("BookingPolicy:MaxAdvanceDays", "0", "BookingPolicy:MaxAdvanceDays must be between 1 and 3650.")]
     [InlineData("BookingPolicy:MaxActiveReservationsPerUser", "0", "BookingPolicy:MaxActiveReservationsPerUser must be between 1 and 1000.")]
+    [InlineData("AccountLockout:MaxFailedAttempts", "0", "AccountLockout:MaxFailedAttempts must be between 1 and 100.")]
+    [InlineData("AccountLockout:LockoutMinutes", "0", "AccountLockout:LockoutMinutes must be between 1 and 1440.")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
         string key,
