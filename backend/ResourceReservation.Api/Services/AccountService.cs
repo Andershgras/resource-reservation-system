@@ -313,14 +313,16 @@ public class AccountService
         return await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Email == normalizedEmail);
     }
 
+    // Timers can fire a moment early, so the time left is measured again after
+    // each wait, until the floor has really passed.
     private async Task WaitForMinimumResponseTimeAsync(long startedAt)
     {
-        var remaining = TimeSpan.FromMilliseconds(_tokenOptions.MinimumResponseMilliseconds) -
-            _timeProvider.GetElapsedTime(startedAt);
+        var minimum = TimeSpan.FromMilliseconds(_tokenOptions.MinimumResponseMilliseconds);
+        TimeSpan remaining;
 
-        if (remaining > TimeSpan.Zero)
+        while ((remaining = minimum - _timeProvider.GetElapsedTime(startedAt)) > TimeSpan.Zero)
         {
-            await Task.Delay(remaining, _timeProvider);
+            await Task.Delay(remaining + TimeSpan.FromMilliseconds(1), _timeProvider);
         }
     }
 
