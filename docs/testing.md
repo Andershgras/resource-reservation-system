@@ -90,6 +90,7 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - admins can't change their own account
   - the list is paged and searchable, never shows secrets, and is admin only
   - validation, including a missing `isActive`
+- **Token checks (`TokenValidationTests`):** a failing check refuses the request instead of trusting the signature alone, a token for a missing user is rejected, and with every log level captured, neither the stamp nor its fingerprint appears in logs or error responses.
 - **Security configuration:**
   - CORS for configured and unknown origins
   - forwarded headers trusted only from configured proxies
