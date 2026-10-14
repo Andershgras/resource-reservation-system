@@ -212,8 +212,17 @@ describe('time options', () => {
     expect(labels(endOptions(night, night.startTime))).toEqual(['23:45', 'Wed 16 Jan, 00:00', 'Wed 16 Jan, 00:15', 'Wed 16 Jan, 00:30'])
   })
 
-  it('counts wall-clock quarter hours across the hour summer time skips', () => {
+  // On 31 March 2030 the clocks go from 02:00 straight to 03:00, so those
+  // times never happen and the API rejects them.
+  it('never offers a time in the hour summer time skips', () => {
     const night = { startTime: '2030-03-31T01:30:00', endTime: '2030-03-31T03:30:00' }
+
+    expect(labels(startOptions(night))).toEqual(['01:30', '01:45', '03:00', '03:15'])
+    expect(labels(endOptions(night, '2030-03-31T01:30:00'))).toEqual(['01:45', '03:00', '03:15', '03:30'])
+  })
+
+  it('still offers times in the hour summer time repeats, which happen', () => {
+    const night = { startTime: '2030-10-27T01:30:00', endTime: '2030-10-27T03:30:00' }
 
     expect(labels(startOptions(night))).toEqual(['01:30', '01:45', '02:00', '02:15', '02:30', '02:45', '03:00', '03:15'])
   })

@@ -1,13 +1,15 @@
-using System.Net;
+﻿using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.Models;
+using ResourceReservation.Api.Services;
 using Respawn;
 using Testcontainers.MsSql;
 
@@ -73,6 +75,7 @@ public sealed class ApiFixture : IAsyncLifetime
             await _respawner!.ResetAsync(connection);
         }
 
+        TestEmailSink.Instance.Clear();
         await SeedAdminAsync();
     }
 
@@ -100,7 +103,8 @@ public sealed class ApiFixture : IAsyncLifetime
         {
             Name = "Integration Admin",
             Email = AdminEmail,
-            Role = "Admin"
+            Role = "Admin",
+            IsEmailConfirmed = true
         };
 
         admin.PasswordHash = new PasswordHasher<User>().HashPassword(admin, AdminPassword);
@@ -170,6 +174,17 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // Test bookings are dated 2030, beyond the default 90-day booking horizon.
         // BookingPolicyTests check the horizon with dates relative to today.
         builder.UseSetting("BookingPolicy:MaxAdvanceDays", "3650");
+        builder.UseSetting("RateLimiting:Email:PermitLimit", "10000");
+        builder.UseSetting("Email:Delivery", "PickupDirectory");
+        builder.UseSetting("Email:PickupDirectory", Path.Combine(Path.GetTempPath(), "rr-integration-emails"));
+        builder.UseSetting("Email:FromAddress", "no-reply@integration.test");
+        builder.UseSetting("Frontend:BaseUrl", "https://app.integration.test");
+        // RegistrationTests checks the minimum response time with its own host.
+        builder.UseSetting("AccountTokens:MinimumResponseMilliseconds", "0");
+        builder.UseSetting("EmailOutbox:PollIntervalMilliseconds", "100");
+        // Every host's worker may pick up any email, so all retry quickly.
+        builder.UseSetting("EmailOutbox:MaxAttempts", "3");
+        builder.UseSetting("EmailOutbox:FirstRetryDelaySeconds", "1");
 
         foreach (var (key, value) in _settingOverrides)
         {
@@ -178,6 +193,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
             services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>());
+        // Emails are caught, never written or sent.
+        builder.ConfigureTestServices(services =>
+            services.AddSingleton<IEmailSender>(TestEmailSink.Instance));
     }
 }
 

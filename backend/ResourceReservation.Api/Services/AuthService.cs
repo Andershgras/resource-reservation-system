@@ -21,6 +21,10 @@ public class AuthService
     // Only given after the correct password, so it reveals nothing new.
     public const string DeactivatedMessage = "This account has been deactivated. Contact an administrator.";
 
+    // Also only after the correct password (ADR 0011).
+    public const string EmailNotConfirmedMessage =
+        "Confirm your email address before signing in. Use the link we sent you, or ask for a new one.";
+
     // A hash of a random password for each hasher, made by that hasher, so it has
     // the same algorithm and work factor as real password hashes. Created once.
     private static readonly ConditionalWeakTable<IPasswordHasher<User>, string> UnknownUserPasswordHashes = new();
@@ -43,58 +47,6 @@ public class AuthService
         _passwordHasher = passwordHasher;
         _timeProvider = timeProvider;
         _lockoutOptions = lockoutOptions.Value;
-    }
-
-    public async Task<ServiceResult<UserResponseDto>> RegisterAsync(RegisterUserDto request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            return ServiceError.Validation("Name is required.");
-        }
-
-        if (!TryNormalizeEmail(request.Email, out var normalizedEmail))
-        {
-            return ServiceError.Validation("A valid email is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-        {
-            return ServiceError.Validation("Password must be at least 8 characters.");
-        }
-
-        if (await EmailExistsAsync(normalizedEmail))
-        {
-            return ServiceError.Validation("Email is already registered.");
-        }
-
-        var user = new User
-        {
-            Name = request.Name.Trim(),
-            Email = normalizedEmail,
-            Role = UserRoles.User,
-            CreatedAt = _timeProvider.GetUtcNow()
-        };
-
-        user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
-        _context.Users.Add(user);
-
-        try
-        {
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateException)
-        {
-            // A concurrent registration may have claimed the email first, in which
-            // case the unique index rejected this insert.
-            if (!await EmailExistsAsync(normalizedEmail))
-            {
-                throw;
-            }
-
-            return ServiceError.Validation("Email is already registered.");
-        }
-
-        return ToUserResponseDto(user);
     }
 
     // Every failed attempt, for a known or unknown email, verifies one password
@@ -143,14 +95,20 @@ public class AuthService
             return ServiceError.Forbidden(DeactivatedMessage);
         }
 
+        if (!user.IsEmailConfirmed)
+        {
+            return ServiceError.Forbidden(EmailNotConfirmedMessage);
+        }
+
         // Reset the failure count only if, at this moment, the account is still
-        // unlocked, active and unchanged. A lockout, deactivation or role change
+        // unlocked, active, confirmed and unchanged. A lockout, deactivation or role change
         // that happened since the user was read makes this match nothing, so no
         // token is issued from out-of-date data.
         var stillAllowed = await _context.Users
             .Where(candidate =>
                 candidate.Id == user.Id &&
                 candidate.IsActive &&
+                candidate.IsEmailConfirmed &&
                 candidate.SecurityStamp == user.SecurityStamp &&
                 (candidate.LockoutEndsAt == null || candidate.LockoutEndsAt <= now))
             .ExecuteUpdateAsync(setters => setters
@@ -178,7 +136,7 @@ public class AuthService
         };
     }
 
-    private static bool IsLockedOut(DateTimeOffset? lockoutEndsAt, DateTimeOffset now)
+    public static bool IsLockedOut(DateTimeOffset? lockoutEndsAt, DateTimeOffset now)
     {
         return lockoutEndsAt is not null && lockoutEndsAt > now;
     }
@@ -187,7 +145,7 @@ public class AuthService
     // Reaching the limit locks the account and starts the count again. A locked
     // account matches nothing, so attempts during a lockout don't extend it.
     // An unknown email matches nothing too, but costs the same round trip.
-    private Task<int> RecordFailedLoginAsync(string normalizedEmail, DateTimeOffset now)
+    public Task<int> RecordFailedLoginAsync(string normalizedEmail, DateTimeOffset now)
     {
         var maxFailedAttempts = _lockoutOptions.MaxFailedAttempts;
         DateTimeOffset? lockoutEndsAt = now.AddMinutes(_lockoutOptions.LockoutMinutes);
@@ -227,13 +185,6 @@ public class AuthService
         _passwordHasher.VerifyHashedPassword(new User(), unknownUserHash, password);
     }
 
-    private Task<bool> EmailExistsAsync(string normalizedEmail)
-    {
-        return _context.Users
-            .AsNoTracking()
-            .AnyAsync(user => user.Email == normalizedEmail);
-    }
-
     private static UserResponseDto ToUserResponseDto(User user)
     {
         return new UserResponseDto
@@ -245,7 +196,7 @@ public class AuthService
         };
     }
 
-    private static bool TryNormalizeEmail(string email, out string normalizedEmail)
+    public static bool TryNormalizeEmail(string? email, out string normalizedEmail)
     {
         normalizedEmail = string.Empty;
 

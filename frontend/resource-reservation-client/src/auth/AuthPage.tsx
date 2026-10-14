@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 import { register } from '../api/authApi'
 import { getFormErrors, hasFieldErrors, type FieldErrors } from '../lib/errors'
 import { validateAuthForm, type AuthField } from '../lib/validation'
@@ -64,10 +64,11 @@ export function AuthPage() {
         return
       }
 
-      await register({ name, email, password })
+      // The same answer whether or not the address already has an account.
+      const answer = await register({ name, email, password })
       setName('')
       setPassword('')
-      setNotice({ tone: 'success', text: 'Registration succeeded. You can log in now.' })
+      setNotice({ tone: 'success', text: answer.message })
       navigate({ pathname: '/login', search })
     } catch (error) {
       const formErrors = getFormErrors(error, authFields)
@@ -182,6 +183,13 @@ export function AuthPage() {
                   : 'Create account'}
             </Button>
           </form>
+
+          {authMode === 'login' && (
+            <p className="auth-links">
+              <Link to="/forgot-password">Forgot your password?</Link>
+              <Link to="/resend-verification">Didn't get the confirmation email?</Link>
+            </p>
+          )}
         </div>
       </div>
     </main>

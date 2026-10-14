@@ -1,5 +1,4 @@
-using System.Collections.Concurrent;
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -79,6 +78,7 @@ public class TokenValidationTests : ApiTestBase
             Email = "logged@integration.test",
             Password = "UserPassword123"
         });
+        await ConfirmEmailAsync("logged@integration.test");
         var userClient = factory.CreateClient();
         userClient.DefaultRequestHeaders.Authorization = await SignInAsync(factory, "logged@integration.test", "UserPassword123");
         var user = await LoadUserAsync("logged@integration.test");
@@ -156,35 +156,5 @@ public class TokenValidationTests : ApiTestBase
                 SecurityAlgorithms.HmacSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-
-    // Records every log message with its exception.
-    private sealed class CapturingLoggerProvider : ILoggerProvider
-    {
-        public ConcurrentQueue<string> Messages { get; } = new();
-
-        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, Messages);
-
-        public void Dispose()
-        {
-        }
-
-        private sealed class CapturingLogger(string category, ConcurrentQueue<string> messages) : ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state)
-                where TState : notnull => null;
-
-            public bool IsEnabled(LogLevel logLevel) => true;
-
-            public void Log<TState>(
-                LogLevel logLevel,
-                EventId eventId,
-                TState state,
-                Exception? exception,
-                Func<TState, Exception?, string> formatter)
-            {
-                messages.Enqueue($"{category} {formatter(state, exception)} {exception}");
-            }
-        }
     }
 }

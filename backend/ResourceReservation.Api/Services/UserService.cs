@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -15,6 +15,8 @@ public class UserService
     public const string LastAdminMessage = "There must always be at least one active admin.";
     public const string BusyMessage = "Another account change is in progress. Try again in a moment.";
     public const string UserNotFoundMessage = "User not found.";
+    public const string UnconfirmedAdminMessage =
+        "This account hasn't confirmed its email address yet, so it can't be made an admin.";
 
     private readonly AppDbContext _context;
     private readonly ApplicationLocks _locks;
@@ -113,14 +115,20 @@ public class UserService
             return ToResponseDto(user);
         }
 
+        // An admin who can't sign in would count towards keeping an admin.
+        if (user.Role == UserRoles.Admin && oldRole != UserRoles.Admin && !user.IsEmailConfirmed)
+        {
+            return ServiceError.Conflict(UnconfirmedAdminMessage);
+        }
+
         // Only removing an active admin can leave none, and the lock means no
         // other change can happen between this check and the commit.
-        var removesActiveAdmin = oldRole == UserRoles.Admin && wasActive &&
+        var removesActiveAdmin = oldRole == UserRoles.Admin && wasActive && user.IsEmailConfirmed &&
             !(user.Role == UserRoles.Admin && user.IsActive);
 
         if (removesActiveAdmin &&
             !await _context.Users.AnyAsync(other =>
-                other.Id != user.Id && other.Role == UserRoles.Admin && other.IsActive))
+                other.Id != user.Id && other.Role == UserRoles.Admin && other.IsActive && other.IsEmailConfirmed))
         {
             return ServiceError.Conflict(LastAdminMessage);
         }
@@ -140,7 +148,7 @@ public class UserService
     private Task<bool> IsActiveAdminAsync(int userId)
     {
         return _context.Users.AnyAsync(user =>
-            user.Id == userId && user.Role == UserRoles.Admin && user.IsActive);
+            user.Id == userId && user.Role == UserRoles.Admin && user.IsActive && user.IsEmailConfirmed);
     }
 
     private static UserAccountResponseDto ToResponseDto(User user)
@@ -152,6 +160,7 @@ public class UserService
             Email = user.Email,
             Role = user.Role,
             IsActive = user.IsActive,
+            IsEmailConfirmed = user.IsEmailConfirmed,
             CreatedAt = user.CreatedAt
         };
     }

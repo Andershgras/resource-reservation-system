@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isNonexistentWallClock,
   addDaysToDateKey,
   formatDate,
   formatDateHeading,
@@ -17,6 +18,22 @@ import {
 
 // The tests run in Europe/Copenhagen (see vite.config.ts). Summer time starts
 // on 31 March 2030 at 02:00 and ends on 27 October 2030 at 03:00.
+describe('isNonexistentWallClock', () => {
+  it.each([
+    ['2030-03-31T02:00:00', true],
+    ['2030-03-31T02:30', true],
+    ['2030-03-31T02:59:00', true],
+    ['2030-03-31T01:59:00', false],
+    ['2030-03-31T03:00:00', false],
+    // The repeated autumn hour happens, twice.
+    ['2030-10-27T02:30:00', false],
+    ['2030-01-15T02:30:00', false],
+    ['not a time', false],
+  ])('%s never happens: %s', (value, expected) => {
+    expect(isNonexistentWallClock(value)).toBe(expected)
+  })
+})
+
 describe('formatting', () => {
   it('formats a date in en-GB order with a short weekday and month', () => {
     expect(formatDate('2030-01-15')).toBe('Tue 15 Jan 2030')

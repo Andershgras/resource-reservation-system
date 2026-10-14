@@ -24,7 +24,7 @@ flowchart LR
 | Layer | Folder | Responsibility |
 |---|---|---|
 | Controllers | `Controllers/` | Routing, `[Authorize]` rules, reading the current user from the token, and turning service results into HTTP responses |
-| Services | `Services/` | Business rules: availability and closures, booking policies, booking, moving and cancellation, the application locks, authentication with lockout, token checks, user management and scheduling time |
+| Services | `Services/` | Business rules: availability and closures, booking policies, booking, moving and cancellation, the application locks, authentication with lockout, token checks, user management, account emails and link tokens, the booking email outbox, and scheduling time |
 | Data | `Data/`, `Models/`, `Migrations/` | EF Core model, database constraints and migrations |
 | Contracts | `DTOs/` | Request and response shapes, with DataAnnotations validation |
 | Configuration | `Configuration/` | Typed settings, validated when the app starts |
@@ -101,6 +101,9 @@ erDiagram
     RESOURCE ||--o{ AVAILABILITY : "has one-off windows"
     RESOURCE ||--o{ AVAILABILITY_RULE : "has weekly rules"
     RESOURCE ||--o{ AVAILABILITY_EXCEPTION : "has closures"
+    USER ||--o{ USER_TOKEN : "has link tokens"
+    USER ||--o{ ACCOUNT_EMAIL_COOLDOWN : "was last emailed"
+    RESERVATION ||--o{ BOOKING_NOTIFICATION : "is emailed about"
 
     USER {
         int Id PK
@@ -113,6 +116,31 @@ erDiagram
         datetimeoffset CreatedAt "UTC, null before Milestone 6"
         int FailedLoginCount
         datetimeoffset LockoutEndsAt "UTC"
+        bool IsEmailConfirmed "unconfirmed users can't sign in"
+        datetimeoffset EmailConfirmedAt "UTC, null before Milestone 6"
+    }
+    USER_TOKEN {
+        int Id PK
+        int UserId FK
+        string Purpose "EmailVerification or PasswordReset"
+        string TokenHash UK "SHA-256, never the token"
+        datetimeoffset ExpiresAt "UTC"
+        datetimeoffset UsedAt "UTC, set once"
+    }
+    ACCOUNT_EMAIL_COOLDOWN {
+        int UserId PK
+        string Purpose PK
+        datetimeoffset LastSentAt "UTC"
+    }
+    BOOKING_NOTIFICATION {
+        int Id PK
+        int ReservationId FK
+        string Kind "Created, Moved or Cancelled"
+        datetime StartTime "snapshot"
+        int CalendarSequence "snapshot"
+        datetimeoffset NextAttemptAt "UTC, also the lease"
+        datetimeoffset SentAt "UTC"
+        datetimeoffset FailedAt "UTC, after the last attempt"
     }
     RESOURCE {
         int Id PK
@@ -159,6 +187,7 @@ erDiagram
         datetimeoffset CancelledAt "UTC"
         int CancelledByUserId FK
         rowversion Version "rejects out-of-date changes"
+        int CalendarSequence "invitation SEQUENCE"
     }
 ```
 
@@ -184,6 +213,27 @@ Booking and availability times are wall-clock times in the configured scheduling
 | Security | Rate-limited login and registration, CORS, trusted proxies, security headers and HSTS. See [security](security.md). |
 | Health | `/health/live` and `/health/ready` for the hosting platform. See [deployment](deployment.md#health-checks). |
 | Time | `SchedulingClock` gives "now" in the scheduling time zone, through an injectable `TimeProvider` |
+| Email | Account emails (links and notices) go through a bounded in-memory queue; booking emails through a database outbox written with the booking. Both are sent by background services through `IEmailSender`. See below and [ADR 0011](adr/0011-email-flows.md). |
+
+## Email delivery
+
+```mermaid
+flowchart LR
+    Account["AccountService<br/>register, resend, forgot, reset"]
+    Queue["AccountEmailQueue<br/>in memory, bounded"]
+    Dispatcher["AccountEmailDispatcher<br/>3 attempts"]
+    Booking["ReservationService<br/>book, move, cancel"]
+    Outbox[("BookingNotifications<br/>same SaveChanges as the booking")]
+    Worker["EmailOutboxWorker<br/>lease, retries, gives up after 6"]
+    Sender["IEmailSender<br/>development: .eml files"]
+
+    Account --> Queue --> Dispatcher --> Sender
+    Booking --> Outbox --> Worker --> Sender
+```
+
+- **Account emails** carry single-use links, which must never be stored or logged, so they stay in memory. A restart loses what is queued, and the user asks again.
+- **Booking emails** are saved with the booking change, so they exist exactly when the change does. A failed email never undoes a booking. Delivery is **at least once, not exactly once**: an email whose sending wasn't recorded, because the API stopped at the wrong moment, is sent again, with the same `Message-ID` and invitation UID.
+- **Calendar invitations:** each booking email has an `.ics` file with a stable UID and a rising SEQUENCE, so calendars update or remove one event.
 
 ## Request pipeline
 
@@ -232,7 +282,7 @@ flowchart TB
 | Folder | Contents |
 |---|---|
 | `src/app/` | The route table, the two layouts, route guards, the not-found page and the query client defaults |
-| `src/auth/` | Session storage, `AuthProvider` and `useAuth`, and the login and registration page |
+| `src/auth/` | Session storage, `AuthProvider` and `useAuth`, the login and registration page, and the pages email links open: confirming an address and resetting a password |
 | `src/features/` | One folder per feature: `resources`, `availability`, `weekly-schedule`, `closures`, `reservations`, `booking`, `users`. Each has its page components and its query hooks. |
 | `src/components/` | App-specific sections built from `src/ui/`: forms, lists, the tabs, and `ConfirmProvider` |
 | `src/ui/` | The design system's components: `Button`, `Field`, `Card`, `Alert`, `Badge`, `ConfirmDialog` and others, each with its stylesheet |
@@ -294,3 +344,4 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0008: Booking policies, rescheduling and reservation history](adr/0008-booking-policies-and-reservation-changes.md)
 - [ADR 0009: Closures (availability exceptions)](adr/0009-availability-exceptions.md)
 - [ADR 0010: User management and account security](adr/0010-user-management-and-account-security.md)
+- [ADR 0011: Email verification, password reset and booking emails](adr/0011-email-flows.md)

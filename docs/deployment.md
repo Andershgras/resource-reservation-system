@@ -85,11 +85,15 @@ Every setting is described in [configuration](configuration.md). At minimum, pro
 - `Jwt:Key`, `Jwt:Issuer` and `Jwt:Audience`, with the key kept in the platform's secret store
 - `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`
 - `Cors:AllowedOrigins`, only if the frontend is on another origin
+- `Email:Delivery`, `Email:FromAddress` and `Frontend:BaseUrl`. The API doesn't start without them. Until Milestone 7 adds a real email provider, the only delivery option writes emails to a folder ([configuration](configuration.md#email)).
 
 Never run production with `ASPNETCORE_ENVIRONMENT=Development`. That would load the committed development key and seed password, enable Swagger, and seed demo data.
 
 ## Known limitations
 
+- **Booking emails accumulate** in the `BookingNotifications` table after they are sent. Nothing removes them yet.
+- **Booking emails are delivered at least once, not exactly once.** Stopping the API between sending an email and recording it sends that email again after the 5-minute lease. Gives-ups are logged as errors, and kept in the table with `FailedAt` and `LastError`.
+- **Account emails are queued in memory.** A verification or reset email still queued when the API stops is lost, and the user asks again. Stop the API gracefully where possible.
 - **Rate limit counters are in memory**, per API instance. With several instances, each one counts separately. A shared store such as Redis would be needed.
 - **The frontend's own security headers** (Content-Security-Policy and others for its pages) must be set by whatever serves the static files. That is part of Milestone 7.
 - **Token storage:** the JWT is kept in `localStorage`. Before any public deployment, review moving to httpOnly cookies. This is tracked in the roadmap for Milestone 7.

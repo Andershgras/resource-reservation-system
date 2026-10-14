@@ -201,7 +201,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
-| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58)), PR 2 done ([#60](https://github.com/Andershgras/resource-reservation-system/pull/60)), PR 3 awaiting review |
+| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58)), PR 2 done ([#60](https://github.com/Andershgras/resource-reservation-system/pull/60)), PR 3 done ([#61](https://github.com/Andershgras/resource-reservation-system/pull/61)), PR 4 awaiting review |
 | M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, auth cookie security review). Deploy-ready, with no hosted demo. | Not started |
 
 ### M1: Booking Correctness And Data Integrity
@@ -467,13 +467,43 @@ Follow-ups noticed during PR 3:
 - Admins can't unlock a locked account by hand. A lockout ends by itself after 15 minutes.
 - Lockout can be used to keep a known user out, 15 minutes at a time. The rate limit slows this ([security](security.md#known-limitations)).
 
-PR 4: email flows
+PR 4: email flows ([ADR 0011](adr/0011-email-flows.md))
 
-- [ ] `IEmailSender` with a development-only sender, testable without a paid provider
-- [ ] Email verification, which allows a generic registration response (from M3)
-- [ ] Password reset that ends existing sessions
-- [ ] Tokens that are random, expiring and single use, stored only as hashes and never written to normal logs
-- [ ] Booking confirmation and cancellation emails, with an `.ics` attachment
+Agreed decisions:
+- New accounts verify their email before signing in. Unverified accounts never get a token and can't book.
+- Booking emails for new, moved and cancelled bookings.
+- Verification links last 24 hours, reset links 1 hour, and each account gets at most one email of each kind every 2 minutes.
+- Booking emails go through a database outbox written with the booking, sent by a background worker with bounded retries and recorded failures. Link emails use a bounded in-memory queue, so raw tokens are never stored. No external message broker.
+- A development email sender only. A real provider is configured in M7.
+- Resetting an unverified account must not hand an attacker's data to the address's owner.
+
+- [x] `IEmailSender` with a development sender that writes `.eml` files, and a capturing sender in tests
+- [x] Email verification, which allows a generic registration response (from M3). Confirming needs the link and the account's password.
+- [x] Password reset that ends existing sessions, and sets up an unconfirmed account again for the inbox owner
+- [x] Tokens that are random, expiring and single use, stored only as hashes, kept in the URL fragment and removed from the address, and never written to normal logs
+- [x] The same answer and a minimum response time for every request that may send email, a per-account cooldown and a per-IP email rate limit
+- [x] Booking confirmation, move and cancellation emails through an outbox, with an `.ics` invitation that updates one calendar event
+- [x] Tests:
+  - SQL Server tests of registration, verification, reset, concurrent use of one link, the cooldown, logging, the outbox and its concurrent workers, and the migration with existing users
+  - unit tests of the invitations, including both daylight-saving changes
+  - page tests with axe, and smoke tests of the new flows
+- [x] Docs: ADR 0011, README, architecture, configuration, deployment, security and testing
+
+Changes in behaviour in PR 4:
+- Changed: `POST /api/auth/register` returns `202 { message }`, the same for every address, instead of `201` with the user.
+- New: unconfirmed accounts get `403` after the right password, until confirmed. Existing accounts are confirmed by the migration.
+- New: `/verify-email`, `/forgot-password`, `/reset-password` and `/resend-verification`, and the API endpoints behind them.
+- New: booking emails with calendar invitations.
+- New: registration, resend-verification and forgot-password have their own per-IP rate limit, and answer no sooner than 250 ms.
+- New: the API needs `Email:Delivery`, `Email:FromAddress` and `Frontend:BaseUrl` to start. Development sets them.
+- Changed: the Users screen marks unconfirmed accounts, which can't be made admins.
+- Changed: bookings, moves, closures and one-off windows can't start or end in the hour skipped when summer time starts (02:00–02:59 on the last Sunday of March). The calendar no longer offers those times ([ADR 0001](adr/0001-time-zone-convention.md#updates)).
+- Note: booking emails are delivered at least once, not exactly once.
+
+Follow-ups noticed during PR 4:
+- Sent booking emails stay in the outbox table. A clean-up job belongs with the deployment work (M7).
+- Unconfirmed accounts that are never confirmed stay in the database. They can't sign in, and a later registration or reset of the address deals with them, but nothing removes them.
+- Editing one-off windows and weekly rules still sends no email to affected bookings, as before.
 
 ### M7: Deployment
 
@@ -490,7 +520,7 @@ Tracked so far:
 
 ## Later Ideas
 
-Availability exceptions are done in M6 PR 2. Email notifications and calendar export are planned in M6 PR 4.
+Availability exceptions are done in M6 PR 2. Email notifications with calendar invitations are done in M6 PR 4.
 
 Deferred, with no milestone yet:
 

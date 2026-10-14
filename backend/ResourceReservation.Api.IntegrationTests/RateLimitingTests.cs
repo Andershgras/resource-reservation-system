@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.DTOs;
@@ -9,6 +9,7 @@ namespace ResourceReservation.Api.IntegrationTests;
 public class RateLimitingTests : ApiTestBase
 {
     private const int PermitLimit = 10;
+    private const int EmailPermitLimit = 3;
     private const string ClientIp = "198.51.100.10";
     private const string ProxyIp = "10.0.0.5";
 
@@ -34,19 +35,25 @@ public class RateLimitingTests : ApiTestBase
         Assert.Equal("6", response.Headers.GetValues("Retry-After").Single());
     }
 
+    // Registration, resending a verification link and asking for a reset all
+    // send email, and share a stricter limit of their own. Sign-in has its own.
     [Fact]
-    public async Task LoginAndRegister_FromSameIp_ShareOneLimit()
+    public async Task EmailRequests_ShareAStricterLimit_SeparateFromSignIn()
     {
         await using var factory = CreateFactory();
         var client = factory.CreateClient();
 
-        for (var attempt = 0; attempt < PermitLimit / 2; attempt++)
-        {
-            Assert.NotEqual(HttpStatusCode.TooManyRequests, (await LoginAsync(client, ClientIp)).StatusCode);
-            Assert.NotEqual(HttpStatusCode.TooManyRequests, (await RegisterAsync(client, ClientIp, attempt)).StatusCode);
-        }
+        Assert.Equal(HttpStatusCode.Accepted, (await RegisterAsync(client, ClientIp, 0)).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await PostEmailRequestAsync(client, ClientIp, "/api/auth/forgot-password")).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await PostEmailRequestAsync(client, ClientIp, "/api/auth/resend-verification")).StatusCode);
+        var limited = await PostEmailRequestAsync(client, ClientIp, "/api/auth/forgot-password");
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await RegisterAsync(client, ClientIp, PermitLimit)).StatusCode);
+        await ProblemAssert.IsProblemAsync(limited, HttpStatusCode.TooManyRequests, AuthRateLimiting.RejectedMessage);
+        // 900 seconds / 3 permits.
+        Assert.Equal("300", limited.Headers.GetValues("Retry-After").Single());
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await RegisterAsync(client, ClientIp, 1)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(client, ClientIp)).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await RegisterAsync(client, "198.51.100.11", 2)).StatusCode);
     }
 
     [Fact]
@@ -149,6 +156,8 @@ public class RateLimitingTests : ApiTestBase
         settings ??= [];
         settings["RateLimiting:Auth:PermitLimit"] = PermitLimit.ToString();
         settings["RateLimiting:Auth:WindowSeconds"] = "60";
+        settings["RateLimiting:Email:PermitLimit"] = EmailPermitLimit.ToString();
+        settings["RateLimiting:Email:WindowSeconds"] = "900";
 
         return new ApiFactory(Fixture.ConnectionString, settings);
     }
@@ -189,6 +198,17 @@ public class RateLimitingTests : ApiTestBase
         request.Headers.Add(TestRemoteIpStartupFilter.HeaderName, remoteIp);
 
         return request;
+    }
+
+    private static Task<HttpResponseMessage> PostEmailRequestAsync(HttpClient client, string remoteIp, string path)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent.Create(new AccountEmailRequestDto { Email = "nobody@integration.test" })
+        };
+        request.Headers.Add(TestRemoteIpStartupFilter.HeaderName, remoteIp);
+
+        return client.SendAsync(request);
     }
 
     private static Task<HttpResponseMessage> RegisterAsync(HttpClient client, string remoteIp, int number)

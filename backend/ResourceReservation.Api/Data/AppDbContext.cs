@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Models;
 
 namespace ResourceReservation.Api.Data;
@@ -16,6 +16,9 @@ public class AppDbContext : DbContext
     public DbSet<AvailabilityException> AvailabilityExceptions { get; set; }
     public DbSet<Reservation> Reservations { get; set; }
     public DbSet<User> Users { get; set; }
+    public DbSet<UserToken> UserTokens { get; set; }
+    public DbSet<AccountEmailCooldown> AccountEmailCooldowns { get; set; }
+    public DbSet<BookingNotification> BookingNotifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +34,46 @@ public class AppDbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValueSql($"CONVERT(varchar({User.SecurityStampLength}), CRYPT_GEN_RANDOM(32), 2)");
             user.HasIndex(u => u.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<UserToken>(token =>
+        {
+            token.Property(t => t.Purpose).HasMaxLength(30);
+            token.Property(t => t.TokenHash).HasMaxLength(UserToken.TokenHashLength).IsUnicode(false);
+            // Tokens are looked up by hash only.
+            token.HasIndex(t => t.TokenHash).IsUnique();
+            token.HasIndex(t => new { t.UserId, t.Purpose });
+            token.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AccountEmailCooldown>(cooldown =>
+        {
+            cooldown.HasKey(c => new { c.UserId, c.Purpose });
+            cooldown.Property(c => c.Purpose).HasMaxLength(30);
+            cooldown.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookingNotification>(notification =>
+        {
+            notification.Property(n => n.Kind).HasMaxLength(20);
+            notification.Property(n => n.ResourceName).HasMaxLength(100);
+            notification.Property(n => n.ResourceLocation).HasMaxLength(200);
+            notification.Property(n => n.RecipientName).HasMaxLength(100);
+            notification.Property(n => n.RecipientEmail).HasMaxLength(255);
+            notification.Property(n => n.LastError).HasMaxLength(BookingNotification.LastErrorMaxLength);
+            // The worker looks for emails still waiting, in order.
+            notification.HasIndex(n => new { n.NextAttemptAt, n.Id })
+                .HasFilter("[SentAt] IS NULL AND [FailedAt] IS NULL");
+            notification.HasOne(n => n.Reservation)
+                .WithMany()
+                .HasForeignKey(n => n.ReservationId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Resource>(resource =>

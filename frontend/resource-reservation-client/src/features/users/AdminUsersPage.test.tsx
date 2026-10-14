@@ -19,6 +19,7 @@ const self: UserAccountResponse = {
   ...testAdmin,
   role: 'Admin',
   isActive: true,
+  isEmailConfirmed: true,
   createdAt: null,
 }
 
@@ -28,6 +29,7 @@ const ada: UserAccountResponse = {
   email: 'ada@example.com',
   role: 'User',
   isActive: true,
+  isEmailConfirmed: true,
   createdAt: '2030-01-10T08:00:00+00:00',
 }
 
@@ -37,6 +39,7 @@ const bo: UserAccountResponse = {
   email: 'bo@example.com',
   role: 'Admin',
   isActive: false,
+  isEmailConfirmed: true,
   createdAt: '2030-01-11T08:00:00+00:00',
 }
 
@@ -75,6 +78,16 @@ describe('AdminUsersPage', () => {
     expect(within(boRow).getByText('Deactivated')).toBeInTheDocument()
     expect(within(boRow).getByRole('button', { name: 'Remove admin role from Bo' })).toBeInTheDocument()
     expect(within(boRow).getByRole('button', { name: 'Reactivate Bo' })).toBeInTheDocument()
+  })
+
+  it('marks unconfirmed accounts, and offers no admin role for them', async () => {
+    vi.mocked(usersApi.getUsers).mockResolvedValue(pageOf([self, { ...ada, isEmailConfirmed: false }]))
+    renderPage()
+
+    const adaRow = await findRow('Ada')
+    expect(within(adaRow).getByText('Email not confirmed')).toBeInTheDocument()
+    expect(within(adaRow).queryByRole('button', { name: 'Make Ada an admin' })).not.toBeInTheDocument()
+    expect(within(adaRow).getByRole('button', { name: 'Deactivate Ada' })).toBeInTheDocument()
   })
 
   it('makes a user an admin after confirming, explaining they sign in again', async () => {

@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
@@ -355,6 +355,7 @@ public class LoginTests : ApiTestBase
             Name = "Login User",
             Email = email,
             IsActive = isActive,
+            IsEmailConfirmed = true,
             LockoutEndsAt = lockoutEndsAt
         };
 

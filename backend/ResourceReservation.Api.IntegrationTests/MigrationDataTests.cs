@@ -71,6 +71,7 @@ public class MigrationDataTests : ApiTestBase
                 Assert.Null(reservation.CancelledAt);
                 Assert.Null(reservation.CancelledByUserId);
                 Assert.NotEmpty(reservation.Version);
+                Assert.Equal(0, reservation.CalendarSequence);
             });
 
             var resource = await context.Resources.AsNoTracking().SingleAsync();
@@ -89,8 +90,9 @@ public class MigrationDataTests : ApiTestBase
         }
     }
 
-    // Users from before account security existed stay active, each get their
-    // own stamp, and can still sign in and use their token afterwards.
+    // Users from before account security and email verification existed stay
+    // active and confirmed, each get their own stamp, and can still sign in and
+    // use their token afterwards.
     [Fact]
     public async Task AccountSecurityMigration_KeepsExistingUsersActiveAndAbleToSignIn()
     {
@@ -128,6 +130,9 @@ public class MigrationDataTests : ApiTestBase
                 Assert.Null(user.CreatedAt);
                 Assert.Equal(0, user.FailedLoginCount);
                 Assert.Null(user.LockoutEndsAt);
+                Assert.True(user.IsEmailConfirmed);
+                // Unknown, so left empty rather than invented.
+                Assert.Null(user.EmailConfirmedAt);
             });
             Assert.NotEqual(users[0].SecurityStamp, users[1].SecurityStamp);
 

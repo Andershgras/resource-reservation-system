@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
@@ -7,11 +7,15 @@ using Microsoft.Extensions.Options;
 
 namespace ResourceReservation.Api.Configuration;
 
-// Brute-force protection for login and registration. Rejected requests get a
-// 429 problem response with Retry-After.
+// Brute-force protection for the account endpoints, per client IP address.
+// Sign-in, verification and password reset share the "auth" limit. The
+// requests that send email share the stricter "email" limit. Rejected requests
+// get a 429 problem response with Retry-After.
 public static class AuthRateLimiting
 {
     public const string PolicyName = "auth";
+
+    public const string EmailPolicyName = "email";
 
     public const string RejectedMessage = "Too many attempts. Please wait a moment and try again.";
 
@@ -19,9 +23,10 @@ public static class AuthRateLimiting
     {
         services.AddRateLimiter(_ => { });
         services.AddOptions<RateLimiterOptions>()
-            .Configure<IOptions<AuthRateLimitOptions>>((options, authOptions) =>
+            .Configure<IOptions<AuthRateLimitOptions>, IOptions<EmailRateLimitOptions>>((options, authOptions, emailOptions) =>
             {
                 var limits = authOptions.Value;
+                var emailLimits = emailOptions.Value;
 
                 // The built-in limiters don't report the time left until the next
                 // permit. A token bucket's Retry-After is one refill interval (6 s by
@@ -33,6 +38,16 @@ public static class AuthRateLimiting
                         TokenLimit = limits.PermitLimit,
                         TokensPerPeriod = 1,
                         ReplenishmentPeriod = limits.GetReplenishmentPeriod(),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    }));
+                options.AddPolicy(EmailPolicyName, context => RateLimitPartition.GetTokenBucketLimiter(
+                    GetClientPartitionKey(context.Connection.RemoteIpAddress),
+                    _ => new TokenBucketRateLimiterOptions
+                    {
+                        TokenLimit = emailLimits.PermitLimit,
+                        TokensPerPeriod = 1,
+                        ReplenishmentPeriod = emailLimits.GetReplenishmentPeriod(),
                         QueueLimit = 0,
                         AutoReplenishment = true
                     }));

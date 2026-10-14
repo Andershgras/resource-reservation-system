@@ -5,6 +5,7 @@ import {
   type BookingRuleField,
   type BookingRulesDraft,
 } from './bookingRules'
+import { isNonexistentWallClock, nonexistentTimeMessage } from './dates'
 import type { FieldErrors } from './errors'
 
 // Client-side checks that run before a form is sent. Each returns the errors
@@ -36,6 +37,42 @@ export function validateAuthForm(
     errors.password = mode === 'register' ? 'Enter a password.' : 'Enter your password.'
   } else if (mode === 'register' && password.length < 8) {
     errors.password = 'Password must be at least 8 characters.'
+  }
+
+  return errors
+}
+
+export function validateEmailForm(email: string): FieldErrors<'email'> {
+  if (!email.trim()) {
+    return { email: 'Enter your email address.' }
+  }
+
+  return /^[^\s@]+@[^\s@]+$/.test(email.trim()) ? {} : { email: 'Enter a valid email address.' }
+}
+
+export type ResetPasswordField = 'name' | 'password' | 'confirmPassword'
+
+// The name is only asked for when the reset sets up an unconfirmed account.
+export function validateResetPasswordForm(
+  needsName: boolean,
+  name: string,
+  password: string,
+  confirmPassword: string,
+): FieldErrors<ResetPasswordField> {
+  const errors: FieldErrors<ResetPasswordField> = {}
+
+  if (needsName && !name.trim()) {
+    errors.name = 'Enter your name.'
+  }
+
+  if (!password) {
+    errors.password = 'Enter a new password.'
+  } else if (password.length < 8) {
+    errors.password = 'Password must be at least 8 characters.'
+  }
+
+  if (password && confirmPassword !== password) {
+    errors.confirmPassword = "The passwords don't match."
   }
 
   return errors
@@ -105,12 +142,16 @@ export function validateAvailabilityForm(
 
   if (!startTime) {
     errors.startTime = 'Enter a start time.'
+  } else if (isNonexistentWallClock(startTime)) {
+    errors.startTime = nonexistentTimeMessage
   }
 
   if (!endTime) {
     errors.endTime = 'Enter an end time.'
   } else if (startTime && endTime <= startTime) {
     errors.endTime = 'End time must be after start time.'
+  } else if (isNonexistentWallClock(endTime)) {
+    errors.endTime = nonexistentTimeMessage
   }
 
   return errors

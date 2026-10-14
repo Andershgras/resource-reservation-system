@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ResourceReservation.Api.Data;
 using ResourceReservation.Api.DTOs;
 using ResourceReservation.Api.Models;
@@ -144,6 +144,11 @@ public class AvailabilityExceptionService
         if (request.EndTime <= request.StartTime)
         {
             return ServiceError.Validation("EndTime must be after StartTime.");
+        }
+
+        if (_schedulingClock.CheckTimesExist(request.StartTime, request.EndTime) is { } timeError)
+        {
+            return timeError;
         }
 
         if (request.EndTime <= _schedulingClock.GetLocalNow())

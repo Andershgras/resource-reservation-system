@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -246,7 +246,7 @@ public class UserManagementTests : ApiTestBase
         Assert.Equal("Carl Eng", Assert.Single(search!.Items).Name);
         Assert.False(firstPage.Items[1].IsActive);
         Assert.Equal(
-            ["createdAt", "email", "id", "isActive", "name", "role"],
+            ["createdAt", "email", "id", "isActive", "isEmailConfirmed", "name", "role"],
             JsonDocument.Parse(json).RootElement.GetProperty("items")[0]
                 .EnumerateObject().Select(property => property.Name).Order());
     }
@@ -334,7 +334,7 @@ public class UserManagementTests : ApiTestBase
         bool isActive = true)
     {
         await using var context = Fixture.CreateDbContext();
-        var user = new User { Name = name, Email = email, Role = role, IsActive = isActive };
+        var user = new User { Name = name, Email = email, Role = role, IsActive = isActive, IsEmailConfirmed = true };
         user.PasswordHash = new Microsoft.AspNetCore.Identity.PasswordHasher<User>().HashPassword(user, Password);
         context.Users.Add(user);
         await context.SaveChangesAsync();

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ResourceReservation.Api.Configuration;
 using ResourceReservation.Api.Data;
@@ -144,6 +144,11 @@ public class ReservationService
             return ServiceError.Validation("EndTime must be after StartTime.");
         }
 
+        if (_schedulingClock.CheckTimesExist(request.StartTime, request.EndTime) is { } timeError)
+        {
+            return timeError;
+        }
+
         var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)
             .Check(request.StartTime, request.EndTime, _schedulingClock.GetLocalNow());
 
@@ -215,6 +220,7 @@ public class ReservationService
         };
 
         _context.Reservations.Add(reservation);
+        QueueNotification(reservation, BookingNotificationKinds.Created, changedByAdmin: false);
         await _context.SaveChangesAsync();
 
         if (transaction is not null)
@@ -254,6 +260,11 @@ public class ReservationService
         reservation.Status = ReservationStatuses.Cancelled;
         reservation.CancelledAt = _schedulingClock.GetUtcNow();
         reservation.CancelledByUserId = currentUser.UserId;
+        reservation.CalendarSequence++;
+
+        await _context.Entry(reservation).Reference(item => item.Resource).LoadAsync();
+        await _context.Entry(reservation).Reference(item => item.User).LoadAsync();
+        QueueNotification(reservation, BookingNotificationKinds.Cancelled, IsAdminActingForOthers(reservation, currentUser));
 
         return await TrySaveChangesAsync()
             ? ServiceResult.Success
@@ -313,6 +324,11 @@ public class ReservationService
             return ServiceError.Validation("EndTime must be after StartTime.");
         }
 
+        if (_schedulingClock.CheckTimesExist(request.StartTime, request.EndTime) is { } timeError)
+        {
+            return timeError;
+        }
+
         var policyError = BookingPolicy.For(resource, _bookingPolicyOptions)
             .Check(request.StartTime, request.EndTime, localNow);
 
@@ -359,6 +375,8 @@ public class ReservationService
         reservation.StartTime = request.StartTime;
         reservation.EndTime = request.EndTime;
         reservation.UpdatedAt = _schedulingClock.GetUtcNow();
+        reservation.CalendarSequence++;
+        QueueNotification(reservation, BookingNotificationKinds.Moved, IsAdminActingForOthers(reservation, currentUser));
 
         if (!await TrySaveChangesAsync())
         {
@@ -412,6 +430,42 @@ public class ReservationService
         {
             return false;
         }
+    }
+
+    // Adds the booking email to the outbox. It is saved by the same SaveChanges
+    // as the booking change, so it exists exactly when the change does, and is
+    // sent later by EmailOutboxWorker. A failed email never undoes the booking
+    // (ADR 0011). Deactivated users aren't emailed.
+    private void QueueNotification(Reservation reservation, string kind, bool changedByAdmin)
+    {
+        var user = reservation.User!;
+
+        if (!user.IsActive)
+        {
+            return;
+        }
+
+        var now = _schedulingClock.GetUtcNow();
+        _context.BookingNotifications.Add(new BookingNotification
+        {
+            Reservation = reservation,
+            Kind = kind,
+            StartTime = reservation.StartTime,
+            EndTime = reservation.EndTime,
+            CalendarSequence = reservation.CalendarSequence,
+            ResourceName = reservation.Resource!.Name,
+            ResourceLocation = reservation.Resource.Location,
+            RecipientName = user.Name,
+            RecipientEmail = user.Email,
+            ChangedByAdmin = changedByAdmin,
+            CreatedAt = now,
+            NextAttemptAt = now
+        });
+    }
+
+    private static bool IsAdminActingForOthers(Reservation reservation, CurrentUser currentUser)
+    {
+        return currentUser.IsAdmin && reservation.UserId != currentUser.UserId;
     }
 
     private static bool CanAccess(Reservation reservation, CurrentUser currentUser)

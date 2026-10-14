@@ -1,4 +1,4 @@
-namespace ResourceReservation.Api.Models;
+﻿namespace ResourceReservation.Api.Models;
 
 public class Reservation
 {
@@ -25,6 +25,10 @@ public class Reservation
     public DateTimeOffset? CancelledAt { get; set; }
 
     public int? CancelledByUserId { get; set; }
+
+    // The calendar invitation's SEQUENCE. It goes up with every move and the
+    // cancellation, so calendars replace the event they already have.
+    public int CalendarSequence { get; set; }
 
     // SQL Server rowversion, changed by every update. Used to reject an update
     // based on an out-of-date copy of the reservation.

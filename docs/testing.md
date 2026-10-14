@@ -40,7 +40,7 @@ npm run test:smoke
 
 These run in about a second, with no external dependencies.
 
-- **Service tests** (`ReservationServiceTests`, `AuthServiceTests`, `AvailabilityServiceTests`, `BookingPolicyTests`) cover the business rules:
+- **Service tests** (`ReservationServiceTests`, `AvailabilityServiceTests`, `BookingPolicyTests`) cover the business rules:
   - availability and merged windows
   - bookings in the past
   - overlaps and cancellations
@@ -51,7 +51,8 @@ These run in about a second, with no external dependencies.
   - when a booking was made and cancelled, and by whom
   - existing bookings that break today's rules staying valid
   - closures (`ClosureTests`): overlapping closures combined but deleted one by one, closed time limited to opening hours, booking and moving at the closure's edges, both Copenhagen daylight-saving changes, and previews and saves that never cancel
-  - registration. Sign-in uses `ExecuteUpdate`, which the in-memory provider can't run, so it is tested against SQL Server.
+  - Registration and sign-in use `ExecuteUpdate` and transactions, which the in-memory provider can't run, so they are tested against SQL Server.
+- **Calendar invitations** (`CalendarInviteTests`): Copenhagen times as UTC in winter and summer, both daylight-saving changes (the skipped spring hour and the repeated autumn hour, on the real 2030 dates), a booking across the autumn change lasting its real length, times in the skipped spring hour reported as never happening and refusing to convert, a booking across that hour allowed and one real hour long, REQUEST and CANCEL with the same UID and a rising SEQUENCE, escaping, line folding at 75 octets without splitting a character, and the email built around the invitation.
 - **Controller tests** cover the CRUD controllers for resources, availability windows and weekly rules. `ControllerExtensionsTests` checks how service errors map to HTTP status codes.
 - **Database:** tests use the EF Core in-memory provider. It doesn't enforce constraints, transactions or locks; the integration tests cover those.
 - **Time:** tests that depend on "now" use `TestSchedulingClock`, which wraps a `FakeTimeProvider` with a fixed time in `Europe/Copenhagen`.
@@ -74,7 +75,35 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - Closures and bookings share the resource lock. With the lock held elsewhere, creating a closure waits and returns 503. A booking waiting for the lock is refused once a closure is saved meanwhile, because availability is checked under the lock. Each test fails with its protection removed. A parallel test also checks that a booking either is listed as affected or is refused.
 - **Closures:** the full flow through the API, bookings made between preview and save, deleting one of two overlapping closures, the admin-only reservations for a week, and that the public schedule never names who booked.
 - **Booking rules and moves:** resource overrides saved and applied to bookings and the schedule, overrides that contradict the defaults rejected beside their field, the real 90-day horizon with dates relative to today, out-of-date versions, and the schedule leaving out a booking being moved only for its owner or an admin.
-- **Registration:** parallel registrations with the same email, and email normalization.
+- **Registration (`RegistrationTests`):**
+  - a new address gets an unconfirmed account and a link whose token is stored only as a hash, and can't sign in yet
+  - an address with an account gets the same answer and a notice, and the account doesn't change, even when it is unconfirmed
+  - ten parallel registrations of one address: one account, one link, at most one notice
+  - email normalization, and the minimum response time for every request that may send email
+- **Email verification (`EmailVerificationTests`):**
+  - the link and the password confirm once
+  - a wrong password neither confirms nor uses the link up, and counts towards the lockout
+  - one link used ten times at once confirms once
+  - expired and made-up links
+  - a new link cancels the old one
+  - the cooldown, even in parallel, and the same answer for every address
+  - a correctly signed token for an unconfirmed account is still refused
+- **Password reset (`PasswordResetTests`):**
+  - a reset ends sessions, clears a lockout and sends a notice
+  - one link used ten times at once resets once
+  - expiry, and a link stopping when the account is deactivated
+  - the same answer for every address, with the cooldown
+  - an unconfirmed account set up again for the inbox owner, with the registrant's name, password and link gone
+- **Account email logging (`AccountEmailLoggingTests`):** with every log level captured through the whole journey, no token, hash or link appears. A failed email is logged by kind and user only.
+- **Booking emails (`BookingEmailTests`):**
+  - making, moving and cancelling send invitations for one calendar event
+  - an admin's change says so
+  - a failing sender never undoes the booking, retries and then records the error, and a later attempt can succeed
+  - a refused booking queues nothing
+  - four concurrent workers send each of 20 emails once
+  - deactivated users aren't emailed
+- **Daylight saving (`DaylightSavingTests`):** on 31 March 2030, bookings starting or ending in 02:00–02:59 are refused, as are moves, closures (preview and save) and one-off windows; periods across the hour are accepted, and a booking 01:30–03:30 gets an invitation for 00:30–01:30 UTC.
+- **Race tests fail without their protection.** Each was checked with its protection removed: using a link without the single-use condition, the cooldown, and the outbox claim condition.
 - **Sign-in and lockout (`LoginTests`):**
   - the lockout: five failures lock even the right password out, attempts during it don't extend it, it ends after 15 minutes on a fake clock, and a success clears the count
   - the same answer for unknown emails, wrong passwords and locked accounts, each verifying exactly one hash, with the stand-in hash in the same format as real ones
@@ -99,7 +128,7 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - health checks
   - expired tokens and the login expiry fields
 - **Startup configuration:** each kind of invalid setting stops the app with a message naming the setting.
-- **Migrations:** they apply to an empty database and match the EF model. `MigrationDataTests` upgrades a separate database holding data from before Milestone 6, and checks every row survives, with unknown audit times left empty and no booking rule overrides. A second test upgrades users from before PR 3. They stay active, each get their own stamp, and can sign in and use their token afterwards.
+- **Migrations:** they apply to an empty database and match the EF model. Users from before email verification come out confirmed, with no invented confirmation time, and existing reservations start at calendar sequence 0. `MigrationDataTests` upgrades a separate database holding data from before Milestone 6, and checks every row survives, with unknown audit times left empty and no booking rule overrides. A second test upgrades users from before PR 3. They stay active, each get their own stamp, and can sign in and use their token afterwards.
 
 The shared test API allows bookings 3650 days ahead, because the test bookings are dated 2030. `BookingPolicyTests` checks the real default with its own API instance.
 
@@ -133,6 +162,8 @@ The tests delete all data in this database. To prevent accidents, the harness re
 - **Closures screen** (`AdminClosuresPage.test.tsx`): field checks, the confirmation listing affected bookings, bookings made after the preview, refusals, deleting one closure, and axe with the dialog open.
 - **Users screen** (`AdminUsersPage.test.tsx`): roles and status shown, no actions on your own account, confirmations that explain the effect, refusals from the API, search and pages in the address, and axe with the dialog open.
 - **Sign-in page** (`AuthPage.test.tsx`): field checks, the generic failed sign-in message, and the deactivated account message.
+- **Daylight saving in the calendar:** `isNonexistentWallClock` finds exactly 02:00–02:59 on the spring change and nothing in the autumn's repeated hour; the calendar never offers a start or end in the skipped hour; and the closure and window forms refuse such times beside the field.
+- **Account pages** (`AccountPages.test.tsx`): the link token removed from the address at once and sent only with the form, the password asked for before confirming, refusals with a way to a new link, a missing token, the reset link checked before anything is typed, matching passwords, the name asked for when an unconfirmed account is set up again, the same answer for every address, the rate limit message, and axe on each page.
 - **Theme** (`theme.test.tsx`): reading and saving the choice, storage being unavailable, the switch, and the two dark token blocks staying identical.
 - **My reservations** (`MyReservationsPage.test.tsx`): when each booking was made, moved and cancelled, in Copenhagen time; which bookings offer Move; and cancelling with the version.
 - **Admin resources** (`AdminResourcesPage.test.tsx`): the booking rules form, with its defaults, checks, API errors and unsaved changes.
@@ -183,6 +214,7 @@ The smoke tests run the same axe-core in Chromium, where the page is rendered, s
 - moving a booking (light mode)
 - the closure confirmation, the closures screen and the admin calendar
 - the deactivation confirmation and the users screen
+- the forgotten password page, the new password page, and email confirmation with an error
 - a chosen dark theme on a light device
 - both reservation lists
 - the admin form with errors
@@ -219,6 +251,8 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - closing a resource, then seeing it closed as a user
 - moving another user's booking from the admin calendar
 - deactivating a user, who then gets the deactivated message at sign-in
+- registering, being refused until the email is confirmed, confirming through the emailed link (whose token leaves the address at once), then signing in
+- resetting a forgotten password from the emailed link, and a used link saying so before anything is typed
 - the saved theme applying before the app's JavaScript runs, and the theme switch
 
 Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.

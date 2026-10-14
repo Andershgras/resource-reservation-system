@@ -60,6 +60,17 @@ builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserSessionValidator>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<AccountService>();
+builder.Services.AddScoped<UserTokenService>();
+builder.Services.AddScoped<AccountEmails>();
+builder.Services.AddScoped<BookingEmails>();
+builder.Services.AddScoped<EmailOutboxProcessor>();
+// Emails go through a sender chosen by Email:Delivery, which is validated at
+// startup. The pickup directory is the only one until Milestone 7.
+builder.Services.AddSingleton<IEmailSender, PickupDirectoryEmailSender>();
+builder.Services.AddSingleton<AccountEmailQueue>();
+builder.Services.AddHostedService<AccountEmailDispatcher>();
+builder.Services.AddHostedService<EmailOutboxWorker>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // Settings are validated when the app starts, so bad configuration never serves a request.
@@ -89,6 +100,26 @@ builder.Services.AddOptions<AuthRateLimitOptions>()
     .ValidateOnStart();
 builder.Services.AddOptions<AccountLockoutOptions>()
     .Bind(builder.Configuration.GetSection(AccountLockoutOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<AccountTokenOptions>()
+    .Bind(builder.Configuration.GetSection(AccountTokenOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<EmailOutboxOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOutboxOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<EmailRateLimitOptions>()
+    .Bind(builder.Configuration.GetSection(EmailRateLimitOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
@@ -223,7 +254,10 @@ using (var scope = app.Services.CreateScope())
             Name = string.IsNullOrWhiteSpace(adminName) ? "Admin" : adminName,
             Email = adminEmail,
             Role = UserRoles.Admin,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow,
+            // Configured by whoever runs the system, so there is nothing to verify.
+            IsEmailConfirmed = true,
+            EmailConfirmedAt = DateTimeOffset.UtcNow
         };
 
         var passwordHasher = new PasswordHasher<User>();
