@@ -51,7 +51,7 @@ These run in about a second, with no external dependencies.
   - when a booking was made and cancelled, and by whom
   - existing bookings that break today's rules staying valid
   - closures (`ClosureTests`): overlapping closures combined but deleted one by one, closed time limited to opening hours, booking and moving at the closure's edges, both Copenhagen daylight-saving changes, and previews and saves that never cancel
-  - registration and login
+  - registration. Sign-in uses `ExecuteUpdate`, which the in-memory provider can't run, so it is tested against SQL Server.
 - **Controller tests** cover the CRUD controllers for resources, availability windows and weekly rules. `ControllerExtensionsTests` checks how service errors map to HTTP status codes.
 - **Database:** tests use the EF Core in-memory provider. It doesn't enforce constraints, transactions or locks; the integration tests cover those.
 - **Time:** tests that depend on "now" use `TestSchedulingClock`, which wraps a `FakeTimeProvider` with a fixed time in `Europe/Copenhagen`.
@@ -69,10 +69,28 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - A held resource or user lock gives a 503 with `Retry-After`.
   - A move and a cancellation of the same booking in parallel: one succeeds and the other gets 409, in every round. Without the `rowversion` check turned into a 409, the loser gets a 500.
   - Two moves, or a move and a new booking, into the same free time: only one succeeds.
+  - Two admins removing each other at the same moment, by role or by status, leave exactly one active admin. An admin demoted while their request waits for the user administration lock is refused. With the lock held elsewhere, a change waits and returns 503. Without the re-check under the lock, these tests fail.
+  - Concurrent failed sign-ins each count once, and racing right and wrong passwords lock the account once and let no right password through.
   - Closures and bookings share the resource lock. With the lock held elsewhere, creating a closure waits and returns 503. A booking waiting for the lock is refused once a closure is saved meanwhile, because availability is checked under the lock. Each test fails with its protection removed. A parallel test also checks that a booking either is listed as affected or is refused.
 - **Closures:** the full flow through the API, bookings made between preview and save, deleting one of two overlapping closures, the admin-only reservations for a week, and that the public schedule never names who booked.
 - **Booking rules and moves:** resource overrides saved and applied to bookings and the schedule, overrides that contradict the defaults rejected beside their field, the real 90-day horizon with dates relative to today, out-of-date versions, and the schedule leaving out a booking being moved only for its owner or an admin.
 - **Registration:** parallel registrations with the same email, and email normalization.
+- **Sign-in and lockout (`LoginTests`):**
+  - the lockout: five failures lock even the right password out, attempts during it don't extend it, it ends after 15 minutes on a fake clock, and a success clears the count
+  - the same answer for unknown emails, wrong passwords and locked accounts, each verifying exactly one hash, with the stand-in hash in the same format as real ones
+  - a deactivated account revealed only after the right password, and never given a token
+  - a lockout or deactivation that lands while the password is being checked, and a password changed during a re-hash, using a hasher the test pauses mid-sign-in
+  - old-format hashes upgraded at sign-in
+  - the stamp never in a response, and only its fingerprint in the token
+  - Each race test fails with its protection removed.
+- **User management (`UserManagementTests`):**
+  - a demoted admin loses access at once with the token they already have, and a deactivated user too, keeping their reservations
+  - changes that change nothing keep sessions
+  - tokens without a stamp, with another stamp or with another role are rejected
+  - admins can't change their own account
+  - the list is paged and searchable, never shows secrets, and is admin only
+  - validation, including a missing `isActive`
+- **Token checks (`TokenValidationTests`):** a failing check refuses the request instead of trusting the signature alone, a token for a missing user is rejected, and with every log level captured, neither the stamp nor its fingerprint appears in logs or error responses.
 - **Security configuration:**
   - CORS for configured and unknown origins
   - forwarded headers trusted only from configured proxies
@@ -81,7 +99,7 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - health checks
   - expired tokens and the login expiry fields
 - **Startup configuration:** each kind of invalid setting stops the app with a message naming the setting.
-- **Migrations:** they apply to an empty database and match the EF model. `MigrationDataTests` upgrades a separate database holding data from before Milestone 6, and checks every row survives, with unknown audit times left empty and no booking rule overrides.
+- **Migrations:** they apply to an empty database and match the EF model. `MigrationDataTests` upgrades a separate database holding data from before Milestone 6, and checks every row survives, with unknown audit times left empty and no booking rule overrides. A second test upgrades users from before PR 3. They stay active, each get their own stamp, and can sign in and use their token afterwards.
 
 The shared test API allows bookings 3650 days ahead, because the test bookings are dated 2030. `BookingPolicyTests` checks the real default with its own API instance.
 
@@ -113,6 +131,8 @@ The tests delete all data in this database. To prevent accidents, the harness re
 - **Closures and freshness** (`BookingPage.test.tsx`): closed time with its reasons; reloading every minute while visible, keeping the week and a time being chosen; and waiting in the background until focus returns. The refresh tests fail without the live options.
 - **The admin calendar** (`AdminCalendar.test.tsx`): owners shown, free time only while moving, moving a booking with its version, and the user calendar never asking for owners.
 - **Closures screen** (`AdminClosuresPage.test.tsx`): field checks, the confirmation listing affected bookings, bookings made after the preview, refusals, deleting one closure, and axe with the dialog open.
+- **Users screen** (`AdminUsersPage.test.tsx`): roles and status shown, no actions on your own account, confirmations that explain the effect, refusals from the API, search and pages in the address, and axe with the dialog open.
+- **Sign-in page** (`AuthPage.test.tsx`): field checks, the generic failed sign-in message, and the deactivated account message.
 - **Theme** (`theme.test.tsx`): reading and saving the choice, storage being unavailable, the switch, and the two dark token blocks staying identical.
 - **My reservations** (`MyReservationsPage.test.tsx`): when each booking was made, moved and cancelled, in Copenhagen time; which bookings offer Move; and cancelling with the version.
 - **Admin resources** (`AdminResourcesPage.test.tsx`): the booking rules form, with its defaults, checks, API errors and unsaved changes.
@@ -162,6 +182,7 @@ The smoke tests run the same axe-core in Chromium, where the page is rendered, s
 - the calendar with a time being chosen
 - moving a booking (light mode)
 - the closure confirmation, the closures screen and the admin calendar
+- the deactivation confirmation and the users screen
 - a chosen dark theme on a light device
 - both reservation lists
 - the admin form with errors
@@ -197,6 +218,7 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - moving a booking from My reservations to a new time in the calendar
 - closing a resource, then seeing it closed as a user
 - moving another user's booking from the admin calendar
+- deactivating a user, who then gets the deactivated message at sign-in
 - the saved theme applying before the app's JavaScript runs, and the theme switch
 
 Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.

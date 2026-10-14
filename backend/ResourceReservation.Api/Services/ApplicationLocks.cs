@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -8,36 +8,50 @@ using ResourceReservation.Api.Data;
 
 namespace ResourceReservation.Api.Services;
 
-// The SQL Server application locks that serialize changes to a resource's
-// bookable time: bookings, moves and closures (ADR 0002).
-public class BookingLocks
+// The SQL Server application locks that serialize changes which must see each
+// other: bookings, moves and closures on a resource's time (ADR 0002), and
+// changes to user accounts' roles and status (ADR 0010).
+public class ApplicationLocks
 {
+    public const string UserAdministrationLockName = "users:administration";
+
     private readonly AppDbContext _context;
     private readonly SchedulingOptions _schedulingOptions;
 
-    public BookingLocks(AppDbContext context, IOptions<SchedulingOptions> schedulingOptions)
+    public ApplicationLocks(AppDbContext context, IOptions<SchedulingOptions> schedulingOptions)
     {
         _context = context;
         _schedulingOptions = schedulingOptions.Value;
     }
 
-    // Opens a transaction and takes the locks in it. Locks are always taken in
-    // the same order, the user's before the resource's, so two requests can
-    // never each hold one lock while waiting for the other. Pass a null user
+    // Opens a transaction and takes the booking locks in it. Locks are always
+    // taken in the same order, the user's before the resource's, so two requests
+    // can never each hold one lock while waiting for the other. Pass a null user
     // when only the resource needs locking. The locks are released when the
     // transaction commits, rolls back or is disposed.
-    public async Task<BookingLock> AcquireAsync(int? userId, int resourceId)
+    public Task<ApplicationLock> AcquireAsync(int? userId, int resourceId)
+    {
+        return AcquireAsync(userId is null
+            ? [$"reservation:resource:{resourceId}"]
+            : [$"reservation:user:{userId}", $"reservation:resource:{resourceId}"]);
+    }
+
+    // Serializes every change to a user's role or active status, so the check
+    // that an active admin remains always sees the other changes.
+    public Task<ApplicationLock> AcquireUserAdministrationAsync()
+    {
+        return AcquireAsync([UserAdministrationLockName]);
+    }
+
+    private async Task<ApplicationLock> AcquireAsync(string[] lockNames)
     {
         // The in-memory test provider has no transactions or locks.
         if (!_context.Database.IsRelational())
         {
-            return new BookingLock(true, null);
+            return new ApplicationLock(true, null);
         }
 
         var transaction = await _context.Database.BeginTransactionAsync();
-        var lockNames = userId is null
-            ? [$"reservation:resource:{resourceId}"]
-            : new[] { $"reservation:user:{userId}", $"reservation:resource:{resourceId}" };
 
         try
         {
@@ -47,7 +61,7 @@ public class BookingLocks
                 {
                     await transaction.DisposeAsync();
 
-                    return new BookingLock(false, null);
+                    return new ApplicationLock(false, null);
                 }
             }
         }
@@ -57,7 +71,7 @@ public class BookingLocks
             throw;
         }
 
-        return new BookingLock(true, transaction);
+        return new ApplicationLock(true, transaction);
     }
 
     private async Task<bool> TryAcquireLockAsync(string lockName)
@@ -100,4 +114,4 @@ public class BookingLocks
 
 // Acquired is false when a lock wasn't granted in time. Transaction is null
 // with the in-memory test provider.
-public sealed record BookingLock(bool Acquired, IDbContextTransaction? Transaction);
+public sealed record ApplicationLock(bool Acquired, IDbContextTransaction? Transaction);

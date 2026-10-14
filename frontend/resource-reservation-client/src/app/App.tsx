@@ -12,6 +12,7 @@ import { BookingPage } from '../features/booking/BookingPage'
 import { AdminReservationsPage } from '../features/reservations/AdminReservationsPage'
 import { MyReservationsPage } from '../features/reservations/MyReservationsPage'
 import { AdminResourcesPage } from '../features/resources/AdminResourcesPage'
+import { AdminUsersPage } from '../features/users/AdminUsersPage'
 import { AdminWeeklySchedulePage } from '../features/weekly-schedule/AdminWeeklySchedulePage'
 import { AdminLayout } from './AdminLayout'
 import { NotFoundPage } from './NotFoundPage'
@@ -43,6 +44,7 @@ export const appRoutes = createRoutesFromElements(
       <Route path="calendar" element={<BookingPage variant="admin" />} />
       <Route path="closures" element={<AdminClosuresPage />} />
       <Route path="reservations" element={<AdminReservationsPage />} />
+      <Route path="users" element={<AdminUsersPage />} />
     </Route>
 
     <Route element={<RequireAuth role="User"><ConfirmProvider><UserLayout /></ConfirmProvider></RequireAuth>}>

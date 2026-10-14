@@ -256,7 +256,7 @@ public class ClosureTests
             context,
             new AvailabilityService(context, clock, bookingPolicy),
             clock,
-            new BookingLocks(context, Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" })),
+            new ApplicationLocks(context, Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" })),
             bookingPolicy);
     }
 
@@ -265,7 +265,7 @@ public class ClosureTests
         return new AvailabilityExceptionService(
             context,
             CreateReservationService(context, localNow),
-            new BookingLocks(context, Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" })),
+            new ApplicationLocks(context, Options.Create(new SchedulingOptions { TimeZoneId = "Europe/Copenhagen" })),
             TestSchedulingClock.Create(localNow));
     }
 

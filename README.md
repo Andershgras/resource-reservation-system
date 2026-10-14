@@ -34,6 +34,12 @@ The project intentionally stays generic. A resource can represent a meeting room
 
 ![Admin weekly schedule](docs/screenshots/admin-weekly-schedule.png)
 
+### Admin User Management
+
+Every account, with search. Admins change roles and deactivate accounts, but not their own.
+
+![Admin user management](docs/screenshots/admin-users.png)
+
 ### User Booking Calendar
 
 A week of free and reserved time for one resource, with a time being chosen. A fully booked day stays visible.
@@ -61,6 +67,9 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 - JWT-based authentication
 - Session expiry: the frontend returns to the login screen when the token expires or the API rejects it
 - Rate-limited login and registration
+- Five failed sign-ins lock an account for 15 minutes, without revealing whether the account exists
+- Role changes and deactivation end the user's existing sessions at once
+- Old password hashes are upgraded when the user signs in
 - Role-based access for Admin and User behavior
 - Seeded development Admin account
 
@@ -76,6 +85,7 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 - View all reservations, with when each was made, moved and cancelled, and by whom
 - Filter reservations by resource and status
 - Cancel any active reservation
+- List and search users, make users admins or remove the role, and deactivate or reactivate accounts. Deactivated users keep their reservations. There is always at least one active admin, and admins can't change their own account.
 
 ### User Features
 
@@ -196,7 +206,7 @@ The frontend provides role-based workflows. Admin users manage the booking setup
 
 ## Domain Model
 
-- `User` - a person who can log in and create reservations
+- `User` - a person who can log in and create reservations, as a User or an Admin. An admin can deactivate an account, which keeps its reservations.
 - `Resource` - something that can be reserved
 - `Availability` - a one-off date/time window where a resource can be booked
 - `AvailabilityRule` - a recurring weekly rule for a resource, such as Monday 08:00-16:00
@@ -217,7 +227,19 @@ Login and registration share a rate limit per client IP address, using a token b
 - A client starts with 10 attempts, then gets one more every 6 seconds, up to 10. That allows 10 attempts per minute sustained, with a burst of up to about 20 in the first minute.
 - Over the limit, the API returns `429` with `Retry-After: 6`, the refill interval. That isn't the time left, so the next attempt may be allowed sooner.
 
+Five failed sign-ins in a row lock the account for 15 minutes. Every failure, including an unknown email or a locked account, returns the same `401` and message. A deactivated account gets `403` only after the right password. Every authenticated request checks that the token's user is still active, with the same role and security stamp ([ADR 0010](docs/adr/0010-user-management-and-account-security.md)).
+
 See [security](docs/security.md#brute-force-protection).
+
+### Users
+
+```text
+GET /api/users?search=&page=1&pageSize=25   Admin only: accounts, paged and searchable by name or email
+PUT /api/users/{id}/role                    Admin only: { "role": "User" | "Admin" }
+PUT /api/users/{id}/status                  Admin only: { "isActive": true | false }
+```
+
+Changing a role or deactivating an account ends the user's existing sessions. Admins can't change their own account (`403`), and a change that would leave no active admin returns `409`. Concurrent changes wait for each other under a SQL Server application lock, and a timeout returns `503` with `Retry-After`.
 
 ### Health
 
@@ -485,10 +507,8 @@ The MVP has been audited for production readiness. See the [audit](docs/audit/20
 
 These are intentionally outside the finished MVP, but would make good future issues:
 
-- Availability exceptions for holidays, maintenance, or one-off closures
 - Resource categories and filtering
 - Better calendar controls for week/month navigation
-- Reservation editing or rescheduling
 - Admin analytics or utilization overview
 - Calendar export
 - Email notifications

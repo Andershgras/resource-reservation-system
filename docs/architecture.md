@@ -24,7 +24,7 @@ flowchart LR
 | Layer | Folder | Responsibility |
 |---|---|---|
 | Controllers | `Controllers/` | Routing, `[Authorize]` rules, reading the current user from the token, and turning service results into HTTP responses |
-| Services | `Services/` | Business rules: availability and closures, booking policies, booking, moving and cancellation, the booking locks, authentication, tokens and scheduling time |
+| Services | `Services/` | Business rules: availability and closures, booking policies, booking, moving and cancellation, the application locks, authentication with lockout, token checks, user management and scheduling time |
 | Data | `Data/`, `Models/`, `Migrations/` | EF Core model, database constraints and migrations |
 | Contracts | `DTOs/` | Request and response shapes, with DataAnnotations validation |
 | Configuration | `Configuration/` | Typed settings, validated when the app starts |
@@ -108,6 +108,11 @@ erDiagram
         string Email UK "max 255, lower-case"
         string PasswordHash "PBKDF2"
         string Role "Admin or User"
+        bool IsActive "deactivated users can't sign in"
+        string SecurityStamp "64 hex, changes revoke tokens"
+        datetimeoffset CreatedAt "UTC, null before Milestone 6"
+        int FailedLoginCount
+        datetimeoffset LockoutEndsAt "UTC"
     }
     RESOURCE {
         int Id PK
@@ -172,8 +177,8 @@ Booking and availability times are wall-clock times in the configured scheduling
 
 | Concern | How it works |
 |---|---|
-| Authentication | JWT bearer tokens signed with HMAC-SHA256. They last `Jwt:ExpiryMinutes` (120 by default). |
-| Authorization | `[Authorize]` and `[Authorize(Roles = "Admin")]` on controllers. Services check ownership. |
+| Authentication | JWT bearer tokens signed with HMAC-SHA256. They last `Jwt:ExpiryMinutes` (120 by default). Every request also checks the token's user is still active with the same role and security stamp. Five failed sign-ins lock an account for 15 minutes. See [ADR 0010](adr/0010-user-management-and-account-security.md). |
+| Authorization | `[Authorize]` and `[Authorize(Roles = "Admin")]` on controllers. Services check ownership. Role and status changes run under an application lock that keeps an active admin. |
 | Errors | RFC 9457 problem details for every error, with `traceId` |
 | Configuration | Typed options validated at startup. See [configuration](configuration.md). |
 | Security | Rate-limited login and registration, CORS, trusted proxies, security headers and HSTS. See [security](security.md). |
@@ -192,7 +197,7 @@ Middleware runs in this order for every request:
 6. **HTTPS redirection**
 7. **CORS**
 8. **Rate limiter:** after CORS, so the browser can read a 429. It only applies to the auth endpoints.
-9. **Authentication and authorization**
+9. **Authentication and authorization:** after the token's signature and lifetime, `UserSessionValidator` checks its user in the database.
 10. **Endpoints:** the controllers and health checks.
 
 ## Frontend
@@ -210,7 +215,7 @@ flowchart TB
     Login["/login, /register<br/>RequireLoggedOut"]
     Admin["AdminLayout<br/>RequireAuth Admin"]
     User["UserLayout<br/>RequireAuth User"]
-    AdminPages["Resources, Availability,<br/>Weekly schedule, Reservations"]
+    AdminPages["Resources, Calendar, Availability,<br/>Weekly schedule, Closures,<br/>Reservations, Users"]
     UserPages["Booking, My reservations"]
     Hooks["features/*/…Queries.ts<br/>TanStack Query hooks"]
     Api["api/client.ts<br/>bearer token, problem details"]
@@ -228,7 +233,7 @@ flowchart TB
 |---|---|
 | `src/app/` | The route table, the two layouts, route guards, the not-found page and the query client defaults |
 | `src/auth/` | Session storage, `AuthProvider` and `useAuth`, and the login and registration page |
-| `src/features/` | One folder per feature: `resources`, `availability`, `weekly-schedule`, `reservations`, `booking`. Each has its page components and its query hooks. |
+| `src/features/` | One folder per feature: `resources`, `availability`, `weekly-schedule`, `closures`, `reservations`, `booking`, `users`. Each has its page components and its query hooks. |
 | `src/components/` | App-specific sections built from `src/ui/`: forms, lists, the tabs, and `ConfirmProvider` |
 | `src/ui/` | The design system's components: `Button`, `Field`, `Card`, `Alert`, `Badge`, `ConfirmDialog` and others, each with its stylesheet |
 | `src/styles/` | Design tokens (`tokens.css`) and element defaults (`base.css`) |
@@ -239,7 +244,7 @@ How state is handled:
 
 - **Server data** is cached by query key. Each change invalidates the data it affects and resolves once the data on screen has reloaded. For example, cancelling a reservation refreshes the reservation lists and the booking schedules.
 - **Logging in or out**, or a session expiring, clears the cache.
-- **Filters and the booking selection** live in the address, such as `/book?resource=3&week=2030-01-14`. A reload or a shared link shows the same view, and invalid values are ignored. Links from before the calendar, with `from` and `to`, open the week of their `from` date. Moving a booking adds `&move=42`.
+- **Filters and the booking selection** live in the address, such as `/book?resource=3&week=2030-01-14` or `/admin/users?search=ada&page=2`. A reload or a shared link shows the same view, and invalid values are ignored. Links from before the calendar, with `from` and `to`, open the week of their `from` date. Moving a booking adds `&move=42`.
 - **Cancelling and moving** send the reservation's `version`, and reload the lists and calendars whether they succeed or not, so a 409 for an out-of-date copy leaves fresh data on screen.
 - **Form drafts and messages** belong to the page that shows them.
 - **Redirects around login and logout** are made only by the route guards (`RequireAuth`, `RequireLoggedOut`), and `returnTo` must be a path inside the app.
@@ -288,3 +293,4 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0007: Plain CSS with design tokens and shared components](adr/0007-design-system.md)
 - [ADR 0008: Booking policies, rescheduling and reservation history](adr/0008-booking-policies-and-reservation-changes.md)
 - [ADR 0009: Closures (availability exceptions)](adr/0009-availability-exceptions.md)
+- [ADR 0010: User management and account security](adr/0010-user-management-and-account-security.md)

@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -29,7 +29,9 @@ public class JwtTokenService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email),
             new(ClaimTypes.Name, user.Name),
-            new(ClaimTypes.Role, user.Role)
+            new(ClaimTypes.Role, user.Role),
+            new(UserSessionValidator.SecurityStampClaimType,
+                UserSessionValidator.FingerprintSecurityStamp(user.SecurityStamp))
         };
 
         var expiresAt = _timeProvider.GetUtcNow().AddMinutes(_jwtOptions.ExpiryMinutes);

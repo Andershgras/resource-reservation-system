@@ -24,6 +24,9 @@ function renderPage(path: string) {
   )
 }
 
+// The API's one answer to every failed login.
+const failedLoginMessage = 'Invalid email or password. After repeated failed attempts, sign-in pauses for a few minutes.'
+
 describe('AuthPage', () => {
   it('shows each API validation error beside its field', async () => {
     vi.mocked(authApi.register).mockRejectedValue(new ApiError(
@@ -59,14 +62,29 @@ describe('AuthPage', () => {
   })
 
   it('shows a failed login for the whole form', async () => {
-    vi.mocked(authApi.login).mockRejectedValue(new ApiError('Invalid email or password.', 401))
+    vi.mocked(authApi.login).mockRejectedValue(new ApiError(failedLoginMessage, 401))
     renderPage('/login')
 
     await userEvent.type(screen.getByRole('textbox', { name: 'Email' }), 'user@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'wrong-password')
     await userEvent.click(screen.getByRole('button', { name: 'Login' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Error: Invalid email or password.')
+    expect(await screen.findByRole('alert')).toHaveTextContent(`Error: ${failedLoginMessage}`)
+  })
+
+  it('says when the account is deactivated, which the API only reveals after the right password', async () => {
+    vi.mocked(authApi.login).mockRejectedValue(
+      new ApiError('This account has been deactivated. Contact an administrator.', 403),
+    )
+    renderPage('/login')
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Email' }), 'user@example.com')
+    await userEvent.type(screen.getByLabelText('Password'), 'right-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('Error: This account has been deactivated. Contact an administrator.')
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
   it('has one h1 and no accessibility violations', async () => {

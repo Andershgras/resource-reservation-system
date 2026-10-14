@@ -1,6 +1,6 @@
 # Deployment
 
-The project isn't hosted yet. Milestone 7 adds Docker Compose, continuous deployment and a hosted demo. This guide describes what the application already expects from any deployment, so that work only has to wire it up.
+The project isn't hosted. Milestone 7 makes it deploy-ready, with Docker Compose and published images, but no hosted demo. This guide describes what the application already expects from any deployment, so that work only has to wire it up.
 
 ## Planned topology
 

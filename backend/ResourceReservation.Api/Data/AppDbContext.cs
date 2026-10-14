@@ -24,6 +24,12 @@ public class AppDbContext : DbContext
             user.Property(u => u.Name).HasMaxLength(100);
             user.Property(u => u.Email).HasMaxLength(255);
             user.Property(u => u.Role).HasMaxLength(20);
+            // The database default covers rows inserted outside the app, so no
+            // account is ever left without a stamp of its own.
+            user.Property(u => u.SecurityStamp)
+                .HasMaxLength(User.SecurityStampLength)
+                .IsUnicode(false)
+                .HasDefaultValueSql($"CONVERT(varchar({User.SecurityStampLength}), CRYPT_GEN_RANDOM(32), 2)");
             user.HasIndex(u => u.Email).IsUnique();
         });
 

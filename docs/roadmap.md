@@ -201,8 +201,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
-| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58)), PR 2 awaiting review |
-| M7 | Deployment (Docker Compose, continuous deployment, end-to-end tests against the real stack, auth cookie security review) | Not started |
+| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58)), PR 2 done ([#60](https://github.com/Andershgras/resource-reservation-system/pull/60)), PR 3 awaiting review |
+| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, auth cookie security review). Deploy-ready, with no hosted demo. | Not started |
 
 ### M1: Booking Correctness And Data Integrity
 
@@ -433,13 +433,39 @@ Follow-ups noticed during PR 2:
 - Editing one-off windows and weekly rules still doesn't report affected bookings, unlike closures ([ADR 0009](adr/0009-availability-exceptions.md)).
 - `index.html` has a small inline script for the theme, which a strict Content-Security-Policy in M7 must allow by hash.
 
-PR 3: user management and account security
+PR 3: user management and account security ([ADR 0010](adr/0010-user-management-and-account-security.md))
 
-- [ ] Admin user list with role changes and deactivation
-- [ ] The last active admin can't be removed or deactivated, even by concurrent requests
-- [ ] Role changes and deactivation take effect on existing tokens immediately
-- [ ] Temporary per-account lockout that doesn't reveal whether an account exists
-- [ ] Re-hash passwords on login when the hasher asks for it (from M3)
+Agreed decisions:
+- Five failed sign-ins lock an account for 15 minutes.
+- Admins can't demote or deactivate themselves.
+- Deactivated users keep their reservations.
+- The last-active-admin check runs under a SQL Server application lock, on every path that changes a role or status.
+- Deactivated accounts never get a token, and deactivation is only revealed after the right password.
+- Concurrent sign-ins can't get around a lockout or corrupt the failure count. Re-hashing can't overwrite a newer password.
+- Security stamps are random, never returned by the API, and checked against the database on every authenticated request.
+
+- [x] Admin user list with search and pages, role changes and deactivation
+- [x] The last active admin can't be removed or deactivated, even by concurrent requests: changes are serialized by a lock, and the acting admin is re-checked under it
+- [x] Role changes and deactivation take effect on existing tokens immediately, through a security stamp checked on every request
+- [x] Temporary per-account lockout that doesn't reveal whether an account exists, with one atomic failure count and the same answer and timing for every failure
+- [x] Re-hash passwords on login when the hasher asks for it (from M3), without overwriting a newer password
+- [x] Tests:
+  - a migration test with existing users, who stay active and can sign in
+  - SQL Server tests of lockout, enumeration resistance, races during sign-in, re-hashing, token revocation and concurrent admin changes, each race shown to fail without its protection
+  - unit, page and smoke tests, with axe on the Users screen in both themes
+- [x] Docs: ADR 0010, updates to ADRs 0002 and 0004, README, architecture, configuration, security and testing
+
+Changes in behaviour in PR 3:
+- New: `/admin/users` and the `/api/users` endpoints.
+- New: five failed sign-ins lock an account for 15 minutes. A deactivated account gets `403` after the right password.
+- Changed: every failed sign-in returns "Invalid email or password. After repeated failed attempts, sign-in pauses for a few minutes."
+- Changed: every authenticated request checks its user in the database. Tokens issued before this change have no security stamp, so everyone signs in once more.
+- Changed: `BookingLocks` is now `ApplicationLocks`.
+- Changed: sign-in tests moved from the in-memory unit tests to SQL Server integration tests.
+
+Follow-ups noticed during PR 3:
+- Admins can't unlock a locked account by hand. A lockout ends by itself after 15 minutes.
+- Lockout can be used to keep a known user out, 15 minutes at a time. The rate limit slows this ([security](security.md#known-limitations)).
 
 PR 4: email flows
 
@@ -450,6 +476,10 @@ PR 4: email flows
 - [ ] Booking confirmation and cancellation emails, with an `.ics` attachment
 
 ### M7: Deployment
+
+Agreed decisions (14 October 2026):
+- M6 PR 3 and PR 4 are finished before M7 starts.
+- M7 ends at "deploy-ready": images published to the GitHub container registry and a documented Docker Compose deployment, with no live host or cloud accounts.
 
 Tracked so far:
 

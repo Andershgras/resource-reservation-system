@@ -18,20 +18,20 @@ public class ReservationService
     private readonly AppDbContext _context;
     private readonly AvailabilityService _availabilityService;
     private readonly SchedulingClock _schedulingClock;
-    private readonly BookingLocks _bookingLocks;
+    private readonly ApplicationLocks _locks;
     private readonly BookingPolicyOptions _bookingPolicyOptions;
 
     public ReservationService(
         AppDbContext context,
         AvailabilityService availabilityService,
         SchedulingClock schedulingClock,
-        BookingLocks bookingLocks,
+        ApplicationLocks locks,
         IOptions<BookingPolicyOptions> bookingPolicyOptions)
     {
         _context = context;
         _availabilityService = availabilityService;
         _schedulingClock = schedulingClock;
-        _bookingLocks = bookingLocks;
+        _locks = locks;
         _bookingPolicyOptions = bookingPolicyOptions.Value;
     }
 
@@ -154,7 +154,7 @@ public class ReservationService
 
         // Serialize bookings per user and per resource, so neither the cap check
         // nor the overlap check can interleave with another booking (ADR 0002).
-        var bookingLock = await _bookingLocks.AcquireAsync(userId, request.ResourceId);
+        var bookingLock = await _locks.AcquireAsync(userId, request.ResourceId);
 
         if (!bookingLock.Acquired)
         {
@@ -323,7 +323,7 @@ public class ReservationService
 
         // Moving doesn't change how many bookings the user holds, so only the
         // resource is locked.
-        var bookingLock = await _bookingLocks.AcquireAsync(null, reservation.ResourceId);
+        var bookingLock = await _locks.AcquireAsync(null, reservation.ResourceId);
 
         if (!bookingLock.Acquired)
         {

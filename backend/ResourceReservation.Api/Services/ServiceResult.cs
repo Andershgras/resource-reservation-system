@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace ResourceReservation.Api.Services;
 
@@ -23,7 +23,9 @@ public sealed record ServiceError(ServiceErrorKind Kind, string Message)
     public static ServiceError NotFound(string message) => new(ServiceErrorKind.NotFound, message);
 
     public static ServiceError Forbidden() =>
-        new(ServiceErrorKind.Forbidden, "You do not have permission to access this resource.");
+        Forbidden("You do not have permission to access this resource.");
+
+    public static ServiceError Forbidden(string message) => new(ServiceErrorKind.Forbidden, message);
 
     public static ServiceError Conflict(string message) => new(ServiceErrorKind.Conflict, message);
 
