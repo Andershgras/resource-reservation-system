@@ -33,3 +33,7 @@ Migrating at startup was rejected for three reasons:
 - **Old and new versions overlap:** a migration must keep working with the API version that is still running while it applies. Breaking changes are split over two releases.
 - **Local development is unchanged.** `dotnet ef database update` still reads `appsettings.Development.json`, now through the factory.
 - **Pinned tool version:** `dotnet-ef` is now a local tool in `dotnet-tools.json`, so CI and developers use the same version.
+
+## Updates
+
+- **Milestone 7 PR 1: Docker Compose runs the bundle.** The `migrator` image contains the same bundle, built by `backend/Dockerfile`. Compose runs it as a one-shot container after SQL Server is ready and before the API starts. It then creates the API's own login, which can read and write data but not change the schema, so the separate logins this ADR describes are now set up automatically. See [deployment](../deployment.md#the-database).

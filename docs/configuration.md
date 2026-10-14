@@ -68,7 +68,7 @@ Emails are verification and reset links, account notices and booking emails ([AD
 | Setting | Required | Default | Notes |
 |---|---|---|---|
 | `Email:Delivery` | Yes | None | How emails are delivered. Only `PickupDirectory` exists for now, which writes each email as an `.eml` file instead of sending it. Development sets it. A real provider comes in Milestone 7. |
-| `Email:PickupDirectory` | With `PickupDirectory` | None | The folder for the `.eml` files, relative to the API's folder. Development uses `.dev-emails`, which git ignores, because the files hold working links. |
+| `Email:PickupDirectory` | With `PickupDirectory` | None | The folder for the `.eml` files, relative to the API's folder, or absolute. Development uses `.dev-emails`, which git ignores, because the files hold working links. Docker Compose uses a volume ([deployment](deployment.md#reading-emails)). |
 | `Email:FromAddress` | Yes | None | The sender address. Its domain also names calendar invitations, as in `reservation-42@example.com`. |
 | `Email:FromName` | No | `Resource Reservation` | |
 | `Frontend:BaseUrl` | Yes | None | Where the frontend runs, such as `https://app.example.com`, for the links in emails. Development uses `http://localhost:5173`. |
@@ -118,7 +118,28 @@ See [deployment](deployment.md#https-termination-and-redirection) for how these 
 
 | Variable | Default | Notes |
 |---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:5052/api` | The API's base URL. It is baked into the build, so set it before `npm run build`. See `.env.example`. |
+| `VITE_API_BASE_URL` | `http://localhost:5052/api` | The API's base URL. It is baked into the build, so set it before `npm run build`. See `.env.example`. The frontend image builds with `/api`, the API on the same origin, behind nginx. |
+
+## Docker Compose
+
+`compose.yaml` reads its settings from `.env`, which git ignores. Copy `.env.example`, which describes each one. Compose won't start while a required one is missing. See [deployment](deployment.md) for how they fit together.
+
+| `.env` setting | Required | Default | Becomes |
+|---|---|---|---|
+| `PUBLIC_ORIGIN` | Yes | None | `Frontend:BaseUrl`, and where nginx redirects plain HTTP. Must start with `https://`. |
+| `MSSQL_SA_PASSWORD` | Yes | None | SQL Server's `sa` password, used only by the migrator and to create the API's login. **Secret.** |
+| `APP_DB_PASSWORD` | Yes | None | The password of the API's own SQL login, `resource_reservation_api`, in `ConnectionStrings:DefaultConnection`. **Secret.** |
+| `JWT_KEY` | Yes | None | `Jwt:Key`. **Secret.** |
+| `EMAIL_FROM_ADDRESS` | Yes | None | `Email:FromAddress` |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | No | None | `SeedAdmin:Email` and `SeedAdmin:Password` |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | No | `ResourceReservation.Api`, `ResourceReservation.Client` | `Jwt:Issuer` and `Jwt:Audience` |
+| `MSSQL_PID` | No | `Express` | SQL Server's edition |
+| `BIND_ADDRESS` | No | `127.0.0.1` | The host address nginx's ports are published on. `0.0.0.0` on a server. |
+| `HTTP_PORT`, `HTTPS_PORT` | No | `8080`, `8443` | The host ports for nginx |
+| `TLS_CERT_DIR` | No | `./certs` | The folder with `tls.crt` and `tls.key`, mounted into nginx |
+| `PROXY_SUBNET`, `PROXY_IP_RANGE`, `PROXY_IP` | No | `172.31.250.0/24`, `172.31.250.128/25`, `172.31.250.10` | The network between nginx and the API. `PROXY_IP` is nginx's fixed address, and becomes `ReverseProxy:KnownProxies`. |
+
+Compose also sets `Email:Delivery` to `PickupDirectory` and `Email:PickupDirectory` to a volume, until real email delivery arrives in Milestone 7 PR 3.
 
 ## Test settings
 

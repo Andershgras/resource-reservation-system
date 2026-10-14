@@ -1,6 +1,6 @@
 # Testing
 
-The project has four automated test suites, and CI runs all of them on every push and pull request.
+The project has four automated test suites, plus a smoke test of the running container stack. CI runs all of them on every push and pull request.
 
 | Suite | Location | What it checks | Needs |
 |---|---|---|---|
@@ -8,6 +8,7 @@ The project has four automated test suites, and CI runs all of them on every pus
 | Backend integration tests | `backend/ResourceReservation.Api.IntegrationTests` | The whole API over HTTP against a real SQL Server | .NET SDK and Docker Desktop |
 | Frontend unit tests | `frontend/resource-reservation-client/src/**/*.test.ts(x)` | Helpers, session handling, the API client, query hooks, routing, pages, and accessibility of the shared components | Node.js |
 | Frontend smoke tests | `frontend/resource-reservation-client/tests/smoke` | The main browser flows in Playwright, with the API mocked | Node.js |
+| Container stack smoke test | `deploy/smoke-test.sh` | The images and Docker Compose stack, checked from outside through nginx | Docker, `curl`, Node.js |
 
 ## Running the tests
 
@@ -255,7 +256,26 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - resetting a forgotten password from the emailed link, and a used link saying so before anything is typed
 - the saved theme applying before the app's JavaScript runs, and the theme switch
 
-Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7.
+Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7 PR 3.
+
+## Container stack smoke test
+
+`deploy/smoke-test.sh` checks a running Docker Compose stack with `curl`, through nginx, checking TLS against the local certificate rather than skipping the check. CI's **Container stack** job builds the three images, starts the stack with throwaway secrets, and runs it. To run it locally, start the stack ([deployment](deployment.md#quick-start-on-your-own-machine)), then:
+
+```bash
+sh deploy/smoke-test.sh
+```
+
+It checks:
+
+- plain HTTP redirecting to `PUBLIC_ORIGIN`, keeping the path
+- the security headers, and that the Content-Security-Policy's script hashes match the inline scripts in the served `index.html`
+- `index.html` always revalidated, and hashed assets cached as immutable
+- the SPA fallback for routes such as `/admin/users`, and a `404` for a missing asset
+- `/health/ready` and `/api` reaching the API, which keeps its own `Cache-Control: no-store`
+- with the seed admin set: signing in, and creating and deleting a resource, which checks that the API's SQL login can write. The new resource's `Location` header must start with `PUBLIC_ORIGIN`, which shows that the API trusts nginx's `X-Forwarded-Proto` and gets the original `Host`.
+
+It doesn't run a browser, so it can't see a CSP violation itself. When the stack was first built, a browser check against it found the hash mismatch caused by Windows line endings ([deployment](deployment.md#the-frontends-responses)). The end-to-end suite in Milestone 7 PR 3 adds browser checks of the real stack.
 
 ## Code coverage
 
