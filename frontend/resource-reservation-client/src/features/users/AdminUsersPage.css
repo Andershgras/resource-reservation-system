@@ -1,0 +1,27 @@
+/* One search field and its button, rather than the two filters of other lists. */
+.user-search {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: var(--space-4);
+}
+
+.user-self-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 760px) {
+  .user-search {
+    grid-template-columns: 1fr;
+  }
+}

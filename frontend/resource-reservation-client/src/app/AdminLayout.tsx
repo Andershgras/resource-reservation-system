@@ -13,6 +13,7 @@ const adminTabs: NavTab[] = [
   { path: '/admin/weekly-schedule', label: 'Weekly schedule' },
   { path: '/admin/closures', label: 'Closures' },
   { path: '/admin/reservations', label: 'Reservations' },
+  { path: '/admin/users', label: 'Users' },
 ]
 
 // The admin workspace, with a summary of the booking setup.
@@ -26,7 +27,7 @@ export function AdminLayout() {
   return (
     <WorkspaceLayout
       title="Booking operations"
-      description="Manage what can be booked, when it is open, and every reservation."
+      description="Manage what can be booked, when it is open, every reservation, and who can sign in."
       tabs={adminTabs}
       searches={searches}
       statsLabel="Admin summary"

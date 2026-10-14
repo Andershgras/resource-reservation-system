@@ -18,6 +18,25 @@ export interface AuthResponse {
   user: UserResponse
 }
 
+// A user account as admins see it.
+export interface UserAccountResponse {
+  id: number
+  name: string
+  email: string
+  role: UserRole
+  isActive: boolean
+  // Null for accounts created before it was recorded.
+  createdAt: string | null
+}
+
+export interface UserAccountPage {
+  items: UserAccountResponse[]
+  // Matching accounts across all pages.
+  totalCount: number
+  page: number
+  pageSize: number
+}
+
 export interface RegisterUserRequest {
   name: string
   email: string

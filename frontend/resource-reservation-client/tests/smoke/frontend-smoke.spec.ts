@@ -11,6 +11,11 @@ interface UserResponse {
   role: UserRole
 }
 
+interface UserAccountResponse extends UserResponse {
+  isActive: boolean
+  createdAt: string | null
+}
+
 interface BookingRuleOverrides {
   minDurationMinutes: number | null
   maxDurationMinutes: number | null
@@ -130,6 +135,11 @@ interface ClosureResponse {
   createdAt: string
   createdByName: string | null
 }
+
+// The API's one answer to every failed login.
+const failedLoginMessage = 'Invalid email or password. After repeated failed attempts, sign-in pauses for a few minutes.'
+// Only given after the right password.
+const deactivatedMessage = 'This account has been deactivated. Contact an administrator.'
 
 test('main frontend reservation flow', async ({ page }) => {
   await mockApi(page)
@@ -418,14 +428,14 @@ test('a 401 during a session returns to the login screen once', async ({ page })
 
 test('a failed login is not treated as an expired session', async ({ page }) => {
   await page.route('http://localhost:5052/api/auth/login', async (route) => {
-    await route.fulfill(problemResponse(401, 'Unauthorized', 'Invalid email or password.'))
+    await route.fulfill(problemResponse(401, 'Unauthorized', failedLoginMessage))
   })
   await page.addInitScript(() => localStorage.clear())
 
   await page.goto('/')
   await login(page, 'someone@example.com', 'WrongPassword1')
 
-  await expect(page.getByText('Error: Invalid email or password.')).toBeVisible()
+  await expect(page.getByText(`Error: ${failedLoginMessage}`)).toBeVisible()
   await expect(page.getByText(sessionExpiredMessage)).toHaveCount(0)
 })
 
@@ -688,6 +698,36 @@ test('an admin closes a resource, sees the booking inside first, and users see i
   await expect(tuesday.getByText('Closed', { exact: true }).first()).toBeVisible()
 })
 
+test('an admin deactivates a user, who then cannot sign in', async ({ page }) => {
+  // Without motion, so axe measures the dialog after it has faded in.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await mockApi(page)
+  await page.goto('/login')
+  await login(page, 'admin@example.com', 'Admin1234')
+  await selectRoleTab(page, 'Users')
+  await expect(page).toHaveURL('/admin/users')
+
+  const users = sectionByHeading(page, 'Users')
+  const ownRow = users.getByRole('listitem').filter({ hasText: 'admin@example.com' })
+  await expect(ownRow.getByText("You can't change your own account.")).toBeVisible()
+  await expect(ownRow.getByRole('button')).toHaveCount(0)
+
+  await users.getByRole('button', { name: 'Deactivate Smoke Test User' }).click()
+  const dialog = page.getByRole('alertdialog', { name: 'Deactivate Smoke Test User?' })
+  await expect(dialog).toContainText('Their reservations are kept.')
+  await expectNoAccessibilityViolations(page, 'the deactivation confirmation')
+  await dialog.getByRole('button', { name: 'Deactivate' }).click()
+
+  await expect(page.getByText('Smoke Test User is deactivated.')).toBeVisible()
+  await expect(users.getByRole('listitem').filter({ hasText: 'smoke.user@example.com' }).getByText('Deactivated'))
+    .toBeVisible()
+  await expectNoAccessibilityViolations(page, 'the users screen')
+
+  await page.getByRole('button', { name: 'Logout' }).click()
+  await login(page, 'smoke.user@example.com', 'Password123')
+  await expect(page.getByText(`Error: ${deactivatedMessage}`)).toBeVisible()
+})
+
 test('an admin moves a booking from the admin calendar', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
@@ -843,6 +883,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await selectRoleTab(page, 'Reservations')
     await expect(sectionByHeading(page, 'Reservations').getByRole('listitem')).toHaveCount(1)
     await expectNoAccessibilityViolations(page, 'admin reservations')
+
+    await selectRoleTab(page, 'Users')
+    await expect(sectionByHeading(page, 'Users').getByRole('listitem')).toHaveCount(2)
+    await expectNoAccessibilityViolations(page, 'admin users')
   })
 }
 
@@ -1078,6 +1122,10 @@ async function mockApi(
 
   let closures: ClosureResponse[] = []
   let nextClosureId = 1
+  let accounts: UserAccountResponse[] = [
+    { ...adminUser, isActive: true, createdAt: null },
+    { ...normalUser, isActive: true, createdAt: '2030-01-10T08:00:00+00:00' },
+  ]
 
   await page.route('http://localhost:5052/api/**', async (route) => {
     const request = route.request()
@@ -1086,7 +1134,14 @@ async function mockApi(
 
     if (request.method() === 'POST' && path === '/auth/login') {
       const body = await request.postDataJSON() as { email: string }
-      currentUser = body.email === adminUser.email ? adminUser : normalUser
+      const signingIn = body.email === adminUser.email ? adminUser : normalUser
+
+      if (!accounts.find((account) => account.id === signingIn.id)?.isActive) {
+        await route.fulfill(problemResponse(403, 'Forbidden', deactivatedMessage))
+        return
+      }
+
+      currentUser = signingIn
 
       await route.fulfill({
         status: 200,
@@ -1097,6 +1152,27 @@ async function mockApi(
 
     if (request.method() === 'POST' && path === '/auth/register') {
       await route.fulfill({ status: 200, json: normalUser })
+      return
+    }
+
+    if (request.method() === 'GET' && path === '/users') {
+      const search = (url.searchParams.get('search') ?? '').toLowerCase()
+      const items = accounts.filter((account) =>
+        `${account.name} ${account.email}`.toLowerCase().includes(search))
+
+      await route.fulfill({ status: 200, json: { items, totalCount: items.length, page: 1, pageSize: 25 } })
+      return
+    }
+
+    const userChangeMatch = path.match(/^\/users\/(\d+)\/(role|status)$/)
+    if (userChangeMatch && request.method() === 'PUT') {
+      const body = await request.postDataJSON() as { role?: UserRole; isActive?: boolean }
+      const id = Number(userChangeMatch[1])
+      accounts = accounts.map((account) => account.id === id
+        ? { ...account, ...(userChangeMatch[2] === 'role' ? { role: body.role! } : { isActive: body.isActive! }) }
+        : account)
+
+      await route.fulfill({ status: 200, json: accounts.find((account) => account.id === id) })
       return
     }
 
