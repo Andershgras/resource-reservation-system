@@ -201,8 +201,8 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M3 | Security and production configuration (CORS, rate limiting, health checks, session expiry handling) | Done ([#54](https://github.com/Andershgras/resource-reservation-system/pull/54)) |
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
-| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | In progress: PR 1 done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58)), PR 2 done ([#60](https://github.com/Andershgras/resource-reservation-system/pull/60)), PR 3 done ([#61](https://github.com/Andershgras/resource-reservation-system/pull/61)), PR 4 awaiting review |
-| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, auth cookie security review). Deploy-ready, with no hosted demo. | Not started |
+| M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | Done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58), [#60](https://github.com/Andershgras/resource-reservation-system/pull/60), [#61](https://github.com/Andershgras/resource-reservation-system/pull/61), [#62](https://github.com/Andershgras/resource-reservation-system/pull/62)) |
+| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, httpOnly cookie authentication). Deploy-ready, with no hosted demo. | In progress: PR 1 awaiting review |
 
 ### M1: Booking Correctness And Data Integrity
 
@@ -510,13 +510,54 @@ Follow-ups noticed during PR 4:
 Agreed decisions (14 October 2026):
 - M6 PR 3 and PR 4 are finished before M7 starts.
 - M7 ends at "deploy-ready": images published to the GitHub container registry and a documented Docker Compose deployment, with no live host or cloud accounts.
+- Three pull requests, each reviewed before the next one starts.
+- Session cookies replace `localStorage`: an httpOnly cookie, with robust CSRF protection rather than only a custom header.
+- `__Host-` cookies need HTTPS, so the stack serves HTTPS on your own machine too.
+- The API trusts forwarded headers only from explicitly configured reverse proxies.
+- SQL Server, and the mail catcher in PR 3, are never exposed in production. Mailpit is for local development only.
+- SMTP through MailKit.
+- Images on GHCR are public, and are published only after CI passes, by a job with minimal permissions.
+- Secrets stay out of images and git.
 
-Tracked so far:
+PR 1: containers and Docker Compose ([deployment](deployment.md))
 
-- [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie, or document why not ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
-- [ ] Content-Security-Policy and other security headers for the frontend's pages, set by whatever serves them. Allow the inline theme script in `index.html` by its hash.
-- [ ] Run the migration bundle as a deployment step, and configure the reverse proxy as trusted
-- [ ] Serve `index.html` for unknown paths (SPA fallback), so frontend routes such as `/admin/reservations` work on refresh
+- [x] API image: multi-stage build, non-root user, no development settings or secrets
+- [x] Migrator image: the existing migration bundle, run once before the API starts
+- [x] Frontend image: nginx, non-root, serving the built app with `/api` on the same origin
+- [x] `compose.yaml`: SQL Server with a volume, then the migrator, then the API's least-privilege SQL login, then the API (checked with `/health/ready`), then nginx. Only nginx publishes ports, on `127.0.0.1` by default.
+- [x] HTTPS at nginx, with a script for a local certificate. Plain HTTP only redirects.
+- [x] The API trusts only nginx's fixed address as its proxy (from M3)
+- [x] Content-Security-Policy and other security headers for the frontend's pages, with the inline theme script allowed by a hash computed at build time (from M6 PR 2)
+- [x] SPA fallback, so routes such as `/admin/users` work on reload, and a 404 for missing assets
+- [x] Hashed assets cached as immutable, `index.html` always revalidated
+- [x] Secrets in `.env`, which git ignores, with `.env.example` committed
+- [x] CI builds the images, starts the stack and runs `deploy/smoke-test.sh`. The workflow's token is read-only.
+- [x] Docs: deployment guide, README quick start, configuration, security, testing, architecture, an update to ADR 0005, and this roadmap
+
+Changes in behaviour in PR 1:
+- New: `docker compose up` runs the whole system at `https://localhost:8443`.
+- Changed: the API logs SQL commands only at warning level, so the outbox worker no longer writes a log entry every 5 seconds.
+
+Verified locally: the stack starts from empty volumes, and the smoke test passes. A browser check found no CSP violations: the saved theme applied, sign-in worked, and `/admin/users` reloaded. A full flow through nginx succeeded: register, confirm with the emailed link, sign in, book, and the booking email with its invitation. Forwarded headers sent from another container were ignored, nginx found the API again after it restarted, and the nginx image refused to start without its settings.
+
+Follow-ups noticed during PR 1:
+- ASP.NET Core's Data Protection keys are kept in memory. Nothing uses them yet, but PR 2's cookie and anti-forgery protection will, so PR 2 stores them in a volume.
+- A load balancer in front of nginx isn't supported out of the box ([deployment](deployment.md#https)).
+
+PR 2: httpOnly cookie authentication (ADR 0012, replacing ADR 0004)
+
+- [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
+- [ ] CSRF protection for every request that changes something
+- [ ] Server-side sign-out, and `GET /api/auth/me` to restore a session on load
+- [ ] Bearer tokens kept for clients other than browsers
+
+PR 3: real email, end-to-end tests and published images
+
+- [ ] SMTP delivery through MailKit
+- [ ] Mailpit in compose, for local development only
+- [ ] Playwright end-to-end tests against the full stack in compose
+- [ ] Images published to GHCR after CI passes, tagged with the commit SHA and `latest`
+- [ ] Clean-up of sent booking emails and of accounts that were never confirmed (from M6 PR 4)
 
 ## Later Ideas
 

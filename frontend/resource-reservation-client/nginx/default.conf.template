@@ -1,0 +1,92 @@
+# nginx serves the frontend and proxies /api and /health to the API, so the
+# browser sees a single origin. TLS ends here. The API listens on plain HTTP on
+# the private network, and trusts this proxy's X-Forwarded-* headers only
+# because its address is in the API's ReverseProxy:KnownProxies.
+#
+# ${PUBLIC_ORIGIN}, ${API_UPSTREAM} and ${NGINX_LOCAL_RESOLVERS} are filled in
+# when the container starts. nginx's own variables, such as $host, are not.
+
+# HSTS for real host names only. On localhost it would also force HTTPS on
+# every other local port, such as the Vite dev server. The API makes the same
+# exception.
+map $host $hsts_header {
+    localhost "";
+    127.0.0.1 "";
+    default "max-age=31536000";
+}
+
+server_tokens off;
+
+# Plain HTTP only redirects to HTTPS.
+server {
+    listen 8080;
+    listen [::]:8080;
+    server_name _;
+
+    location / {
+        return 301 ${PUBLIC_ORIGIN}$request_uri;
+    }
+}
+
+server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+    http2 on;
+    server_name _;
+
+    ssl_certificate /etc/nginx/certs/tls.crt;
+    ssl_certificate_key /etc/nginx/certs/tls.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    root /usr/share/nginx/html;
+
+    # Looked up per request, so a restarted API container is found again.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+    set $api_upstream ${API_UPSTREAM};
+
+    # The API sets its own security and cache headers. nginx is the first
+    # proxy, so it replaces any X-Forwarded-For the client sent rather than
+    # appending to it.
+    location ~ ^/(api|health)/ {
+        proxy_pass http://$api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        # As the browser sent it, port included, for the links the API builds.
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header X-Forwarded-Prefix "";
+    }
+
+    # Built files have a content hash in their names, so they never change.
+    # A missing one is a 404, never index.html served as JavaScript.
+    location /assets/ {
+        try_files $uri =404;
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        gzip on;
+        gzip_types text/css application/javascript;
+        gzip_vary on;
+    }
+
+    # Always revalidated, so a new release reaches the browser on the next load.
+    location = /index.html {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        gzip on;
+        gzip_vary on;
+    }
+
+    # Unknown paths are routes in the app, such as /admin/users.
+    location / {
+        try_files $uri /index.html;
+        include /etc/nginx/snippets/security-headers.conf;
+        gzip on;
+        gzip_types image/svg+xml;
+        gzip_vary on;
+    }
+}

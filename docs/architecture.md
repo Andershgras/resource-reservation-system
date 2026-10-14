@@ -212,6 +212,7 @@ Booking and availability times are wall-clock times in the configured scheduling
 | Configuration | Typed options validated at startup. See [configuration](configuration.md). |
 | Security | Rate-limited login and registration, CORS, trusted proxies, security headers and HSTS. See [security](security.md). |
 | Health | `/health/live` and `/health/ready` for the hosting platform. See [deployment](deployment.md#health-checks). |
+| Hosting | Docker Compose: nginx terminates HTTPS, serves the frontend and passes `/api` and `/health` to the API, so both share one origin. Migrations run in a one-shot container before the API starts. See [deployment](deployment.md). |
 | Time | `SchedulingClock` gives "now" in the scheduling time zone, through an injectable `TimeProvider` |
 | Email | Account emails (links and notices) go through a bounded in-memory queue; booking emails through a database outbox written with the booking. Both are sent by background services through `IEmailSender`. See below and [ADR 0011](adr/0011-email-flows.md). |
 
@@ -239,7 +240,7 @@ flowchart LR
 
 Middleware runs in this order for every request:
 
-1. **Forwarded headers:** only when trusted proxies are configured. They set the real client IP address and scheme.
+1. **Forwarded headers:** only when trusted proxies are configured. They set the real client IP address and scheme. In Docker Compose, the only trusted proxy is nginx.
 2. **Exception handler:** turns unhandled exceptions into a 500 problem response.
 3. **HSTS:** outside Development only.
 4. **Security headers:** added when the response starts, so they're present on every response.

@@ -155,6 +155,7 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 ### Tooling
 
 - GitHub Actions
+- Docker and Docker Compose, with nginx in front of the API
 - Visual Studio / .NET CLI
 - SQL Server LocalDB
 - SQL Server Management Studio
@@ -173,9 +174,13 @@ backend/
 
   ResourceReservation.Api.Tests/
   ResourceReservation.Api.IntegrationTests/
+  Dockerfile       the API and migrator images
 
 frontend/
   resource-reservation-client/
+    Dockerfile     the nginx image with the built frontend
+    nginx/         nginx config: TLS, proxy, security headers
+    scripts/       build helpers, such as the CSP hash of the inline script
     src/
       api/         typed API calls and the shared client
       app/         routes, layouts, route guards, query client
@@ -188,10 +193,19 @@ frontend/
     tests/
       smoke/
 
+deploy/
+  sql/             the API's SQL login, created by compose
+  create-dev-certificate.sh
+  smoke-test.sh    checks a running compose stack through nginx
+
+compose.yaml       the whole system in Docker Compose
+.env.example       compose settings; copy to .env, which git ignores
+
 docs/
   adr/             architecture decision records
   audit/           project audits
   architecture.md  layers, request flow, data model and frontend diagrams
+  deployment.md    Docker Compose, HTTPS, the reverse proxy and releases
   testing.md       test suites, how to run them, and coverage
   planning.md
   roadmap.md
@@ -358,14 +372,30 @@ Validation errors also include `errors`, keyed by field name. Unexpected server 
 | `429` | Too many login or registration attempts. `Retry-After` gives the refill interval in seconds. |
 | `503` | Another booking for the same resource is in progress. Retry after the number of seconds in the `Retry-After` header. |
 
+## Run With Docker Compose
+
+The quickest way to run the whole system: SQL Server, migrations, the API, and nginx serving the frontend over HTTPS. You need Docker and `openssl`, which comes with Git Bash on Windows.
+
+```bash
+cp .env.example .env    # fill in the three secrets and the seed admin
+sh deploy/create-dev-certificate.sh
+docker compose up --build
+```
+
+Then open <https://localhost:8443> and accept the self-signed certificate, or create a trusted one with mkcert. `sh deploy/smoke-test.sh` checks the running stack. Until real email delivery arrives in Milestone 7, emails are written to a volume.
+
+[docs/deployment.md](docs/deployment.md) explains the setup, how to read the emails, and how to run it on a server.
+
 ## Local Setup
+
+For development, run the API and the Vite dev server directly.
 
 ### Prerequisites
 
 - .NET SDK matching the project target framework
 - Node.js
 - SQL Server LocalDB
-- Docker Desktop (only for the integration tests)
+- Docker Desktop (for the integration tests and Docker Compose)
 
 ### Backend
 
@@ -473,11 +503,12 @@ The Playwright smoke tests cover the main browser flow: Admin login, resource ma
 
 GitHub Actions runs on push and pull request.
 
-The workflow runs three jobs:
+The workflow runs four jobs, with a token that can only read the repository:
 
 - **Backend:** restores and tests the backend, and reports coverage.
 - **Migration bundle:** builds the migration bundle, applies it to an empty SQL Server, and uploads it.
 - **Frontend:** installs dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests.
+- **Container stack:** builds the three images, starts the whole system with Docker Compose, and runs `deploy/smoke-test.sh` against it.
 
 Pull requests fail if any check fails.
 
@@ -504,18 +535,21 @@ The API checks its settings at startup and stops with a message naming any setti
 
 ## Deployment Notes
 
-This project is prepared as a portfolio application and isn't hosted yet. [docs/deployment.md](docs/deployment.md) describes what a deployment needs: HTTPS termination at a reverse proxy, the release order, migration bundles, and health checks.
+This project is prepared as a portfolio application and isn't hosted. It is deploy-ready with Docker Compose ([docs/deployment.md](docs/deployment.md)):
 
-For production-like hosting:
+- **One origin:** nginx serves the frontend and passes `/api` and `/health` to the API, so there are no cross-origin requests.
+- **HTTPS at nginx,** also on your own machine. Plain HTTP only redirects.
+- **Trusted proxy:** the API trusts forwarded headers only from nginx's fixed address.
+- **Security headers for the frontend,** including a strict Content-Security-Policy that allows the inline theme script by its hash.
+- **Caching:** hashed assets are cached as immutable, and `index.html` is always revalidated.
+- **Migrations:** a one-shot container runs the migration bundle before the API starts. The API never migrates the database itself.
+- **Least privilege:** the API connects with its own SQL login, which can't change the schema. Every container but SQL Server runs as a non-root user.
+- **Only nginx publishes ports.** SQL Server and the API are reachable only on private networks.
+- **Secrets** come from `.env`, which git ignores. Images contain none.
 
-- Use a real SQL Server database instead of LocalDB. SQL Server specifically is required, because reservation locking uses `sp_getapplock`.
-- Apply migrations with the migration bundle that CI builds (the `efbundle-linux-x64` artifact), before starting a new API version. The API never migrates the database itself.
-- Configure `ConnectionStrings:DefaultConnection` and the JWT settings through the hosting environment, with secrets outside source control
-- Set `Scheduling:TimeZoneId` if the resources are not in `Europe/Copenhagen`. Use an IANA time zone ID.
-- If the frontend is on a different origin than the API, add it to `Cors:AllowedOrigins`
-- Behind a reverse proxy, list it in `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`, so the API sees the real client IP and scheme. Don't set `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, which trusts forwarded headers from anyone.
-- Outside Development, the API sends HSTS on HTTPS responses. Every API response also carries security headers and `Cache-Control: no-store`.
-- Set `VITE_API_BASE_URL` to the deployed backend URL, and build the frontend as static files with `npm run build`
+Before any public deployment, Milestone 7 still moves the session to an httpOnly cookie and adds real email delivery ([roadmap](docs/roadmap.md#m7-deployment)).
+
+Outside Docker, the same rules apply: use SQL Server, which reservation locking needs (`sp_getapplock`); apply the migration bundle before each release; keep secrets in the hosting environment; list the reverse proxy in `ReverseProxy:KnownProxies`; and build the frontend with `VITE_API_BASE_URL` pointing at the API.
 
 ## Roadmap
 
@@ -528,8 +562,7 @@ These are intentionally outside the finished MVP, but would make good future iss
 - Resource categories and filtering
 - Better calendar controls for week/month navigation
 - Admin analytics or utilization overview
-- Docker setup
-- Production deployment
+- Hosted production deployment
 - Multi-tenant organization support
 
 ## Portfolio Notes

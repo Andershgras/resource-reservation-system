@@ -52,7 +52,9 @@ The frontend keeps the token in `localStorage` ([ADR 0004](adr/0004-token-storag
 - React escapes rendered values, and the frontend doesn't use `dangerouslySetInnerHTML`.
 - Tokens are short-lived.
 
-**Before any public deployment** (Milestone 7), review moving the token to an httpOnly cookie, and give the frontend a strict Content-Security-Policy. `index.html` has one small inline script, which applies the saved theme before the page draws; a strict policy must allow it by its hash. This is tracked in the [roadmap](roadmap.md).
+- In Docker Compose, nginx gives the frontend a strict Content-Security-Policy: scripts only from the app's own origin, plus the inline theme script in `index.html`, allowed by its hash ([deployment](deployment.md#the-frontends-responses)). An injected inline script or a script from another site doesn't run.
+
+**Before any public deployment**, Milestone 7 PR 2 moves the token to an httpOnly cookie. This is tracked in the [roadmap](roadmap.md#m7-deployment).
 
 ## Brute-force protection
 
@@ -89,6 +91,8 @@ The frontend keeps the token in `localStorage` ([ADR 0004](adr/0004-token-storag
 | `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` | API responses can't load or run anything. Swagger UI, in Development only, is excluded. |
 | `Cache-Control` (on `/api`) | `no-store` | Responses with personal data aren't stored by browsers or proxies |
 
+The frontend's own pages get their headers from nginx, including the Content-Security-Policy. They are listed in [deployment](deployment.md#the-frontends-responses).
+
 ## Cross-origin requests
 
 Only the origins in `Cors:AllowedOrigins` may call the API from a browser on another origin. Development also allows the local Vite dev server. The policy allows only the methods the API uses: `GET`, `POST`, `PUT` and `DELETE`.
@@ -100,7 +104,8 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 ## Secrets
 
 - **Development:** the JWT key and seed admin password in `appsettings.Development.json` are for local development only.
-- **Production:** secrets are supplied through the hosting platform ([configuration](configuration.md#secrets)).
+- **Production:** secrets are supplied through the hosting platform ([configuration](configuration.md#secrets)). With Docker Compose, they are in `.env`, which git ignores.
+- **Images:** the container images contain no secrets. `.dockerignore` keeps `appsettings.Development.json`, `.env` files and certificates out of every build ([deployment](deployment.md#secrets)).
 - **Never run production in the `Development` environment.**
 
 ## Dependency advisories
@@ -120,12 +125,12 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 |---|---|---|
 | **Login timing is reduced, not constant** | Small timing differences remain, such as the database lookup | See [login timing](#login-timing) below |
 | **Lockout can be used against a user.** Anyone who knows an email can lock that account for 15 minutes at a time | The real user can't sign in during the lockout | Attempts during a lockout don't extend it, and the per-IP rate limit slows the attack. Admins can't unlock accounts by hand yet. |
-| No server-side logout | A stolen token works until it expires, unless its user's role or status changes | Short token lifetime for now. Revisit with the cookie review in Milestone 7. |
-| Token in `localStorage` | Readable by any script that runs on the frontend's origin | Cookie review before public deployment (Milestone 7) |
+| No server-side logout | A stolen token works until it expires, unless its user's role or status changes | Short token lifetime for now. Milestone 7 PR 2 adds server-side sign-out. |
+| Token in `localStorage` | Readable by any script that runs on the frontend's origin. The Content-Security-Policy makes injecting such a script much harder. | Milestone 7 PR 2 moves it to an httpOnly cookie, before public deployment |
 | Rate limit counters are per API instance | With several instances, each one counts separately | A shared store such as Redis if the API is scaled out |
 | **Account emails are queued in memory** | A verification or reset email still queued when the API restarts is lost | The user asks for another. Booking emails use a database outbox and survive restarts. |
 | **The response time floor has limits** | Under heavy load, registration and reset requests can take longer than 250 ms, and small timing differences could show again | Raise `AccountTokens:MinimumResponseMilliseconds` if needed |
-| **Development email only** | Emails are written as files, not sent | A real provider in Milestone 7 |
+| **Development email only** | Emails are written as files, not sent, also in Docker Compose | SMTP delivery in Milestone 7 PR 3 |
 
 Fixed in Milestone 6 PR 4: registration no longer reveals existing accounts, and users can reset a forgotten password themselves.
 
