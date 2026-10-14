@@ -160,10 +160,6 @@ export function AdminUsersPage() {
                       <dd>{user.email}</dd>
                     </div>
                     <div>
-                      <dt>Role</dt>
-                      <dd>{user.role}</dd>
-                    </div>
-                    <div>
                       <dt>Joined</dt>
                       <dd>{user.createdAt ? formatInstant(user.createdAt) : 'Not recorded'}</dd>
                     </div>
