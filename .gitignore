@@ -434,3 +434,8 @@ FodyWeavers.xsd
 
 # Emails written by the development email sender. They hold working sign-in links.
 .dev-emails/
+
+# Docker Compose secrets and local TLS certificates (see docs/deployment.md)
+/.env
+/certs/
+/compose-emails/
