@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+coverage/
+
+# Vite reads .env files during the build. The image sets its own settings.
+.env
+.env.*

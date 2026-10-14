@@ -1,0 +1,26 @@
+# Build context for backend/Dockerfile, which builds from the repository root.
+# Only the API project and the .NET tool manifest are needed.
+
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+
+# Development settings hold the development JWT key and seed admin password.
+# Images run outside Development and must never contain them.
+**/appsettings.Development.json
+**/.dev-emails/
+
+# Secrets and local state
+**/.env
+**/*.env
+certs/
+
+.git/
+.github/
+.claude/
+docs/
+TestResults/
+frontend/
+backend/ResourceReservation.Api.Tests/
+backend/ResourceReservation.Api.IntegrationTests/
