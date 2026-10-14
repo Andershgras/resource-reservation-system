@@ -153,6 +153,7 @@ export function AdminUsersPage() {
                     {isSelf && <Badge tone="primary">You</Badge>}
                     {user.role === 'Admin' && <Badge tone="primary">Admin</Badge>}
                     {!user.isActive && <Badge tone="warning">Deactivated</Badge>}
+                    {!user.isEmailConfirmed && <Badge>Email not confirmed</Badge>}
                   </p>
                   <dl className="item-meta">
                     <div>
@@ -170,14 +171,15 @@ export function AdminUsersPage() {
                     <p className="user-self-note">You can't change your own account.</p>
                   ) : (
                     <>
-                      <Button
+                      {/* An account that can't sign in can't be made an admin. */}
+                      {(user.role === 'Admin' || user.isEmailConfirmed) && <Button
                         size="sm"
                         aria-label={user.role === 'Admin' ? `Remove admin role from ${user.name}` : `Make ${user.name} an admin`}
                         disabled={isChanging(user)}
                         onClick={() => handleRoleChange(user)}
                       >
                         {user.role === 'Admin' ? 'Remove admin' : 'Make admin'}
-                      </Button>
+                      </Button>}
                       <Button
                         size="sm"
                         variant={user.isActive ? 'ghost' : 'secondary'}

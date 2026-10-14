@@ -13,6 +13,7 @@ interface UserResponse {
 
 interface UserAccountResponse extends UserResponse {
   isActive: boolean
+  isEmailConfirmed: boolean
   createdAt: string | null
 }
 
@@ -140,6 +141,15 @@ interface ClosureResponse {
 const failedLoginMessage = 'Invalid email or password. After repeated failed attempts, sign-in pauses for a few minutes.'
 // Only given after the right password.
 const deactivatedMessage = 'This account has been deactivated. Contact an administrator.'
+const emailNotConfirmedMessage =
+  'Confirm your email address before signing in. Use the link we sent you, or ask for a new one.'
+const registrationMessage =
+  "Check your inbox to finish creating your account. If the email doesn't arrive, you can ask for a new one."
+const passwordResetRequestedMessage = "If that address has an account, we've sent it a link to reset the password."
+const invalidLinkMessage = "This link doesn't work. It may have expired or been used already. Ask for a new one."
+// The tokens the mocked emails would carry.
+const verificationToken = 'SmokeVerificationToken000000000000000000000'
+const resetToken = 'SmokeResetToken0000000000000000000000000000'
 
 test('main frontend reservation flow', async ({ page }) => {
   await mockApi(page)
@@ -212,7 +222,20 @@ test('main frontend reservation flow', async ({ page }) => {
   await page.getByLabel('Email').fill('smoke.user@example.com')
   await page.getByLabel('Password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page.getByText('Registration succeeded. You can log in now.')).toBeVisible()
+  await expect(page.getByText(registrationMessage)).toBeVisible()
+
+  // The account can't sign in until its email is confirmed.
+  await login(page, 'smoke.user@example.com', 'Password123')
+  await expect(page.getByText(`Error: ${emailNotConfirmedMessage}`)).toBeVisible()
+
+  // The link from the email. The token leaves the address at once.
+  await page.goto(`/verify-email#token=${verificationToken}`)
+  await expect(page.getByRole('heading', { name: 'Confirm your email' })).toBeVisible()
+  expect(new URL(page.url()).hash).toBe('')
+  await page.getByLabel('Password').fill('Password123')
+  await page.getByRole('button', { name: 'Confirm email' }).click()
+  await expect(page.getByRole('heading', { name: 'Email confirmed' })).toBeVisible()
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
 
   await login(page, 'smoke.user@example.com', 'Password123')
   await expect(page.getByRole('heading', { name: 'Your booking space' })).toBeVisible()
@@ -318,7 +341,7 @@ test('validation errors from the API are shown per field', async ({ page }) => {
       undefined,
       {
         errors: {
-          Email: ['Email is already registered.'],
+          Email: ['Email must be 255 characters or fewer.'],
           Password: ['Password must contain a number.'],
         },
       },
@@ -334,7 +357,7 @@ test('validation errors from the API are shown per field', async ({ page }) => {
   await page.getByRole('button', { name: 'Create account' }).click()
 
   // Each message is shown beside its field, and read with it.
-  await expect(page.getByLabel('Email')).toHaveAccessibleDescription('Email is already registered.')
+  await expect(page.getByLabel('Email')).toHaveAccessibleDescription('Email must be 255 characters or fewer.')
   await expect(page.getByLabel('Password')).toHaveAccessibleDescription(
     'At least 8 characters, including a number. Password must contain a number.',
   )
@@ -728,6 +751,35 @@ test('an admin deactivates a user, who then cannot sign in', async ({ page }) =>
   await expect(page.getByText(`Error: ${deactivatedMessage}`)).toBeVisible()
 })
 
+test('a forgotten password is reset from the emailed link', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/login')
+
+  await page.getByRole('link', { name: 'Forgot your password?' }).click()
+  await page.getByLabel('Email').fill('smoke.user@example.com')
+  await page.getByRole('button', { name: 'Send reset link' }).click()
+  await expect(page.getByText(passwordResetRequestedMessage)).toBeVisible()
+  await expectNoAccessibilityViolations(page, 'the forgotten password page')
+
+  await page.goto(`/reset-password#token=${resetToken}`)
+  await expect(page.getByLabel('New password', { exact: true })).toBeVisible()
+  expect(new URL(page.url()).hash).toBe('')
+  await page.getByLabel('New password', { exact: true }).fill('NewPassword456')
+  await page.getByLabel('Repeat the new password').fill('NewPassword456')
+  await expectNoAccessibilityViolations(page, 'the new password page')
+  await page.getByRole('button', { name: 'Set new password' }).click()
+  await expect(page.getByRole('heading', { name: 'Password changed' })).toBeVisible()
+
+  // A used or made-up link says so before anything is typed. Email links
+  // open as a fresh page, so leave this one first.
+  await page.goto('/login')
+  await page.goto('/reset-password#token=UsedToken000000000000000000000000000000000')
+  await expect(page.getByText(`Error: ${invalidLinkMessage}`)).toBeVisible()
+  await expect(page.getByLabel('New password', { exact: true })).toHaveCount(0)
+})
+
 test('an admin moves a booking from the admin calendar', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await mockApi(page, { seedOverlapReservation: true, seededReservationIsOwn: true, seedFreeTime: true })
@@ -864,6 +916,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await selectRoleTab(page, 'My reservations')
     await expect(sectionByHeading(page, 'My reservations').getByRole('listitem')).toHaveCount(1)
     await expectNoAccessibilityViolations(page, 'my reservations')
+
+    await page.goto(`/verify-email#token=${verificationToken}`)
+    await page.getByRole('button', { name: 'Confirm email' }).click()
+    await expect(page.getByLabel('Password')).toHaveAccessibleDescription('Enter your password.')
+    await expectNoAccessibilityViolations(page, 'email confirmation with an error')
+    await page.goto('/book')
 
     await page.getByRole('button', { name: 'Logout' }).click()
     await login(page, 'admin@example.com', 'Admin1234')
@@ -1123,8 +1181,8 @@ async function mockApi(
   let closures: ClosureResponse[] = []
   let nextClosureId = 1
   let accounts: UserAccountResponse[] = [
-    { ...adminUser, isActive: true, createdAt: null },
-    { ...normalUser, isActive: true, createdAt: '2030-01-10T08:00:00+00:00' },
+    { ...adminUser, isActive: true, isEmailConfirmed: true, createdAt: null },
+    { ...normalUser, isActive: true, isEmailConfirmed: true, createdAt: '2030-01-10T08:00:00+00:00' },
   ]
 
   await page.route('http://localhost:5052/api/**', async (route) => {
@@ -1136,8 +1194,15 @@ async function mockApi(
       const body = await request.postDataJSON() as { email: string }
       const signingIn = body.email === adminUser.email ? adminUser : normalUser
 
-      if (!accounts.find((account) => account.id === signingIn.id)?.isActive) {
+      const account = accounts.find((candidate) => candidate.id === signingIn.id)
+
+      if (!account?.isActive) {
         await route.fulfill(problemResponse(403, 'Forbidden', deactivatedMessage))
+        return
+      }
+
+      if (!account.isEmailConfirmed) {
+        await route.fulfill(problemResponse(403, 'Forbidden', emailNotConfirmedMessage))
         return
       }
 
@@ -1151,7 +1216,40 @@ async function mockApi(
     }
 
     if (request.method() === 'POST' && path === '/auth/register') {
-      await route.fulfill({ status: 200, json: normalUser })
+      accounts = accounts.map((account) => account.id === normalUser.id ? { ...account, isEmailConfirmed: false } : account)
+      await route.fulfill({ status: 202, json: { message: registrationMessage } })
+      return
+    }
+
+    if (request.method() === 'POST' && path === '/auth/verify-email') {
+      const body = await request.postDataJSON() as { token: string; password: string }
+
+      if (body.token !== verificationToken) {
+        await route.fulfill(problemResponse(400, 'Bad Request', invalidLinkMessage))
+        return
+      }
+
+      accounts = accounts.map((account) => account.id === normalUser.id ? { ...account, isEmailConfirmed: true } : account)
+      await route.fulfill({ status: 204 })
+      return
+    }
+
+    if (request.method() === 'POST' && (path === '/auth/forgot-password' || path === '/auth/resend-verification')) {
+      await route.fulfill({ status: 202, json: { message: passwordResetRequestedMessage } })
+      return
+    }
+
+    if (request.method() === 'POST' && path.startsWith('/auth/reset-password')) {
+      const body = await request.postDataJSON() as { token: string }
+
+      if (body.token !== resetToken) {
+        await route.fulfill(problemResponse(400, 'Bad Request', invalidLinkMessage))
+        return
+      }
+
+      await route.fulfill(path === '/auth/reset-password/check'
+        ? { status: 200, json: { completesRegistration: false } }
+        : { status: 204 })
       return
     }
 

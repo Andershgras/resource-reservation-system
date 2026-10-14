@@ -25,6 +25,8 @@ export interface UserAccountResponse {
   email: string
   role: UserRole
   isActive: boolean
+  // False until the owner confirms the address. Such accounts can't sign in.
+  isEmailConfirmed: boolean
   // Null for accounts created before it was recorded.
   createdAt: string | null
 }
@@ -41,6 +43,23 @@ export interface RegisterUserRequest {
   name: string
   email: string
   password: string
+}
+
+// The one answer to a request that may send an email, whatever happened.
+export interface AcceptedMessage {
+  message: string
+}
+
+export interface PasswordResetStatus {
+  // The account was never confirmed, so the reset sets it up again and also
+  // asks for a name.
+  completesRegistration: boolean
+}
+
+export interface ResetPasswordRequest {
+  token: string
+  password: string
+  name?: string
 }
 
 export interface LoginUserRequest {

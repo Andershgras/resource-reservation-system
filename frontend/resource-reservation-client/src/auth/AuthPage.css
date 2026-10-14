@@ -141,6 +141,43 @@
   margin-top: var(--space-2);
 }
 
+/* Links under the sign-in form, such as "Forgot password?". */
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+/* The single card of the pages that email links open. */
+.account-panel {
+  width: min(100%, 28rem);
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-8);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.account-logo {
+  color: var(--color-heading);
+}
+
+.account-logo .auth-logo-mark {
+  border-color: transparent;
+  color: var(--brand-text);
+  background: var(--brand-gradient);
+}
+
+.account-back {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
 @media (max-width: 760px) {
   .auth-page {
     padding-block: var(--space-4);
@@ -160,7 +197,8 @@
     font-size: var(--text-xl);
   }
 
-  .auth-form-area {
+  .auth-form-area,
+  .account-panel {
     padding: var(--space-6);
   }
 }

@@ -41,6 +41,42 @@ export function validateAuthForm(
   return errors
 }
 
+export function validateEmailForm(email: string): FieldErrors<'email'> {
+  if (!email.trim()) {
+    return { email: 'Enter your email address.' }
+  }
+
+  return /^[^\s@]+@[^\s@]+$/.test(email.trim()) ? {} : { email: 'Enter a valid email address.' }
+}
+
+export type ResetPasswordField = 'name' | 'password' | 'confirmPassword'
+
+// The name is only asked for when the reset sets up an unconfirmed account.
+export function validateResetPasswordForm(
+  needsName: boolean,
+  name: string,
+  password: string,
+  confirmPassword: string,
+): FieldErrors<ResetPasswordField> {
+  const errors: FieldErrors<ResetPasswordField> = {}
+
+  if (needsName && !name.trim()) {
+    errors.name = 'Enter your name.'
+  }
+
+  if (!password) {
+    errors.password = 'Enter a new password.'
+  } else if (password.length < 8) {
+    errors.password = 'Password must be at least 8 characters.'
+  }
+
+  if (password && confirmPassword !== password) {
+    errors.confirmPassword = "The passwords don't match."
+  }
+
+  return errors
+}
+
 export type ResourceField = 'name' | 'description' | 'location' | BookingRuleField
 
 // The limits the API accepts for each booking rule, with its message.

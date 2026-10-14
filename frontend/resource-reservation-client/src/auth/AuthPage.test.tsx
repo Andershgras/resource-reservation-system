@@ -30,9 +30,9 @@ const failedLoginMessage = 'Invalid email or password. After repeated failed att
 describe('AuthPage', () => {
   it('shows each API validation error beside its field', async () => {
     vi.mocked(authApi.register).mockRejectedValue(new ApiError(
-      'Email is already registered. Password must contain a number.',
+      'Email must be 255 characters or fewer. Password must contain a number.',
       400,
-      { email: 'Email is already registered.', password: 'Password must contain a number.' },
+      { email: 'Email must be 255 characters or fewer.', password: 'Password must contain a number.' },
     ))
     renderPage('/register')
 
@@ -42,12 +42,33 @@ describe('AuthPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
     const email = screen.getByRole('textbox', { name: 'Email' })
-    expect(email).toHaveAccessibleDescription('Email is already registered.')
+    expect(email).toHaveAccessibleDescription('Email must be 255 characters or fewer.')
     expect(email).toHaveFocus()
     expect(screen.getByLabelText('Password')).toHaveAccessibleDescription(
       'At least 8 characters, including a number. Password must contain a number.',
     )
     expect(screen.getByRole('textbox', { name: 'Name' })).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('after registering, says to check the inbox, whether or not the address was new', async () => {
+    vi.mocked(authApi.register).mockResolvedValue({ message: 'Check your inbox to finish creating your account.' })
+    renderPage('/register')
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Ada')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Email' }), 'ada@example.com')
+    await userEvent.type(screen.getByLabelText('Password'), 'Password1')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Check your inbox to finish creating your account.')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sign in')
+  })
+
+  it('links to a password reset and to a new confirmation email', () => {
+    renderPage('/login')
+
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password')
+    expect(screen.getByRole('link', { name: "Didn't get the confirmation email?" }))
+      .toHaveAttribute('href', '/resend-verification')
   })
 
   it('checks the fields before sending them', async () => {

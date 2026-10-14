@@ -4,7 +4,11 @@ import {
   Navigate,
   Route,
 } from 'react-router'
+import { forgotPassword, resendVerification } from '../api/authApi'
 import { AuthPage } from '../auth/AuthPage'
+import { EmailRequestPage } from '../auth/EmailRequestPage'
+import { ResetPasswordPage } from '../auth/ResetPasswordPage'
+import { VerifyEmailPage } from '../auth/VerifyEmailPage'
 import { ConfirmProvider } from '../components/ConfirmProvider'
 import { AdminAvailabilityPage } from '../features/availability/AdminAvailabilityPage'
 import { AdminClosuresPage } from '../features/closures/AdminClosuresPage'
@@ -32,6 +36,32 @@ export const appRoutes = createRoutesFromElements(
       <Route path="/login" />
       <Route path="/register" />
     </Route>
+
+    {/* Open to everyone, because email links open them. */}
+    <Route path="/verify-email" element={<VerifyEmailPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <Route
+      path="/forgot-password"
+      element={(
+        <EmailRequestPage
+          title="Forgot your password?"
+          description="Enter your email address and we'll send you a link to choose a new password."
+          submitLabel="Send reset link"
+          send={forgotPassword}
+        />
+      )}
+    />
+    <Route
+      path="/resend-verification"
+      element={(
+        <EmailRequestPage
+          title="Confirm your email"
+          description="Enter the address you registered with and we'll send a new confirmation link."
+          submitLabel="Send a new link"
+          send={resendVerification}
+        />
+      )}
+    />
 
     <Route
       path="/admin"
