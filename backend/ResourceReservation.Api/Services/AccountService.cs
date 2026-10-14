@@ -250,8 +250,9 @@ public class AccountService
     // An unconfirmed account may have been registered by someone else with this
     // address. Resetting it proves the inbox, so the reset sets the account up
     // again for the inbox owner: their name and password, a new creation time,
-    // and nothing kept from the registration. Unconfirmed accounts can't sign
-    // in or book, so they hold nothing else.
+    // a new stamp, no lockout, no links and no email cooldowns. Nothing the
+    // registrant chose or caused is kept. Unconfirmed accounts can't sign in,
+    // book or be made admins, so they hold nothing else.
     public async Task<ServiceResult> ResetPasswordAsync(ResetPasswordDto request)
     {
         var token = await _tokens.FindUsableAsync(request.Token, UserTokenPurposes.PasswordReset);
@@ -281,6 +282,9 @@ public class AccountService
 
         if (completesRegistration)
         {
+            await _context.AccountEmailCooldowns
+                .Where(cooldown => cooldown.UserId == user.Id)
+                .ExecuteDeleteAsync();
             user.Name = request.Name!.Trim();
             user.CreatedAt = now;
             user.IsEmailConfirmed = true;

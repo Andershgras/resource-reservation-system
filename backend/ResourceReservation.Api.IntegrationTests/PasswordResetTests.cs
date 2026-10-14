@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Identity;
@@ -127,7 +127,13 @@ public class PasswordResetTests : ApiTestBase
             Password = OldPassword
         });
         var squattersLink = TestEmailSink.TokenFrom((await TestEmailSink.Instance.WaitForAsync(Email))[0]);
+        // The registrant also runs up failed attempts and asks for another link.
+        await CreateAnonymousClient().PostAsJsonAsync("/api/auth/verify-email",
+            new VerifyEmailDto { Token = squattersLink, Password = "Guess123456" });
+        await CreateAnonymousClient().PostAsJsonAsync("/api/auth/resend-verification",
+            new AccountEmailRequestDto { Email = Email });
         var before = await LoadUserAsync();
+        Assert.Equal(1, before.FailedLoginCount);
 
         var token = await RequestLinkAsync(expectedEmails: 2);
         var resetEmail = TestEmailSink.Instance.Messages.Last(message => message.ToAddress == Email);
@@ -141,10 +147,23 @@ public class PasswordResetTests : ApiTestBase
         await ProblemAssert.IsProblemAsync(withoutName, HttpStatusCode.BadRequest, AccountService.NameRequiredMessage);
         Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
         var after = await LoadUserAsync();
+        // Every field the registrant set or caused is replaced.
         Assert.Equal("Inbox Owner", after.Name);
+        Assert.NotEqual(before.PasswordHash, after.PasswordHash);
         Assert.True(after.IsEmailConfirmed);
+        Assert.NotNull(after.EmailConfirmedAt);
         Assert.True(after.CreatedAt > before.CreatedAt);
         Assert.NotEqual(before.SecurityStamp, after.SecurityStamp);
+        Assert.Equal((0, null), (after.FailedLoginCount, after.LockoutEndsAt));
+        Assert.Equal((UserRoles.User, true), (after.Role, after.IsActive));
+        await using (var context = Fixture.CreateDbContext())
+        {
+            Assert.All(await context.UserTokens.Where(token => token.UserId == after.Id).ToListAsync(),
+                token => Assert.NotNull(token.UsedAt));
+            Assert.Empty(await context.AccountEmailCooldowns.Where(cooldown => cooldown.UserId == after.Id).ToListAsync());
+            Assert.Empty(await context.Reservations.Where(reservation => reservation.UserId == after.Id).ToListAsync());
+            Assert.Empty(await context.BookingNotifications.Where(n => n.RecipientEmail == Email).ToListAsync());
+        }
         Assert.Equal(HttpStatusCode.Unauthorized, (await SignInResponseAsync(OldPassword)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await SignInResponseAsync(NewPassword)).StatusCode);
         // The registrant's verification link was cancelled with the reset.
