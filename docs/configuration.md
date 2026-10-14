@@ -39,13 +39,15 @@ ReverseProxy__KnownProxies__0=10.0.0.5
 | `Jwt:ExpiryMinutes` | No | `120` | Token lifetime, 1–1440 minutes. When it runs out, the user has to log in again. |
 | `RateLimiting:Auth:PermitLimit` | No | `10` | 1–10000. The token bucket's size: how many login and registration attempts a client IP address can make in a row. |
 | `RateLimiting:Auth:WindowSeconds` | No | `60` | 1–3600 seconds. One token is added every `WindowSeconds / PermitLimit` seconds, which is also the `Retry-After` value. The sustained rate is `PermitLimit` attempts per `WindowSeconds`. See [security](security.md#brute-force-protection). |
+| `AccountLockout:MaxFailedAttempts` | No | `5` | 1–100. Failed sign-ins in a row that lock an account. A successful sign-in clears the count. |
+| `AccountLockout:LockoutMinutes` | No | `15` | 1–1440 minutes. How long a lockout lasts. Attempts during it don't extend it. See [security](security.md#brute-force-protection). |
 
 ### Scheduling
 
 | Setting | Required | Default | Notes |
 |---|---|---|---|
 | `Scheduling:TimeZoneId` | Yes | `Europe/Copenhagen` | IANA time zone for all reservation and availability times ([ADR 0001](adr/0001-time-zone-convention.md)) |
-| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource or user, 100–60000 ms ([ADR 0002](adr/0002-reservation-concurrency.md)) |
+| `Scheduling:BookingLockTimeoutMilliseconds` | No | `10000` | How long a booking waits for another booking of the same resource or user, 100–60000 ms ([ADR 0002](adr/0002-reservation-concurrency.md)). Account changes wait for each other the same length of time ([ADR 0010](adr/0010-user-management-and-account-security.md)). |
 
 ### Booking rules
 
