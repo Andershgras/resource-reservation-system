@@ -63,11 +63,14 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<UserTokenService>();
 builder.Services.AddScoped<AccountEmails>();
+builder.Services.AddScoped<BookingEmails>();
+builder.Services.AddScoped<EmailOutboxProcessor>();
 // Emails go through a sender chosen by Email:Delivery, which is validated at
 // startup. The pickup directory is the only one until Milestone 7.
 builder.Services.AddSingleton<IEmailSender, PickupDirectoryEmailSender>();
 builder.Services.AddSingleton<AccountEmailQueue>();
 builder.Services.AddHostedService<AccountEmailDispatcher>();
+builder.Services.AddHostedService<EmailOutboxWorker>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // Settings are validated when the app starts, so bad configuration never serves a request.
@@ -109,6 +112,10 @@ builder.Services.AddOptions<FrontendOptions>()
     .ValidateOnStart();
 builder.Services.AddOptions<AccountTokenOptions>()
     .Bind(builder.Configuration.GetSection(AccountTokenOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<EmailOutboxOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOutboxOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<EmailRateLimitOptions>()

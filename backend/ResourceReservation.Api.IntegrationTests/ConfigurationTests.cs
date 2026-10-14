@@ -39,6 +39,8 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("AccountTokens:EmailVerificationHours", "0", "AccountTokens:EmailVerificationHours must be between 1 and 168.")]
     [InlineData("AccountTokens:PasswordResetMinutes", "1", "AccountTokens:PasswordResetMinutes must be between 5 and 1440.")]
     [InlineData("AccountTokens:EmailCooldownSeconds", "-1", "AccountTokens:EmailCooldownSeconds must be between 0 and 3600.")]
+    [InlineData("EmailOutbox:MaxAttempts", "0", "EmailOutbox:MaxAttempts must be between 1 and 20.")]
+    [InlineData("EmailOutbox:PollIntervalMilliseconds", "10", "EmailOutbox:PollIntervalMilliseconds must be between 100 and 300000.")]
     [InlineData("RateLimiting:Email:PermitLimit", "0", "RateLimiting:Email:PermitLimit must be between 1 and 10000.")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
