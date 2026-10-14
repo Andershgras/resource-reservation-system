@@ -92,6 +92,7 @@ Never run production with `ASPNETCORE_ENVIRONMENT=Development`. That would load 
 ## Known limitations
 
 - **Booking emails accumulate** in the `BookingNotifications` table after they are sent. Nothing removes them yet.
+- **Booking emails are delivered at least once, not exactly once.** Stopping the API between sending an email and recording it sends that email again after the 5-minute lease. Gives-ups are logged as errors, and kept in the table with `FailedAt` and `LastError`.
 - **Account emails are queued in memory.** A verification or reset email still queued when the API stops is lost, and the user asks again. Stop the API gracefully where possible.
 - **Rate limit counters are in memory**, per API instance. With several instances, each one counts separately. A shared store such as Redis would be needed.
 - **The frontend's own security headers** (Content-Security-Policy and others for its pages) must be set by whatever serves the static files. That is part of Milestone 7.

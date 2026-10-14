@@ -59,7 +59,10 @@ describe('AuthPage', () => {
     await userEvent.type(screen.getByLabelText('Password'), 'Password1')
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Check your inbox to finish creating your account.')
+    // Waits for the message itself: the status region can appear a moment before its text.
+    expect(await screen.findByText('Check your inbox to finish creating your account.', undefined, { timeout: 3000 }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Check your inbox to finish creating your account.')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sign in')
   })
 

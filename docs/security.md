@@ -13,7 +13,7 @@ This page describes how the application protects accounts and data, and lists th
 - **Old password hashes are upgraded.** When the hasher reports an old format or work factor, the password is re-hashed at sign-in, but only if the stored hash is still the one that was verified.
 - **Registration** always creates a `User`. The client can't choose a role. The first Admin comes from the `SeedAdmin` settings.
 - **Email verification:** new accounts can't sign in, get a token or book until the address is confirmed. Confirming needs the emailed link and the account's password, so a link sent to someone who didn't register can't activate the account ([ADR 0011](adr/0011-email-flows.md)). Accounts from before verification existed count as confirmed.
-- **Password reset** sets a new security stamp, which ends every session, clears any lockout and cancels the user's other links. Resetting an unconfirmed account sets it up again for the owner of the address, with nothing kept from whoever registered it.
+- **Password reset** sets a new security stamp, which ends every session, clears any lockout and cancels the user's other links. Resetting an unconfirmed account sets it up again for the owner of the address: their name and password, a new creation time and stamp, and no failed attempts, lockout, links or email cooldowns from whoever registered it.
 
 ## Email links
 

@@ -497,6 +497,8 @@ Changes in behaviour in PR 4:
 - New: registration, resend-verification and forgot-password have their own per-IP rate limit, and answer no sooner than 250 ms.
 - New: the API needs `Email:Delivery`, `Email:FromAddress` and `Frontend:BaseUrl` to start. Development sets them.
 - Changed: the Users screen marks unconfirmed accounts, which can't be made admins.
+- Changed: bookings, moves, closures and one-off windows can't start or end in the hour skipped when summer time starts (02:00–02:59 on the last Sunday of March). The calendar no longer offers those times ([ADR 0001](adr/0001-time-zone-convention.md#updates)).
+- Note: booking emails are delivered at least once, not exactly once.
 
 Follow-ups noticed during PR 4:
 - Sent booking emails stay in the outbox table. A clean-up job belongs with the deployment work (M7).

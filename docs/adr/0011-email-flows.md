@@ -43,7 +43,8 @@ Milestone 6 PR 4 adds email. Agreed requirements:
 
 **The outbox worker:**
 - **Claiming:** it claims an entry with a conditional `UPDATE` that moves `NextAttemptAt` ahead by a 5-minute lease. With several API instances, only one sends each email.
-- **Delivery is at least once:** if the API stops after sending but before recording it, the lease runs out and the email goes again. The repeat has the same `Message-ID` and the same calendar UID and SEQUENCE, so calendars don't show a duplicate event.
+- **Delivery is at least once, not exactly once.** An email can be sent twice: if the API stops, or the database can't be reached, after the email was handed to the sender but before `SentAt` was saved, the lease runs out and the email goes again. Exactly-once delivery isn't possible without the mail provider taking part in the transaction. A repeat is recognisable: it has the same `Message-ID`, and its invitation has the same UID and SEQUENCE, so calendars update the event they have rather than adding another. Recipients may still see the email twice in their inbox.
+- **An email can also fail for good** after the last attempt. The booking stands, `FailedAt` and `LastError` record why, and an error is logged.
 - **Deactivated users** get no booking emails.
 
 ### Development sender
@@ -96,7 +97,7 @@ Milestone 6 PR 4 adds email. Agreed requirements:
 - a new creation time;
 - the email confirmed, all earlier links cancelled, and a new security stamp.
 
-Nothing the registrant chose survives. Unconfirmed accounts can't sign in or book, so they hold no other data.
+Nothing the registrant chose or caused survives: their name, password hash, creation time, security stamp, failed attempts and lockout, links and email cooldowns are all replaced or removed. Unconfirmed accounts can't sign in, book or be made admins, and no API books on another user's behalf, so they hold no other data. A test checks each of these after a registrant has set a password, failed a confirmation and asked for another link.
 
 ### Not revealing accounts
 
@@ -120,14 +121,14 @@ Each booking email carries `booking.ics`:
 - **SEQUENCE:** the reservation's `CalendarSequence`, which goes up with every move and the cancellation. So a calendar updates or removes the event it already has.
 - **DTSTAMP:** when the change happened.
 - **Times:** `DTSTART` and `DTEND` are converted from Copenhagen wall-clock time (ADR 0001) to UTC, so the file needs no time zone definitions.
-  - A time in the spring-forward gap is read with the offset from before the gap, so 02:30 lands on 03:30 summer time.
-  - A time in the repeated autumn hour is read as its first occurrence, in summer time.
+  - A time in the hour skipped when summer time starts never happens, so it has no UTC instant. Such times are rejected when they are entered ([ADR 0001](0001-time-zone-convention.md#updates)), and converting one throws rather than moving it silently.
+  - A time in the repeated autumn hour happens twice, and is read as its first occurrence, in summer time.
 - **Format:** lines end in CRLF and are folded at 75 octets without splitting a character. Text is escaped.
 
 ## Consequences
 
 - **Production needs `Email:Delivery`** and a public `Frontend:BaseUrl`. Until Milestone 7 adds a real provider, the only option writes files.
-- **Restarts:** account emails still queued are lost, and users ask again. Booking emails are not lost.
+- **Restarts:** account emails still queued are lost, and users ask again. Booking emails are not lost, but may occasionally be sent twice (at least once, not exactly once).
 - **The outbox keeps every sent row.** Nothing removes them yet. A clean-up job belongs with the deployment work.
 - **The response floor** adds up to 250 ms to registration and the two email requests. Under heavy load the work can take longer than the floor, and small differences could show again.
 - **API contract:** `POST /api/auth/register` now returns `202 { message }` instead of `201` with the user. Clients that read the user from it must change.

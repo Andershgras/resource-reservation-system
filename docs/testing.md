@@ -52,7 +52,7 @@ These run in about a second, with no external dependencies.
   - existing bookings that break today's rules staying valid
   - closures (`ClosureTests`): overlapping closures combined but deleted one by one, closed time limited to opening hours, booking and moving at the closure's edges, both Copenhagen daylight-saving changes, and previews and saves that never cancel
   - Registration and sign-in use `ExecuteUpdate` and transactions, which the in-memory provider can't run, so they are tested against SQL Server.
-- **Calendar invitations** (`CalendarInviteTests`): Copenhagen times as UTC in winter and summer, both daylight-saving changes (the skipped spring hour and the repeated autumn hour, on the real 2030 dates), a booking across the autumn change lasting its real length, REQUEST and CANCEL with the same UID and a rising SEQUENCE, escaping, line folding at 75 octets without splitting a character, and the email built around the invitation.
+- **Calendar invitations** (`CalendarInviteTests`): Copenhagen times as UTC in winter and summer, both daylight-saving changes (the skipped spring hour and the repeated autumn hour, on the real 2030 dates), a booking across the autumn change lasting its real length, times in the skipped spring hour reported as never happening and refusing to convert, a booking across that hour allowed and one real hour long, REQUEST and CANCEL with the same UID and a rising SEQUENCE, escaping, line folding at 75 octets without splitting a character, and the email built around the invitation.
 - **Controller tests** cover the CRUD controllers for resources, availability windows and weekly rules. `ControllerExtensionsTests` checks how service errors map to HTTP status codes.
 - **Database:** tests use the EF Core in-memory provider. It doesn't enforce constraints, transactions or locks; the integration tests cover those.
 - **Time:** tests that depend on "now" use `TestSchedulingClock`, which wraps a `FakeTimeProvider` with a fixed time in `Europe/Copenhagen`.
@@ -102,6 +102,7 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - a refused booking queues nothing
   - four concurrent workers send each of 20 emails once
   - deactivated users aren't emailed
+- **Daylight saving (`DaylightSavingTests`):** on 31 March 2030, bookings starting or ending in 02:00–02:59 are refused, as are moves, closures (preview and save) and one-off windows; periods across the hour are accepted, and a booking 01:30–03:30 gets an invitation for 00:30–01:30 UTC.
 - **Race tests fail without their protection.** Each was checked with its protection removed: using a link without the single-use condition, the cooldown, and the outbox claim condition.
 - **Sign-in and lockout (`LoginTests`):**
   - the lockout: five failures lock even the right password out, attempts during it don't extend it, it ends after 15 minutes on a fake clock, and a success clears the count
@@ -161,6 +162,7 @@ The tests delete all data in this database. To prevent accidents, the harness re
 - **Closures screen** (`AdminClosuresPage.test.tsx`): field checks, the confirmation listing affected bookings, bookings made after the preview, refusals, deleting one closure, and axe with the dialog open.
 - **Users screen** (`AdminUsersPage.test.tsx`): roles and status shown, no actions on your own account, confirmations that explain the effect, refusals from the API, search and pages in the address, and axe with the dialog open.
 - **Sign-in page** (`AuthPage.test.tsx`): field checks, the generic failed sign-in message, and the deactivated account message.
+- **Daylight saving in the calendar:** `isNonexistentWallClock` finds exactly 02:00–02:59 on the spring change and nothing in the autumn's repeated hour; the calendar never offers a start or end in the skipped hour; and the closure and window forms refuse such times beside the field.
 - **Account pages** (`AccountPages.test.tsx`): the link token removed from the address at once and sent only with the form, the password asked for before confirming, refusals with a way to a new link, a missing token, the reset link checked before anything is typed, matching passwords, the name asked for when an unconfirmed account is set up again, the same answer for every address, the rate limit message, and axe on each page.
 - **Theme** (`theme.test.tsx`): reading and saving the choice, storage being unavailable, the switch, and the two dark token blocks staying identical.
 - **My reservations** (`MyReservationsPage.test.tsx`): when each booking was made, moved and cancelled, in Copenhagen time; which bookings offer Move; and cancelling with the version.

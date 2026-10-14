@@ -232,7 +232,7 @@ flowchart LR
 ```
 
 - **Account emails** carry single-use links, which must never be stored or logged, so they stay in memory. A restart loses what is queued, and the user asks again.
-- **Booking emails** are saved with the booking change, so they exist exactly when the change does. A failed email never undoes a booking.
+- **Booking emails** are saved with the booking change, so they exist exactly when the change does. A failed email never undoes a booking. Delivery is **at least once, not exactly once**: an email whose sending wasn't recorded, because the API stopped at the wrong moment, is sent again, with the same `Message-ID` and invitation UID.
 - **Calendar invitations:** each booking email has an `.ics` file with a stable UID and a rising SEQUENCE, so calendars update or remove one event.
 
 ## Request pipeline

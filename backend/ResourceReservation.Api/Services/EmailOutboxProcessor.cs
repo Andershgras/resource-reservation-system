@@ -11,7 +11,7 @@ namespace ResourceReservation.Api.Services;
 // Each email is claimed with a conditional UPDATE that moves NextAttemptAt
 // ahead by a lease, so with several API instances only one sends it. If the
 // API stops after sending but before recording it, the lease runs out and the
-// email is sent again: delivery is at least once. A repeat has the same
+// email is sent again: delivery is at least once, not exactly once. A repeat has the same
 // Message-ID and the same calendar UID and SEQUENCE, so calendars don't show
 // a duplicate event.
 public class EmailOutboxProcessor
