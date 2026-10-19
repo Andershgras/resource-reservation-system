@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { AuthProvider } from '../auth/AuthProvider'
-import { saveAuthSession } from '../auth/authStorage'
+import { startSession } from '../auth/authSession'
 import { expectNoAxeViolations } from '../test/axe'
 import { createQueryClient } from './queryClient'
 import { WorkspaceLayout } from './WorkspaceLayout'
@@ -15,8 +15,7 @@ const tabs = [
 ]
 
 function renderLayout(path: string) {
-  saveAuthSession({
-    token: 'token-1',
+  startSession({
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     expiresInSeconds: 60,
     user: { id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' },

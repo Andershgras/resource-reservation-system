@@ -1,18 +1,30 @@
 import { apiRequest } from './client'
 import type {
   AcceptedMessage,
-  AuthResponse,
   LoginUserRequest,
   PasswordResetStatus,
   RegisterUserRequest,
   ResetPasswordRequest,
+  SessionResponse,
 } from './types'
 
+// Signs in. The API sets the httpOnly session cookie.
 export function login(request: LoginUserRequest) {
-  return apiRequest<AuthResponse>('/auth/login', {
+  return apiRequest<SessionResponse>('/auth/login', {
     method: 'POST',
     body: request,
   })
+}
+
+// Who is signed in, from the session cookie. Rejects with a 401 ApiError when
+// nobody is.
+export function getCurrentSession() {
+  return apiRequest<SessionResponse>('/auth/me')
+}
+
+// Ends the session on the server and deletes the cookie.
+export function logout() {
+  return apiRequest<void>('/auth/logout', { method: 'POST' })
 }
 
 // The same answer whether or not the address already has an account. A new
