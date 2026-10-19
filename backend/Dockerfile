@@ -40,10 +40,9 @@ RUN dotnet ef migrations bundle \
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS api
 WORKDIR /app
 
-# Where the PickupDirectory sender writes emails and the Data Protection keys
-# are kept, owned by the non-root user so named volumes mounted here are
-# writable.
-RUN mkdir -p /var/lib/resource-reservation/emails /var/lib/resource-reservation/keys \
+# Where the Data Protection keys are kept, owned by the non-root user so the
+# named volume mounted here is writable.
+RUN mkdir -p /var/lib/resource-reservation/keys \
     && chown -R "$APP_UID" /var/lib/resource-reservation
 
 COPY --from=publish-api /out/api ./

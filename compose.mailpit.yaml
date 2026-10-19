@@ -1,0 +1,43 @@
+# For your own machine and CI only, never production: adds Mailpit, which
+# catches every email the API sends, and shows them at http://localhost:8025.
+#
+#   docker compose -f compose.yaml -f compose.mailpit.yaml up --build
+#
+# The API sends to Mailpit without TLS. Its settings only allow that because
+# this file says so explicitly (Email:Smtp:AllowInsecureConnection) and the
+# host, mailpit, is a local name (docs/deployment.md). Mailpit's web UI is
+# published on 127.0.0.1 only, and its SMTP port isn't published at all.
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    # Not root. Mailpit keeps its messages in /tmp, which is gone when the
+    # container is removed.
+    user: "65534:65534"
+    environment:
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - mail
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  api:
+    environment:
+      Email__Smtp__Host: mailpit
+      Email__Smtp__Port: "1025"
+      Email__Smtp__Security: None
+      Email__Smtp__AllowInsecureConnection: "true"
+      Email__Smtp__Username: ""
+      Email__Smtp__Password: ""
+    networks:
+      - mail
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
+networks:
+  # Mailpit and the API only.
+  mail:

@@ -156,8 +156,10 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 
 ### Tooling
 
-- GitHub Actions
+- GitHub Actions, publishing images to the GitHub container registry
 - Docker and Docker Compose, with nginx in front of the API
+- MailKit for SMTP, and Mailpit to catch emails locally and in CI
+- Playwright for smoke tests with a mocked API, and end-to-end tests against the real stack
 - Visual Studio / .NET CLI
 - SQL Server LocalDB
 - SQL Server Management Studio
@@ -193,14 +195,16 @@ frontend/
       styles/      design tokens and base styles
       ui/          design-system components with their stylesheets
     tests/
-      smoke/
+      smoke/       browser flows with the API mocked
+    e2e/           end-to-end journeys against the real stack and Mailpit
 
 deploy/
   sql/             the API's SQL login, created by compose
   create-dev-certificate.sh
   smoke-test.sh    checks a running compose stack through nginx
 
-compose.yaml       the whole system in Docker Compose
+compose.yaml       the whole system in Docker Compose, as production runs it
+compose.mailpit.yaml  local and CI only: adds Mailpit to catch every email
 .env.example       compose settings; copy to .env, which git ignores
 
 docs/
@@ -389,12 +393,12 @@ The quickest way to run the whole system: SQL Server, migrations, the API, and n
 ```bash
 cp .env.example .env    # fill in the three secrets and the seed admin
 sh deploy/create-dev-certificate.sh
-docker compose up --build
+docker compose -f compose.yaml -f compose.mailpit.yaml up --build
 ```
 
-Then open <https://localhost:8443> and accept the self-signed certificate, or create a trusted one with mkcert. `sh deploy/smoke-test.sh` checks the running stack. Until real email delivery arrives in Milestone 7, emails are written to a volume.
+Then open <https://localhost:8443> and accept the self-signed certificate, or create a trusted one with mkcert. Every email the app sends arrives in Mailpit, at <http://localhost:8025>. `sh deploy/smoke-test.sh` checks the running stack, and `npm run test:e2e` in `frontend/resource-reservation-client` runs the end-to-end tests against it.
 
-[docs/deployment.md](docs/deployment.md) explains the setup, how to read the emails, and how to run it on a server.
+[docs/deployment.md](docs/deployment.md) explains the setup, sending real email, the published images, and how to run it on a server.
 
 ## Local Setup
 
@@ -446,7 +450,7 @@ The development Admin user is seeded from `appsettings.Development.json`:
 
 ### Emails In Development
 
-In Development, emails aren't sent. Each one is written as an `.eml` file to `backend/ResourceReservation.Api/.dev-emails/`, which git ignores. Open a file in any mail client, or as text, to follow a verification or reset link, or to see a booking email and its calendar invitation. The links point at `http://localhost:5173`, set by `Frontend:BaseUrl`.
+In Development, emails aren't sent. Each one is written as an `.eml` file to `backend/ResourceReservation.Api/.dev-emails/`, which git ignores. Open a file in any mail client, or as text, to follow a verification or reset link, or to see a booking email and its calendar invitation. The links point at `http://localhost:5173`, set by `Frontend:BaseUrl`. The Docker Compose stack sends real email over SMTP instead, and its Mailpit overlay catches it ([Run With Docker Compose](#run-with-docker-compose)).
 
 The seeded admin and accounts that existed before email verification are already confirmed.
 
@@ -507,12 +511,13 @@ The Playwright smoke tests cover the main browser flow: Admin login, resource ma
 
 GitHub Actions runs on push and pull request.
 
-The workflow runs four jobs, with a token that can only read the repository:
+The workflow's token can only read the repository. It runs four check jobs, and a fifth on `main`:
 
 - **Backend:** restores and tests the backend, and reports coverage.
 - **Migration bundle:** builds the migration bundle, applies it to an empty SQL Server, and uploads it.
 - **Frontend:** installs dependencies, runs lint, builds the frontend, and runs the Playwright smoke tests.
-- **Container stack:** builds the three images, starts the whole system with Docker Compose, and runs `deploy/smoke-test.sh` against it.
+- **Container stack:** builds the three images, starts the whole system with Docker Compose and Mailpit, and runs `deploy/smoke-test.sh` and the end-to-end tests against it.
+- **Publish images:** only for a push to `main`, and only after the other four have passed. It pushes the images to the GitHub container registry, tagged with the commit SHA and `latest`. It is the only job that can write packages.
 
 Pull requests fail if any check fails.
 
@@ -550,8 +555,10 @@ This project is prepared as a portfolio application and isn't hosted. It is depl
 - **Least privilege:** the API connects with its own SQL login, which can't change the schema. Every container but SQL Server runs as a non-root user.
 - **Only nginx publishes ports.** SQL Server and the API are reachable only on private networks.
 - **Secrets** come from `.env`, which git ignores. Images contain none.
-
-Before any public deployment, Milestone 7 still moves the session to an httpOnly cookie and adds real email delivery ([roadmap](docs/roadmap.md#m7-deployment)).
+- **Sessions** are in an httpOnly, `SameSite=Strict` cookie, with server-side sign-out and CSRF protection ([ADR 0012](docs/adr/0012-cookie-sessions-and-csrf.md)).
+- **Email** goes through your SMTP server, always over TLS. Mailpit is only for your own machine and CI.
+- **Published images:** CI publishes them to the GitHub container registry after every check has passed on `main`.
+- **Data retention:** sent emails, expired sessions, spent links and abandoned registrations are deleted on a schedule ([ADR 0013](docs/adr/0013-data-retention.md)).
 
 Outside Docker, the same rules apply: use SQL Server, which reservation locking needs (`sp_getapplock`); apply the migration bundle before each release; keep secrets in the hosting environment; list the reverse proxy in `ReverseProxy:KnownProxies`; and build the frontend with `VITE_API_BASE_URL` pointing at the API.
 

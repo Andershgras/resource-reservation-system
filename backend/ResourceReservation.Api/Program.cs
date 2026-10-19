@@ -67,12 +67,19 @@ builder.Services.AddScoped<UserTokenService>();
 builder.Services.AddScoped<AccountEmails>();
 builder.Services.AddScoped<BookingEmails>();
 builder.Services.AddScoped<EmailOutboxProcessor>();
-// Emails go through a sender chosen by Email:Delivery, which is validated at
-// startup. The pickup directory is the only one until Milestone 7.
-builder.Services.AddSingleton<IEmailSender, PickupDirectoryEmailSender>();
+// Emails go through the sender Email:Delivery names, which is validated at
+// startup: an SMTP server, or the development pickup directory.
+builder.Services.AddSingleton<SmtpEmailSender>();
+builder.Services.AddSingleton<PickupDirectoryEmailSender>();
+builder.Services.AddSingleton<IEmailSender>(serviceProvider =>
+    serviceProvider.GetRequiredService<IOptions<EmailOptions>>().Value.Delivery == EmailOptions.SmtpDelivery
+        ? serviceProvider.GetRequiredService<SmtpEmailSender>()
+        : serviceProvider.GetRequiredService<PickupDirectoryEmailSender>());
 builder.Services.AddSingleton<AccountEmailQueue>();
 builder.Services.AddHostedService<AccountEmailDispatcher>();
 builder.Services.AddHostedService<EmailOutboxWorker>();
+builder.Services.AddScoped<DataRetention>();
+builder.Services.AddHostedService<DataRetentionWorker>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // Settings are validated when the app starts, so bad configuration never serves a request.
@@ -132,6 +139,10 @@ builder.Services.AddOptions<AuthCookieOptions>()
     .Validate<IHostEnvironment>(
         (options, environment) => !options.AllowInsecureDevelopmentCookies || environment.IsDevelopment(),
         "AuthCookies:AllowInsecureDevelopmentCookies is only allowed in the Development environment.")
+    .ValidateOnStart();
+builder.Services.AddOptions<RetentionOptions>()
+    .Bind(builder.Configuration.GetSection(RetentionOptions.SectionName))
+    .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
     .Bind(builder.Configuration.GetSection(SeedAdminOptions.SectionName))
@@ -299,6 +310,17 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// Validation allows unencrypted SMTP only for a local test mail catcher, and
+// only when asked for explicitly. Say so in the log every time it is used.
+var emailOptions = app.Services.GetRequiredService<IOptions<EmailOptions>>().Value;
+
+if (emailOptions.Delivery == EmailOptions.SmtpDelivery && emailOptions.Smtp.IsInsecure)
+{
+    app.Logger.LogWarning(
+        "Emails are sent to {SmtpHost} without TLS (Email:Smtp:Security None). Only use this with a local test mail catcher.",
+        emailOptions.Smtp.Host);
+}
 
 if (app.Environment.IsDevelopment())
 {

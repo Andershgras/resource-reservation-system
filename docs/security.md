@@ -16,6 +16,16 @@ This page describes how the application protects accounts and data, and lists th
 - **Email verification:** new accounts can't sign in, get a token or book until the address is confirmed. Confirming needs the emailed link and the account's password, so a link sent to someone who didn't register can't activate the account ([ADR 0011](adr/0011-email-flows.md)). Accounts from before verification existed count as confirmed.
 - **Password reset** sets a new security stamp, which ends every session, clears any lockout and cancels the user's other links. Resetting an unconfirmed account sets it up again for the owner of the address: their name and password, a new creation time and stamp, and no failed attempts, lockout, links or email cooldowns from whoever registered it.
 
+## Sending email
+
+Emails go through an SMTP server with MailKit ([deployment](deployment.md#email)):
+
+- **TLS is required.** STARTTLS by default, or TLS from the start. If the server doesn't offer STARTTLS, or its certificate doesn't check out, the email isn't sent. It never falls back to plain text, which a test checks against a server without TLS.
+- **Plain text only for a local test mail catcher.** `Email:Smtp:Security=None` needs `Email:Smtp:AllowInsecureConnection=true` as well, and a local host: `localhost`, a loopback or private address, or a name without dots, such as `mailpit`. It can't be used with a password, which would travel unencrypted. Anything else stops the API at startup, and when it is used, the API logs a warning at startup. Only `compose.mailpit.yaml` sets it, and production runs `compose.yaml` alone.
+- **Mailpit stays local.** Its web UI is published on `127.0.0.1` only, and its SMTP port not at all. It shares a network only with the API.
+- **The SMTP password** is a secret in `.env`, like the others.
+- **Email content is never logged.** Failures are logged with the email's kind, without its content, which can hold a single-use link.
+
 ## Email links
 
 Verification and reset links ([ADR 0011](adr/0011-email-flows.md)):
@@ -128,6 +138,20 @@ The frontend's own pages get their headers from nginx, including the Content-Sec
 
 Only the origins in `Cors:AllowedOrigins` may call the API from a browser on another origin. Development also allows the local Vite dev server. The policy allows only the methods the API uses: `GET`, `POST`, `PUT` and `DELETE`.
 
+## Data retention
+
+Personal data no longer needed for its purpose is deleted on a schedule ([ADR 0013](adr/0013-data-retention.md)):
+
+| Data | Deleted after |
+|---|---|
+| Sent booking emails | 30 days |
+| Given-up booking emails | 90 days |
+| Sessions | 7 days past their expiry |
+| Used or expired links | 7 days |
+| Unconfirmed accounts | 7 days |
+
+An unconfirmed account is only deleted if it is still active and a plain user, and if no reservation, cancellation or closure refers to it. It must also have no link that still works. Only its throwaway rows go with it: spent links, email cooldowns and sessions. A test lists every foreign key to `Users`, so a new one must be considered before the clean-up can delete accounts that it refers to. The log records counts only.
+
 ## Errors and logging
 
 Every error is an RFC 9457 problem response. Unexpected exceptions are logged on the server, and the client only gets a generic `500` with a `traceId` that links the response to the server log. Health endpoints return only `Healthy` or `Unhealthy`.
@@ -157,11 +181,11 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 | **Login timing is reduced, not constant** | Small timing differences remain, such as the database lookup | See [login timing](#login-timing) below |
 | **Lockout can be used against a user.** Anyone who knows an email can lock that account for 15 minutes at a time | The real user can't sign in during the lockout | Attempts during a lockout don't extend it, and the per-IP rate limit slows the attack. Admins can't unlock accounts by hand yet. |
 | **Data Protection keys are stored unencrypted** in their folder | Anyone who can read the volume could forge anti-forgery tokens. They would still need the victim's session cookie, which is httpOnly and `SameSite=Strict`. | Keep the volume readable only by the API. Keys can be protected with a certificate if needed. |
-| **Expired session rows stay** in `UserSessions` | The table grows by one row per sign-in | A clean-up job in Milestone 7 PR 3 |
 | Rate limit counters are per API instance | With several instances, each one counts separately | A shared store such as Redis if the API is scaled out |
 | **Account emails are queued in memory** | A verification or reset email still queued when the API restarts is lost | The user asks for another. Booking emails use a database outbox and survive restarts. |
 | **The response time floor has limits** | Under heavy load, registration and reset requests can take longer than 250 ms, and small timing differences could show again | Raise `AccountTokens:MinimumResponseMilliseconds` if needed |
-| **Development email only** | Emails are written as files, not sent, also in Docker Compose | SMTP delivery in Milestone 7 PR 3 |
+
+Fixed in Milestone 7 PR 3: emails are sent through SMTP over TLS. Data no longer needed is deleted on a schedule ([ADR 0013](adr/0013-data-retention.md)): sent booking emails, expired sessions, spent links, and unconfirmed accounts that nothing important refers to.
 
 Fixed in Milestone 7 PR 2: the session token is in an httpOnly cookie instead of `localStorage`, and signing out revokes the session on the server ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)).
 

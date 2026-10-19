@@ -438,4 +438,3 @@ FodyWeavers.xsd
 # Docker Compose secrets and local TLS certificates (see docs/deployment.md)
 /.env
 /certs/
-/compose-emails/

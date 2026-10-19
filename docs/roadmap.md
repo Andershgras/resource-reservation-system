@@ -202,7 +202,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | Done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58), [#60](https://github.com/Andershgras/resource-reservation-system/pull/60), [#61](https://github.com/Andershgras/resource-reservation-system/pull/61), [#62](https://github.com/Andershgras/resource-reservation-system/pull/62)) |
-| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, httpOnly cookie authentication). Deploy-ready, with no hosted demo. | In progress: PR 1 done ([#63](https://github.com/Andershgras/resource-reservation-system/pull/63)), PR 2 awaiting review |
+| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, httpOnly cookie authentication). Deploy-ready, with no hosted demo. | In progress: PR 1 done ([#63](https://github.com/Andershgras/resource-reservation-system/pull/63)), PR 2 done ([#64](https://github.com/Andershgras/resource-reservation-system/pull/64)), PR 3 awaiting review |
 
 ### M1: Booking Correctness And Data Integrity
 
@@ -592,13 +592,49 @@ Follow-ups noticed during PR 2:
 - Expired rows stay in `UserSessions`. The clean-up job in PR 3 should cover them, with the sent booking emails and unconfirmed accounts.
 - The Data Protection keys are stored unencrypted in their volume. Protecting them with a certificate is possible, if a deployment needs it.
 
-PR 3: real email, end-to-end tests and published images
+PR 3: real email, end-to-end tests and published images ([ADR 0013](adr/0013-data-retention.md), an update to [ADR 0011](adr/0011-email-flows.md))
 
-- [ ] SMTP delivery through MailKit
-- [ ] Mailpit in compose, for local development only
-- [ ] Playwright end-to-end tests against the full stack in compose
-- [ ] Images published to GHCR after CI passes, tagged with the commit SHA and `latest`
-- [ ] Clean-up of sent booking emails, of accounts that were never confirmed (from M6 PR 4), and of expired sessions (from PR 2)
+Agreed decisions (19 October 2026):
+- Retention: sent booking emails 30 days, given-up ones 90 days, expired sessions, used or expired links and unconfirmed accounts 7 days.
+- Unconfirmed accounts that an admin deactivated are kept.
+- Used and expired link tokens are cleaned up too.
+- The publish job rebuilds the images from the tested commit, after every other job has passed, rather than carrying the tested images between jobs.
+- The three packages are made public by hand once, after the first publish.
+- SMTP without TLS only in explicitly permitted local or test configurations.
+- Account clean-up keeps referential integrity, and never deletes important related data.
+- Images are published only after all CI checks pass on `main`.
+
+- [x] SMTP delivery through MailKit: STARTTLS or TLS, with no fallback to plain text. Plain text needs explicit permission and a local host, and can't carry a password.
+- [x] Docker Compose sends through the SMTP server in `.env`. The pickup volume is gone.
+- [x] `compose.mailpit.yaml` adds Mailpit for local runs and CI only. Its UI is on `127.0.0.1`, and it runs as an unprivileged user.
+- [x] Playwright end-to-end tests against the full stack in compose. They read every email from Mailpit, and run in CI's Container stack job.
+- [x] Images published to GHCR after every other job passes on `main`, tagged with the commit SHA and `latest`. Only the publish job can write packages, and publishes run one at a time.
+- [x] Hourly clean-up of sent and given-up booking emails, expired sessions (from PR 2), used or expired links, and unconfirmed accounts that nothing important refers to (from M6 PR 4)
+- [x] Tests:
+  - real SMTP delivery to Mailpit, and STARTTLS refusing a server without TLS
+  - the SMTP rules and startup validation
+  - every clean-up rule and guard against SQL Server, including a list of every foreign key to `Users`
+  - the end-to-end journeys
+- [x] Docs: ADR 0013, an update to ADR 0011, README, architecture, configuration, deployment, security, testing and this roadmap
+
+Changes in behaviour in PR 3:
+- New: `Email:Delivery=Smtp` and the `Email:Smtp` settings. Docker Compose needs `SMTP_HOST`, unless the Mailpit overlay is used.
+- New: data no longer needed is deleted every hour (`Retention` settings).
+- New: `npm run test:e2e`, and CI publishes images on `main`.
+- Changed: the local quick start is `docker compose -f compose.yaml -f compose.mailpit.yaml up --build`.
+- Changed: `MailKit` 4.18.1 is a new dependency. It pulls in `System.Security.Cryptography.Pkcs`, which is pinned to 10.0.13, the release that fixes CVE-2026-84008 (high) and CVE-2026-70162 (moderate).
+
+Verified locally:
+- **Tests:** 183 backend unit and 259 integration tests pass. The end-to-end tests pass against a stack started from empty volumes.
+- **Compose:** a registration's email arrived in Mailpit over SMTP, and the API logged its warning about the unencrypted local connection.
+- **Clean-up:** with the stack running, the worker deleted old sent emails and an old unconfirmed account under the API's least-privilege SQL login, and logged only the counts.
+- **Workflow:** actionlint and shellcheck report nothing.
+- **The publish job** can only run on GitHub, and first runs when this is merged.
+
+Follow-ups noticed during PR 3:
+- After the first publish, make the three packages public in their package settings.
+- The CI actions are pinned to major versions. Pinning them to commit SHAs would harden the publish job further.
+- `System.Security.Cryptography.Pkcs` can be unpinned once MimeKit depends on a fixed version.
 
 ## Later Ideas
 

@@ -78,8 +78,13 @@ Emails are verification and reset links, account notices and booking emails ([AD
 
 | Setting | Required | Default | Notes |
 |---|---|---|---|
-| `Email:Delivery` | Yes | None | How emails are delivered. Only `PickupDirectory` exists for now, which writes each email as an `.eml` file instead of sending it. Development sets it. A real provider comes in Milestone 7. |
-| `Email:PickupDirectory` | With `PickupDirectory` | None | The folder for the `.eml` files, relative to the API's folder, or absolute. Development uses `.dev-emails`, which git ignores, because the files hold working links. Docker Compose uses a volume ([deployment](deployment.md#reading-emails)). |
+| `Email:Delivery` | Yes | None | `Smtp` sends through an SMTP server. `PickupDirectory` writes each email as an `.eml` file instead, for development without Docker, which Development sets. Docker Compose uses `Smtp`. |
+| `Email:PickupDirectory` | With `PickupDirectory` | None | The folder for the `.eml` files, relative to the API's folder, or absolute. Development uses `.dev-emails`, which git ignores, because the files hold working links. |
+| `Email:Smtp:Host` | With `Smtp` | None | The SMTP server, such as `smtp.example.com` |
+| `Email:Smtp:Port` | No | `587` | 1–65535. Usually 587 for `StartTls` and 465 for `SslOnConnect`. |
+| `Email:Smtp:Security` | No | `StartTls` | `StartTls`: upgrade the connection with STARTTLS, and fail if the server doesn't offer it. `SslOnConnect`: TLS from the start. `None`: plain text, for a local test mail catcher only (below). |
+| `Email:Smtp:AllowInsecureConnection` | With `None` | `false` | Must be `true` for `Security` `None`, which is then only allowed for a local host: `localhost`, a loopback or private address, or a name without dots, such as `mailpit`. A password can't be used with it. Anything else stops the API at startup. `compose.mailpit.yaml` sets it. |
+| `Email:Smtp:Username`, `Email:Smtp:Password` | No | None | Both, or neither for a server that needs no sign-in. **The password is a secret.** |
 | `Email:FromAddress` | Yes | None | The sender address. Its domain also names calendar invitations, as in `reservation-42@example.com`. |
 | `Email:FromName` | No | `Resource Reservation` | |
 | `Frontend:BaseUrl` | Yes | None | Where the frontend runs, such as `https://app.example.com`, for the links in emails. Development uses `http://localhost:5173`. |
@@ -92,6 +97,21 @@ Emails are verification and reset links, account notices and booking emails ([AD
 | `EmailOutbox:FirstRetryDelaySeconds` | No | `30` | 1–3600. The wait after the first failure. Each later wait is four times longer, up to an hour. |
 | `RateLimiting:Email:PermitLimit` | No | `5` | 1–10000. Requests that send email that a client IP address can make in a row. |
 | `RateLimiting:Email:WindowSeconds` | No | `900` | 1–86400. One more such request is allowed every `WindowSeconds / PermitLimit` seconds. |
+
+### Data retention
+
+A background worker deletes data that is no longer needed, every `IntervalMinutes` ([ADR 0013](adr/0013-data-retention.md)). Each period counts from when a row stopped being needed.
+
+| Setting | Required | Default | Notes |
+|---|---|---|---|
+| `Retention:Enabled` | No | `true` | The integration tests turn it off and run the clean-up directly. |
+| `Retention:IntervalMinutes` | No | `60` | 1–1440. The first round runs a minute after startup. |
+| `Retention:BatchSize` | No | `1000` | 100–100000. Rows deleted per statement, so a large clean-up never holds long locks. |
+| `Retention:SentBookingEmailDays` | No | `30` | 1–3650. Days after a booking email was sent. |
+| `Retention:FailedBookingEmailDays` | No | `90` | 1–3650. Days after a booking email was given up. |
+| `Retention:ExpiredSessionDays` | No | `7` | 1–3650. Days after a session expired. |
+| `Retention:UsedLinkTokenDays` | No | `7` | 1–3650. Days after a verification or reset link was used or expired. |
+| `Retention:UnconfirmedAccountDays` | No | `7` | 2–3650. Days after registration for an account whose address was never confirmed. Such an account is kept if an admin deactivated it, if anything important refers to it, or while a link for it still works. |
 
 ### Hosting
 
@@ -149,8 +169,13 @@ See [deployment](deployment.md#https-termination-and-redirection) for how these 
 | `HTTP_PORT`, `HTTPS_PORT` | No | `8080`, `8443` | The host ports for nginx |
 | `TLS_CERT_DIR` | No | `./certs` | The folder with `tls.crt` and `tls.key`, mounted into nginx |
 | `PROXY_SUBNET`, `PROXY_IP_RANGE`, `PROXY_IP` | No | `172.31.250.0/24`, `172.31.250.128/25`, `172.31.250.10` | The network between nginx and the API. `PROXY_IP` is nginx's fixed address, and becomes `ReverseProxy:KnownProxies`. |
+| `SMTP_HOST` | Yes, without Mailpit | None | `Email:Smtp:Host`. `compose.mailpit.yaml` replaces all the SMTP settings with Mailpit. |
+| `SMTP_PORT`, `SMTP_SECURITY` | No | `587`, `StartTls` | `Email:Smtp:Port` and `Email:Smtp:Security` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | No | None | `Email:Smtp:Username` and `Email:Smtp:Password`. **The password is a secret.** |
+| `IMAGE_PREFIX`, `IMAGE_TAG` | No | `resource-reservation`, `local` | Which images to run. For the published ones, `ghcr.io/andershgras/resource-reservation` and a commit SHA ([deployment](deployment.md#published-images)). |
+| `MAILPIT_UI_PORT` | No | `8025` | Only with `compose.mailpit.yaml`: Mailpit's web UI, on `127.0.0.1` |
 
-Compose also sets `Email:Delivery` to `PickupDirectory` and `Email:PickupDirectory` to a volume, until real email delivery arrives in Milestone 7 PR 3.
+Compose sets `Email:Delivery` to `Smtp`.
 
 ## Test settings
 

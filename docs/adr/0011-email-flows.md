@@ -134,3 +134,12 @@ Each booking email carries `booking.ics`:
 - **API contract:** `POST /api/auth/register` now returns `202 { message }` instead of `201` with the user. Clients that read the user from it must change.
 - **Everyone keeps signing in.** Existing accounts are confirmed by the migration. New accounts confirm first.
 - **Registration tests moved** from in-memory unit tests to SQL Server, because the flows use `ExecuteUpdate` and transactions.
+
+## Updates
+
+- **Milestone 7 PR 3: SMTP delivery.** `Email:Delivery=Smtp` sends through an SMTP server with MailKit (`SmtpEmailSender`). The pickup directory stays for development without Docker.
+  - Connections use TLS: STARTTLS by default, or TLS from the start. STARTTLS never falls back to plain text, which a test checks against a server without TLS.
+  - Plain text is only allowed for a local test mail catcher. It needs `Email:Smtp:AllowInsecureConnection=true` and a local host (`localhost`, a loopback or private address, or a name without dots), never a password, and the API logs a warning when it is used.
+  - Docker Compose sends through the SMTP server in `.env`. `compose.mailpit.yaml` adds Mailpit for local runs and CI ([deployment](../deployment.md#email)).
+  - The outbox and the account queue retry as before.
+- **Milestone 7 PR 3: clean-up.** Sent booking emails are deleted after 30 days and given-up ones after 90, along with used or expired links after a week, and unconfirmed accounts that nothing important refers to ([ADR 0013](0013-data-retention.md)).
