@@ -188,6 +188,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // Every host's worker may pick up any email, so all retry quickly.
         builder.UseSetting("EmailOutbox:MaxAttempts", "3");
         builder.UseSetting("EmailOutbox:FirstRetryDelaySeconds", "1");
+        // DataRetentionTests run the clean-up themselves, so the worker never
+        // deletes another test's data.
+        builder.UseSetting("Retention:Enabled", "false");
 
         foreach (var (key, value) in _settingOverrides)
         {

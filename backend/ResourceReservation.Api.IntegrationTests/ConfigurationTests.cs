@@ -30,8 +30,8 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("BookingPolicy:MaxActiveReservationsPerUser", "0", "BookingPolicy:MaxActiveReservationsPerUser must be between 1 and 1000.")]
     [InlineData("AccountLockout:MaxFailedAttempts", "0", "AccountLockout:MaxFailedAttempts must be between 1 and 100.")]
     [InlineData("AccountLockout:LockoutMinutes", "0", "AccountLockout:LockoutMinutes must be between 1 and 1440.")]
-    [InlineData("Email:Delivery", "", "Email:Delivery is required.")]
-    [InlineData("Email:Delivery", "Carrier pigeon", "Email:Delivery must be PickupDirectory.")]
+    [InlineData("Email:Delivery", "", "Email:Delivery is required: Smtp, or PickupDirectory for development.")]
+    [InlineData("Email:Delivery", "Carrier pigeon", "Email:Delivery must be Smtp or PickupDirectory.")]
     [InlineData("Email:PickupDirectory", "", "Email:PickupDirectory is required when Email:Delivery is PickupDirectory.")]
     [InlineData("Email:FromAddress", "not-an-address", "Email:FromAddress 'not-an-address' is not an email address.")]
     [InlineData("Frontend:BaseUrl", "", "Frontend:BaseUrl is required.")]
@@ -44,6 +44,9 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("EmailOutbox:PollIntervalMilliseconds", "10", "EmailOutbox:PollIntervalMilliseconds must be between 100 and 300000.")]
     [InlineData("RateLimiting:Email:PermitLimit", "0", "RateLimiting:Email:PermitLimit must be between 1 and 10000.")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
+    [InlineData("Email:Delivery", "Smtp", "Email:Smtp:Host is required when Email:Delivery is Smtp.")]
+    [InlineData("Retention:UnconfirmedAccountDays", "1", "Retention:UnconfirmedAccountDays must be between 2 and 3650.")]
+    [InlineData("Retention:IntervalMinutes", "0", "Retention:IntervalMinutes must be between 1 and 1440.")]
     // Relaxed cookies are for the Vite dev server only. The tests run as "Testing".
     [InlineData("AuthCookies:AllowInsecureDevelopmentCookies", "true", "AuthCookies:AllowInsecureDevelopmentCookies is only allowed in the Development environment.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
@@ -76,6 +79,27 @@ public class ConfigurationTests : ApiTestBase
         Assert.Contains(
             "BookingPolicy:MinLeadTimeMinutes plus BookingPolicy:MinDurationMinutes must fit within BookingPolicy:MaxAdvanceDays.",
             exception.ToString());
+    }
+
+    // Unencrypted SMTP needs explicit permission and a local mail catcher.
+    [Theory]
+    [InlineData("mailpit", "false", "needs Email:Smtp:AllowInsecureConnection=true")]
+    [InlineData("smtp.example.com", "true", "Email:Smtp:Security None is only allowed for a local host, not 'smtp.example.com'.")]
+    public void Startup_WithUnencryptedSmtpOutsideALocalTestSetup_Fails(string host, string allowInsecure, string expectedMessage)
+    {
+        using var factory = new ApiFactory(
+            Fixture.ConnectionString,
+            new Dictionary<string, string>
+            {
+                ["Email:Delivery"] = "Smtp",
+                ["Email:Smtp:Host"] = host,
+                ["Email:Smtp:Security"] = "None",
+                ["Email:Smtp:AllowInsecureConnection"] = allowInsecure
+            });
+
+        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateBrowserClient());
+
+        Assert.Contains(expectedMessage, exception.ToString());
     }
 
     [Fact]
