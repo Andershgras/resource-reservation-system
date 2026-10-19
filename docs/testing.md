@@ -1,6 +1,6 @@
 # Testing
 
-The project has four automated test suites, plus a smoke test of the running container stack. CI runs all of them on every push and pull request.
+The project has four automated test suites, plus a smoke test and end-to-end tests of the running container stack. CI runs all of them on every push and pull request.
 
 | Suite | Location | What it checks | Needs |
 |---|---|---|---|
@@ -9,6 +9,7 @@ The project has four automated test suites, plus a smoke test of the running con
 | Frontend unit tests | `frontend/resource-reservation-client/src/**/*.test.ts(x)` | Helpers, session handling, the API client, query hooks, routing, pages, and accessibility of the shared components | Node.js |
 | Frontend smoke tests | `frontend/resource-reservation-client/tests/smoke` | The main browser flows in Playwright, with the API mocked | Node.js |
 | Container stack smoke test | `deploy/smoke-test.sh` | The images and Docker Compose stack, checked from outside through nginx | Docker, `curl`, Node.js |
+| End-to-end tests | `frontend/resource-reservation-client/e2e` | Whole journeys in a real browser against the real stack, with every email read from Mailpit | Docker, Node.js |
 
 ## Running the tests
 
@@ -153,6 +154,20 @@ How the harness works (`Infrastructure/ApiFixture.cs`):
 3. Before each test, [Respawn](https://github.com/jbogard/Respawn) deletes all data and a test admin is seeded again.
 4. Tests in the shared collection run one at a time, because they share the database.
 
+### Email and clean-up
+
+- **SMTP delivery (`SmtpDeliveryTests`):** `SmtpEmailSender` sends to a real Mailpit container, also started with Testcontainers. The email must arrive with its Message-ID, addresses, text and `.ics` invitation. STARTTLS to a server without TLS must fail, and nothing may arrive, so it never falls back to plain text.
+- **SMTP settings (`SmtpEmailTests`, unit tests):** plain text is refused without `AllowInsecureConnection`, refused for a host that isn't local even with it, and refused with a password. The rules for which hosts count as local, the other SMTP settings, and the MIME message built for MailKit are covered too.
+- **Startup (`ConfigurationTests`):** unencrypted SMTP outside a local test setup, missing SMTP settings and out-of-range retention settings stop the API.
+- **Clean-up (`DataRetentionTests`, ADR 0013):** the clean-up runs against SQL Server, with the worker turned off.
+  - sent and given-up booking emails deleted only after their periods, and unsent ones never
+  - expired sessions after a week, and revoked ones only once expired
+  - used or expired links after a week
+  - an old unconfirmed account deleted with its links, cooldowns and sessions
+  - unconfirmed accounts kept when they own or cancelled a reservation, created a closure, were deactivated, have a working link, are recent, are admins, or have no creation time
+  - batches repeated until nothing is left, and a second run finding nothing
+  - every foreign key to `Users` listed with its delete behaviour, so a new one fails the test until the clean-up is checked for it
+
 ### Running without Docker
 
 Point the tests at any SQL Server you have, for example LocalDB:
@@ -162,7 +177,7 @@ INTEGRATION_TEST_CONNECTION_STRING="Server=(localdb)\MSSQLLocalDB;Database=Resou
   dotnet test backend/ResourceReservation.Api.IntegrationTests
 ```
 
-The tests delete all data in this database. To prevent accidents, the harness refuses any database whose name doesn't end in `_IntegrationTests`.
+The tests delete all data in this database. To prevent accidents, the harness refuses any database whose name doesn't end in `_IntegrationTests`. `SmtpDeliveryTests` still needs Docker, for its Mailpit container.
 
 ## Frontend unit tests
 
@@ -272,7 +287,7 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - resetting a forgotten password from the emailed link, and a used link saying so before anything is typed
 - the saved theme applying before the app's JavaScript runs, and the theme switch
 
-Because the API is mocked, these tests don't prove the frontend and backend work together. An end-to-end suite against the real stack is planned for Milestone 7 PR 3.
+Because the API is mocked, these tests don't prove the frontend and backend work together. The [end-to-end tests](#end-to-end-tests) do.
 
 ## Container stack smoke test
 
@@ -292,7 +307,35 @@ It checks:
 - with the seed admin set: signing in, and creating and deleting a resource, which checks that the API's SQL login can write. The new resource's `Location` header must start with `PUBLIC_ORIGIN`, which shows that the API trusts nginx's `X-Forwarded-Proto` and gets the original `Host`.
 - with the seed admin set: a browser session over HTTPS with a cookie jar. It checks the `__Host-` cookie's attributes and that the sign-in response holds no token. Sign-in without an anti-forgery token, a forged token and a cross-site request must be refused. Signing out must revoke the session, so a copy of the cookie gets `401`.
 
-It doesn't run a browser, so it can't see a CSP violation itself. When the stack was first built, a browser check against it found the hash mismatch caused by Windows line endings ([deployment](deployment.md#the-frontends-responses)). The end-to-end suite in Milestone 7 PR 3 adds browser checks of the real stack.
+It doesn't run a browser, so it can't see a CSP violation itself. When the stack was first built, a browser check against it found the hash mismatch caused by Windows line endings ([deployment](deployment.md#the-frontends-responses)). The end-to-end tests now check that in a real browser on every run.
+
+## End-to-end tests
+
+Playwright drives Chromium against the real stack: nginx, the API, SQL Server and Mailpit, with nothing mocked. They run in CI's **Container stack** job, after the smoke test. Locally, start the stack with Mailpit ([deployment](deployment.md#quick-start-on-your-own-machine)), then:
+
+```bash
+set -a; . ./.env; set +a          # the seed admin's credentials
+cd frontend/resource-reservation-client
+npm run test:e2e
+```
+
+They use `E2E_BASE_URL` (`https://localhost:8443` by default), `MAILPIT_URL` (`http://localhost:8025`) and the seed admin from `.env`, or `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`.
+
+- **A new user's journey (`booking-journey.spec.ts`):**
+  1. Register in the browser, and fetch the verification email from Mailpit's API.
+  2. Open its link, confirm with the password, and sign in.
+  3. Book a time a week ahead, move it, then cancel it.
+  4. Each of the three booking emails must arrive with its calendar invitation, and the cancelled time must be free again.
+- **The session in a real browser (`session-security.spec.ts`):**
+  - both cookies are `__Host-`, `HttpOnly`, `Secure` and `SameSite=Strict`, and `document.cookie` is empty
+  - only the signed-in hint is in `localStorage`, and a reload restores the session
+  - a form another site posts to the API is refused
+  - signing out deletes the cookie, and a copy of it gets `401`
+- **Both** fail on any console error or CSP violation.
+
+The test data, a resource open every day, is created through `/api/auth/token`, and every name and address is unique, so the tests can run against a stack that already holds data.
+
+**Rate limits:** the stack keeps the API's real per-IP rate limits. Each run registers one account and signs in a few times. Running the suite many times in a row soon gets `429`: registrations allow 5, then one every 3 minutes. Wait, or run `docker compose restart api`, because the counters are kept in memory.
 
 ## Code coverage
 

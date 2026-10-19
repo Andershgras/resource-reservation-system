@@ -214,7 +214,8 @@ Booking and availability times are wall-clock times in the configured scheduling
 | Health | `/health/live` and `/health/ready` for the hosting platform. See [deployment](deployment.md#health-checks). |
 | Hosting | Docker Compose: nginx terminates HTTPS, serves the frontend and passes `/api` and `/health` to the API, so both share one origin. Migrations run in a one-shot container before the API starts. See [deployment](deployment.md). |
 | Time | `SchedulingClock` gives "now" in the scheduling time zone, through an injectable `TimeProvider` |
-| Email | Account emails (links and notices) go through a bounded in-memory queue; booking emails through a database outbox written with the booking. Both are sent by background services through `IEmailSender`. See below and [ADR 0011](adr/0011-email-flows.md). |
+| Email | Account emails (links and notices) go through a bounded in-memory queue; booking emails through a database outbox written with the booking. Both are sent by background services through `IEmailSender`: SMTP over TLS with MailKit, or `.eml` files in development. See below and [ADR 0011](adr/0011-email-flows.md). |
+| Data retention | `DataRetentionWorker` deletes, every hour, sent booking emails, expired sessions, spent links and unconfirmed accounts that nothing important refers to, in batches. See [ADR 0013](adr/0013-data-retention.md). |
 
 ## Email delivery
 
@@ -226,7 +227,7 @@ flowchart LR
     Booking["ReservationService<br/>book, move, cancel"]
     Outbox[("BookingNotifications<br/>same SaveChanges as the booking")]
     Worker["EmailOutboxWorker<br/>lease, retries, gives up after 6"]
-    Sender["IEmailSender<br/>development: .eml files"]
+    Sender["IEmailSender<br/>SMTP over TLS (MailKit),<br/>or .eml files in development"]
 
     Account --> Queue --> Dispatcher --> Sender
     Booking --> Outbox --> Worker --> Sender
@@ -348,3 +349,4 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0010: User management and account security](adr/0010-user-management-and-account-security.md)
 - [ADR 0011: Email verification, password reset and booking emails](adr/0011-email-flows.md)
 - [ADR 0012: Browser sessions in an httpOnly cookie, with server-side sign-out and CSRF protection](adr/0012-cookie-sessions-and-csrf.md)
+- [ADR 0013: Deleting data that is no longer needed](adr/0013-data-retention.md)
