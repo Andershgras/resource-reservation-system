@@ -1,11 +1,14 @@
-# The whole system: SQL Server, migrations, the API and nginx.
+# The whole system: SQL Server, migrations, the API and nginx. This file is what
+# production runs. It sends email through the SMTP server set in .env.
+#
+# On your own machine, add the Mailpit overlay, which catches every email:
 #
 #   cp .env.example .env          # then fill in the secrets
 #   sh deploy/create-dev-certificate.sh
-#   docker compose up --build
+#   docker compose -f compose.yaml -f compose.mailpit.yaml up --build
 #
-# Then open PUBLIC_ORIGIN, https://localhost:8443 by default. See
-# docs/deployment.md for production.
+# Then open PUBLIC_ORIGIN, https://localhost:8443 by default, and Mailpit at
+# http://localhost:8025. See docs/deployment.md for production.
 #
 # Only nginx publishes ports. SQL Server and the API are reachable only on
 # their private networks.
@@ -85,17 +88,21 @@ services:
       # Only nginx's fixed address is trusted to forward the client's IP and scheme.
       ReverseProxy__KnownProxies__0: ${PROXY_IP:-172.31.250.10}
       Frontend__BaseUrl: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env}
-      # Until real email delivery exists, emails are written to a volume.
-      Email__Delivery: PickupDirectory
-      Email__PickupDirectory: /var/lib/resource-reservation/emails
+      # Always TLS: STARTTLS by default, or SslOnConnect for port 465. The API
+      # stops at startup if the SMTP settings are missing or insecure.
+      Email__Delivery: Smtp
       Email__FromAddress: ${EMAIL_FROM_ADDRESS:?Set EMAIL_FROM_ADDRESS in .env}
+      Email__Smtp__Host: ${SMTP_HOST:-}
+      Email__Smtp__Port: ${SMTP_PORT:-587}
+      Email__Smtp__Security: ${SMTP_SECURITY:-StartTls}
+      Email__Smtp__Username: ${SMTP_USERNAME:-}
+      Email__Smtp__Password: ${SMTP_PASSWORD:-}
       SeedAdmin__Email: ${SEED_ADMIN_EMAIL:-}
       SeedAdmin__Password: ${SEED_ADMIN_PASSWORD:-}
       # Protects the anti-forgery tokens, so they survive a restart. Session
       # cookies are JWTs and don't depend on these keys.
       DataProtection__KeysDirectory: /var/lib/resource-reservation/keys
     volumes:
-      - api-emails:/var/lib/resource-reservation/emails
       - api-keys:/var/lib/resource-reservation/keys
     networks:
       - data
@@ -154,5 +161,4 @@ networks:
 
 volumes:
   db-data:
-  api-emails:
   api-keys:
