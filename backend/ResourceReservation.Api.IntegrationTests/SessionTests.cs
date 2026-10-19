@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -18,11 +18,11 @@ public class SessionTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Login_ReturnsWhenTheTokenExpires()
+    public async Task Token_ReturnsWhenTheTokenExpires()
     {
         var before = DateTimeOffset.UtcNow;
 
-        var response = await CreateAnonymousClient().PostAsJsonAsync("/api/auth/login", new LoginUserDto
+        var response = await CreateAnonymousClient().PostAsJsonAsync("/api/auth/token", new LoginUserDto
         {
             Email = ApiFixture.AdminEmail,
             Password = ApiFixture.AdminPassword

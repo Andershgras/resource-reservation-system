@@ -35,7 +35,7 @@ public class TokenValidationTests : ApiTestBase
         await using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
             builder.ConfigureTestServices(services => services.AddScoped<UserSessionValidator>(
                 _ => throw new InvalidOperationException("Simulated database failure"))));
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
         client.DefaultRequestHeaders.Authorization = token;
 
         var adminOnly = await client.GetAsync("/api/users");
@@ -70,7 +70,7 @@ public class TokenValidationTests : ApiTestBase
         var logs = new CapturingLoggerProvider();
         await using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
             builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(logs)));
-        var adminClient = factory.CreateClient();
+        var adminClient = factory.CreateBrowserClient();
         adminClient.DefaultRequestHeaders.Authorization = await SignInAsync(factory, ApiFixture.AdminEmail, ApiFixture.AdminPassword);
         await adminClient.PostAsJsonAsync("/api/auth/register", new RegisterUserDto
         {
@@ -79,7 +79,7 @@ public class TokenValidationTests : ApiTestBase
             Password = "UserPassword123"
         });
         await ConfirmEmailAsync("logged@integration.test");
-        var userClient = factory.CreateClient();
+        var userClient = factory.CreateBrowserClient();
         userClient.DefaultRequestHeaders.Authorization = await SignInAsync(factory, "logged@integration.test", "UserPassword123");
         var user = await LoadUserAsync("logged@integration.test");
         var oldStamp = user.SecurityStamp;
@@ -89,7 +89,7 @@ public class TokenValidationTests : ApiTestBase
             $"/api/users/{user.Id}/status",
             new ChangeUserStatusDto { IsActive = false })).StatusCode);
         var rejected = await userClient.GetAsync("/api/reservations/me");
-        var deactivatedSignIn = await factory.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginUserDto
+        var deactivatedSignIn = await factory.CreateBrowserClient().PostAsJsonAsync("/api/auth/login", new LoginUserDto
         {
             Email = "logged@integration.test",
             Password = "UserPassword123"
@@ -120,7 +120,7 @@ public class TokenValidationTests : ApiTestBase
         string email,
         string password)
     {
-        var response = await factory.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginUserDto
+        var response = await factory.CreateBrowserClient().PostAsJsonAsync("/api/auth/token", new LoginUserDto
         {
             Email = email,
             Password = password

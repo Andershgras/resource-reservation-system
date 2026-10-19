@@ -50,7 +50,7 @@ public sealed class CorsTests : ApiTestBase, IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/resources");
         request.Headers.Add("Origin", AllowedOrigin);
 
-        var response = await _factory.CreateClient().SendAsync(request);
+        var response = await _factory.CreateBrowserClient().SendAsync(request);
 
         response.EnsureSuccessStatusCode();
         Assert.Equal(AllowedOrigin, GetHeader(response, "Access-Control-Allow-Origin"));
@@ -71,7 +71,7 @@ public sealed class CorsTests : ApiTestBase, IDisposable
     {
         using var request = CreatePreflight(origin);
 
-        return await _factory.CreateClient().SendAsync(request);
+        return await _factory.CreateBrowserClient().SendAsync(request);
     }
 
     private static HttpRequestMessage CreatePreflight(string origin)

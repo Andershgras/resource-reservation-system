@@ -250,7 +250,7 @@ public class ReservationTests : ApiTestBase
         await using var shortTimeoutFactory = new ApiFactory(
             Fixture.ConnectionString,
             new Dictionary<string, string> { ["Scheduling:BookingLockTimeoutMilliseconds"] = "500" });
-        var client = shortTimeoutFactory.CreateClient();
+        var client = shortTimeoutFactory.CreateBrowserClient();
         client.DefaultRequestHeaders.Authorization = userClient.DefaultRequestHeaders.Authorization;
 
         await using var connection = new SqlConnection(Fixture.ConnectionString);
@@ -291,7 +291,7 @@ public class ReservationTests : ApiTestBase
         await using var shortTimeoutFactory = new ApiFactory(
             Fixture.ConnectionString,
             new Dictionary<string, string> { ["Scheduling:BookingLockTimeoutMilliseconds"] = "500" });
-        var client = shortTimeoutFactory.CreateClient();
+        var client = shortTimeoutFactory.CreateBrowserClient();
         client.DefaultRequestHeaders.Authorization = userClient.DefaultRequestHeaders.Authorization;
         var request = new CreateReservationDto
         {

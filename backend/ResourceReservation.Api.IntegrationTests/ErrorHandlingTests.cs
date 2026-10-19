@@ -21,7 +21,7 @@ public class ErrorHandlingTests : ApiTestBase
         }.ConnectionString;
         await using var factory = new ApiFactory(brokenConnectionString);
 
-        var response = await factory.CreateClient().GetAsync("/api/resources");
+        var response = await factory.CreateBrowserClient().GetAsync("/api/resources");
 
         var problem = await ProblemAssert.IsProblemAsync(response, HttpStatusCode.InternalServerError);
         var body = await response.Content.ReadAsStringAsync();

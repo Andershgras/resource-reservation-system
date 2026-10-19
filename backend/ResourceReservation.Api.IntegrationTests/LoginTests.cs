@@ -30,11 +30,15 @@ public class LoginTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Login_ReturnsATokenWithAFingerprintOfTheStampButNeverTheStamp()
+    public async Task Token_ReturnsATokenWithAFingerprintOfTheStampButNeverTheStamp()
     {
         var user = await SeedUserAsync();
 
-        var response = await LoginAsync(CreateAnonymousClient(), Password);
+        var response = await CreateAnonymousClient().PostAsJsonAsync("/api/auth/token", new LoginUserDto
+        {
+            Email = user.Email,
+            Password = Password
+        });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
@@ -139,7 +143,7 @@ public class LoginTests : ApiTestBase
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         await using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(clock)));
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         for (var attempt = 0; attempt < MaxFailedAttempts; attempt++)
         {
@@ -200,7 +204,7 @@ public class LoginTests : ApiTestBase
         var hasher = new GatedPasswordHasher();
         await using var factory = CreateFactoryWithHasher(hasher);
 
-        var signIn = LoginAsync(factory.CreateClient(), Password);
+        var signIn = LoginAsync(factory.CreateBrowserClient(), Password);
         await hasher.Verifying.Task.WaitAsync(TimeSpan.FromSeconds(30));
         await UpdateUserAsync(user.Id, stored => stored.LockoutEndsAt = DateTimeOffset.UtcNow.AddMinutes(15));
         hasher.Release.SetResult();
@@ -215,7 +219,7 @@ public class LoginTests : ApiTestBase
         var hasher = new GatedPasswordHasher();
         await using var factory = CreateFactoryWithHasher(hasher);
 
-        var signIn = LoginAsync(factory.CreateClient(), Password);
+        var signIn = LoginAsync(factory.CreateBrowserClient(), Password);
         await hasher.Verifying.Task.WaitAsync(TimeSpan.FromSeconds(30));
         await UpdateUserAsync(user.Id, stored =>
         {
@@ -268,7 +272,7 @@ public class LoginTests : ApiTestBase
         var hasher = new RecordingPasswordHasher();
         await using var factory = CreateFactoryWithHasher(hasher);
 
-        await LoginAsync(factory.CreateClient(), password, email);
+        await LoginAsync(factory.CreateBrowserClient(), password, email);
 
         Assert.Equal(password, Assert.Single(hasher.Verifications).ProvidedPassword);
     }
@@ -279,7 +283,7 @@ public class LoginTests : ApiTestBase
         await SeedUserAsync();
         var hasher = new RecordingPasswordHasher();
         await using var factory = CreateFactoryWithHasher(hasher);
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         await LoginAsync(client, WrongPassword);
         await LoginAsync(client, Password, "first-missing@integration.test");
@@ -329,7 +333,7 @@ public class LoginTests : ApiTestBase
         var hasher = new GatedPasswordHasher();
         await using var factory = CreateFactoryWithHasher(hasher);
 
-        var signIn = LoginAsync(factory.CreateClient(), Password);
+        var signIn = LoginAsync(factory.CreateBrowserClient(), Password);
         await hasher.Verifying.Task.WaitAsync(TimeSpan.FromSeconds(30));
         await UpdateUserAsync(user.Id, stored => stored.PasswordHash = newerHash);
         hasher.Release.SetResult();

@@ -155,7 +155,7 @@ public class RegistrationTests : ApiTestBase
         {
             ["AccountTokens:MinimumResponseMilliseconds"] = "300"
         });
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
         var requests = new (string Path, object Body)[]
         {
             ("/api/auth/register", new RegisterUserDto { Name = "A", Email = Email, Password = Password }),

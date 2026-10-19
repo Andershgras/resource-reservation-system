@@ -44,6 +44,8 @@ public class ConfigurationTests : ApiTestBase
     [InlineData("EmailOutbox:PollIntervalMilliseconds", "10", "EmailOutbox:PollIntervalMilliseconds must be between 100 and 300000.")]
     [InlineData("RateLimiting:Email:PermitLimit", "0", "RateLimiting:Email:PermitLimit must be between 1 and 10000.")]
     [InlineData("ConnectionStrings:DefaultConnection", "", "ConnectionStrings:DefaultConnection is required.")]
+    // Relaxed cookies are for the Vite dev server only. The tests run as "Testing".
+    [InlineData("AuthCookies:AllowInsecureDevelopmentCookies", "true", "AuthCookies:AllowInsecureDevelopmentCookies is only allowed in the Development environment.")]
     public void Startup_WithInvalidSetting_FailsWithMessageNamingTheSetting(
         string key,
         string value,
@@ -53,7 +55,7 @@ public class ConfigurationTests : ApiTestBase
             Fixture.ConnectionString,
             new Dictionary<string, string> { [key] = value });
 
-        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateBrowserClient());
 
         Assert.Contains(expectedMessage, exception.ToString());
     }
@@ -69,7 +71,7 @@ public class ConfigurationTests : ApiTestBase
                 ["BookingPolicy:MaxAdvanceDays"] = "1"
             });
 
-        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        var exception = Assert.ThrowsAny<Exception>(() => factory.CreateBrowserClient());
 
         Assert.Contains(
             "BookingPolicy:MinLeadTimeMinutes plus BookingPolicy:MinDurationMinutes must fit within BookingPolicy:MaxAdvanceDays.",

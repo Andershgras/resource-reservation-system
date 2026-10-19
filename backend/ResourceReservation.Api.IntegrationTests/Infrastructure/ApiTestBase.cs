@@ -29,9 +29,10 @@ public abstract class ApiTestBase : IAsyncLifetime
         return Task.CompletedTask;
     }
 
+    // A browser-like client, with cookies and anti-forgery tokens.
     protected HttpClient CreateAnonymousClient()
     {
-        return Fixture.Factory.CreateClient();
+        return Fixture.Factory.CreateBrowserClient();
     }
 
     protected Task<HttpClient> CreateAdminClientAsync()
@@ -80,6 +81,25 @@ public abstract class ApiTestBase : IAsyncLifetime
         return resource.Id;
     }
 
+    // A session for a token a test signs itself, so the token's other claims
+    // decide whether it is accepted.
+    protected async Task<Guid> CreateSessionAsync(int userId)
+    {
+        await using var context = Fixture.CreateDbContext();
+        var session = new ResourceReservation.Api.Models.UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Client = ResourceReservation.Api.Models.UserSessionClients.Token,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10)
+        };
+        context.UserSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        return session.Id;
+    }
+
     // Marks a registered address as confirmed, as following its link would.
     protected async Task ConfirmEmailAsync(string email)
     {
@@ -90,7 +110,8 @@ public abstract class ApiTestBase : IAsyncLifetime
         await context.SaveChangesAsync();
     }
 
-    private async Task<HttpClient> CreateAuthenticatedClientAsync(string email, string password)
+    // A browser signed in with the session cookie, as the frontend is.
+    protected async Task<HttpClient> CreateBrowserSessionClientAsync(string email, string password)
     {
         var client = CreateAnonymousClient();
         var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginUserDto
@@ -100,7 +121,23 @@ public abstract class ApiTestBase : IAsyncLifetime
         });
 
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
-        var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDto>();
+
+        return client;
+    }
+
+    // Most tests use a bearer token from /api/auth/token, which is checked the
+    // same way as the session cookie (ADR 0012).
+    private async Task<HttpClient> CreateAuthenticatedClientAsync(string email, string password)
+    {
+        var client = CreateAnonymousClient();
+        var tokenResponse = await client.PostAsJsonAsync("/api/auth/token", new LoginUserDto
+        {
+            Email = email,
+            Password = password
+        });
+
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+        var auth = await tokenResponse.Content.ReadFromJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", auth!.Token);
 
