@@ -10,6 +10,9 @@ using ResourceReservation.Api.Models;
 
 namespace ResourceReservation.Api.Services;
 
+// A successful sign-in: the user and the token for their new session.
+public sealed record SignInResult(UserResponseDto User, IssuedToken Token);
+
 public class AuthService
 {
     // The only answer to a failed sign-in, whether the email is unknown, the
@@ -51,8 +54,9 @@ public class AuthService
 
     // Every failed attempt, for a known or unknown email, verifies one password
     // hash and runs the same failure update, so failures take about as long as
-    // each other and give the same answer (ADR 0010).
-    public async Task<ServiceResult<AuthResponseDto>> LoginAsync(LoginUserDto request)
+    // each other and give the same answer (ADR 0010). A success starts a new
+    // session for the given client (UserSessionClients, ADR 0012).
+    public async Task<ServiceResult<SignInResult>> LoginAsync(LoginUserDto request, string client)
     {
         if (!TryNormalizeEmail(request.Email, out var normalizedEmail))
         {
@@ -125,13 +129,55 @@ public class AuthService
             await RehashPasswordAsync(user, request.Password);
         }
 
-        var issuedToken = _jwtTokenService.CreateToken(user);
-
-        return new AuthResponseDto
+        // The token is issued for the stamp read above. If the stamp changed
+        // since the check, every request with this token is rejected anyway.
+        var session = new UserSession
         {
-            Token = issuedToken.Token,
-            ExpiresAt = issuedToken.ExpiresAt,
-            ExpiresInSeconds = issuedToken.ExpiresInSeconds,
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Client = client,
+            CreatedAt = now,
+            ExpiresAt = _jwtTokenService.GetExpiry()
+        };
+
+        _context.UserSessions.Add(session);
+        await _context.SaveChangesAsync();
+
+        var issuedToken = _jwtTokenService.CreateToken(user, session.Id, session.ExpiresAt);
+
+        return new SignInResult(ToUserResponseDto(user), issuedToken);
+    }
+
+    // Signs out one session. Revoking a session that is already revoked, or
+    // doesn't exist, changes nothing.
+    public Task<int> RevokeSessionAsync(Guid sessionId)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        return _context.UserSessions
+            .Where(session => session.Id == sessionId && session.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now));
+    }
+
+    // The signed-in user and how long their session has left, for restoring a
+    // browser session on page load.
+    public async Task<SessionResponseDto?> GetSessionAsync(CurrentUserSession current)
+    {
+        var user = await _context.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(user => user.Id == current.UserId);
+
+        if (user is null)
+        {
+            return null;
+        }
+
+        var remaining = current.ExpiresAt - _timeProvider.GetUtcNow();
+
+        return new SessionResponseDto
+        {
+            ExpiresAt = current.ExpiresAt,
+            ExpiresInSeconds = Math.Max(0, (int)Math.Floor(remaining.TotalSeconds)),
             User = ToUserResponseDto(user)
         };
     }

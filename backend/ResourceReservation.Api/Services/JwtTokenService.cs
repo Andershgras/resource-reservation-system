@@ -22,7 +22,9 @@ public class JwtTokenService
         _timeProvider = timeProvider;
     }
 
-    public IssuedToken CreateToken(User user)
+    // The token belongs to one session, whose ID it carries. The session must
+    // already exist with the same expiry (see AuthService.LoginAsync).
+    public IssuedToken CreateToken(User user, Guid sessionId, DateTimeOffset expiresAt)
     {
         var claims = new List<Claim>
         {
@@ -31,10 +33,10 @@ public class JwtTokenService
             new(ClaimTypes.Name, user.Name),
             new(ClaimTypes.Role, user.Role),
             new(UserSessionValidator.SecurityStampClaimType,
-                UserSessionValidator.FingerprintSecurityStamp(user.SecurityStamp))
+                UserSessionValidator.FingerprintSecurityStamp(user.SecurityStamp)),
+            new(UserSessionValidator.SessionIdClaimType, sessionId.ToString())
         };
 
-        var expiresAt = _timeProvider.GetUtcNow().AddMinutes(_jwtOptions.ExpiryMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -48,6 +50,12 @@ public class JwtTokenService
         return new IssuedToken(
             new JwtSecurityTokenHandler().WriteToken(token),
             expiresAt,
-            _jwtOptions.ExpiryMinutes * 60);
+            (int)Math.Ceiling((expiresAt - _timeProvider.GetUtcNow()).TotalSeconds));
+    }
+
+    // When a token issued now stops being accepted.
+    public DateTimeOffset GetExpiry()
+    {
+        return _timeProvider.GetUtcNow().AddMinutes(_jwtOptions.ExpiryMinutes);
     }
 }

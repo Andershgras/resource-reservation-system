@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace ResourceReservation.Api.Configuration;
 
@@ -17,6 +17,14 @@ public class FrontendOptions : IValidatableObject
 
         return fragment is null ? link : $"{link}#{fragment}";
     }
+
+    // Scheme, host and port, such as "https://app.example.com", as browsers send
+    // it in the Origin header. Empty while BaseUrl is invalid, which stops the
+    // API from starting anyway. Validation reads every property, so this must
+    // not throw.
+    public string Origin => Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri)
+        ? uri.GetLeftPart(UriPartial.Authority)
+        : string.Empty;
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

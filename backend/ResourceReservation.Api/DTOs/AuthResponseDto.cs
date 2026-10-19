@@ -1,5 +1,6 @@
 namespace ResourceReservation.Api.DTOs;
 
+// A bearer token for clients other than browsers, from POST /api/auth/token.
 public class AuthResponseDto
 {
     public string Token { get; set; } = string.Empty;

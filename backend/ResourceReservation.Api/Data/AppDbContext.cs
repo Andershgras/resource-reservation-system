@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<Reservation> Reservations { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<UserToken> UserTokens { get; set; }
+    public DbSet<UserSession> UserSessions { get; set; }
     public DbSet<AccountEmailCooldown> AccountEmailCooldowns { get; set; }
     public DbSet<BookingNotification> BookingNotifications { get; set; }
 
@@ -46,6 +47,18 @@ public class AppDbContext : DbContext
             token.HasOne(t => t.User)
                 .WithMany()
                 .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserSession>(session =>
+        {
+            // The ID comes from the app, so it is random rather than sequential.
+            session.Property(s => s.Id).ValueGeneratedNever();
+            session.Property(s => s.Client).HasMaxLength(UserSession.ClientMaxLength);
+            session.HasIndex(s => s.UserId);
+            session.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
