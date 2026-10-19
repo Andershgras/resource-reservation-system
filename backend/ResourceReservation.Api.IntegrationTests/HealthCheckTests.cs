@@ -30,7 +30,7 @@ public class HealthCheckTests : ApiTestBase
             InitialCatalog = "Missing_IntegrationTests"
         }.ConnectionString;
         await using var factory = new ApiFactory(brokenConnectionString);
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         var live = await client.GetAsync("/health/live");
         var ready = await client.GetAsync("/health/ready");

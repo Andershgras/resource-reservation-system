@@ -127,7 +127,20 @@ These host the real API with `WebApplicationFactory` and run it against SQL Serv
   - security headers and HSTS
   - rate limiting per client IP, including shared and spoofed addresses
   - health checks
-  - expired tokens and the login expiry fields
+  - expired tokens and the token endpoint's expiry fields
+- **Cookie sessions and CSRF (`CookieSessionTests`, ADR 0012):** the tests run against `https://localhost`, so they use the production `__Host-` cookies.
+  - the session and anti-forgery cookies' attributes, and no token in the sign-in response
+  - restoring a session with `/me`, and the cookie authenticating requests
+  - signing out revoking only that session, so a replayed copy of its cookie is refused while another device keeps working, also for bearer tokens
+  - signing in again revoking the browser's previous session
+  - failing closed: a revoked, expired, missing or another user's session, or a token without a session ID, is rejected
+  - a security stamp change still ending cookie sessions
+  - CSRF: no token, a forged token, a token from before signing in, sign-in without a token, cross-site `Sec-Fetch-Site` and foreign `Origin` values are all refused. A same-origin request is accepted.
+  - only a bearer token that passed validation skips CSRF: a malformed or revoked one doesn't
+  - `/token` needing no anti-forgery token and setting no cookie, but refused from another site
+  - the relaxed Development cookies refused at startup in any other environment (`ConfigurationTests`)
+
+Most other tests sign in through `/api/auth/token` and send a bearer token. Their anonymous requests use a browser-like client (`Infrastructure/BrowserClient.cs`), which keeps cookies and adds an anti-forgery token as the frontend does: one token shared by parallel requests, fetched again after signing in or out.
 - **Startup configuration:** each kind of invalid setting stops the app with a message naming the setting.
 - **Migrations:** they apply to an empty database and match the EF model. Users from before email verification come out confirmed, with no invented confirmation time, and existing reservations start at calendar sequence 0. `MigrationDataTests` upgrades a separate database holding data from before Milestone 6, and checks every row survives, with unknown audit times left empty and no booking rule overrides. A second test upgrades users from before PR 3. They stay active, each get their own stamp, and can sign in and use their token afterwards.
 
@@ -169,14 +182,17 @@ The tests delete all data in this database. To prevent accidents, the harness re
 - **My reservations** (`MyReservationsPage.test.tsx`): when each booking was made, moved and cancelled, in Copenhagen time; which bookings offer Move; and cancelling with the version.
 - **Admin resources** (`AdminResourcesPage.test.tsx`): the booking rules form, with its defaults, checks, API errors and unsaved changes.
 - **The unsaved-changes guard** (`useUnsavedChangesGuard.test.tsx`): Stay, Discard, Escape, the back button, a quick Stay followed by another navigation, same-screen changes, reloads, logout and session expiry. `src/test/renderScreen.tsx` renders a screen in a data router with a signed-in user, as the app does.
-- **`src/auth/authStorage.ts`:** session expiry, using fake timers. Covered cases:
-  - restoring a valid, expired or outdated session
-  - ending only the session whose token was rejected
+- **`src/auth/authSession.ts`:** the in-memory session, using fake timers. Covered cases:
+  - no token ever stored, only the signed-in hint
+  - timing from `expiresInSeconds` on the device's clock
+  - ending only the session of the right generation, and expiry
+  - removing tokens stored by earlier versions, and remembering a sign-out that failed
 - **`src/api/client.ts`:** with `fetch` stubbed. Covered cases:
-  - headers and body
+  - headers and body, on the same origin and without an `Authorization` header
+  - the anti-forgery token: only on unsafe requests, fetched once for parallel requests, fetched again after signing in or out, and retried once after `csrf_token_invalid`
   - problem-details messages
-  - a 401 ending the session only when a token was sent
-- **`AuthProvider`:** restoring a session, and clearing the query cache on login, logout and expiry.
+  - a 401 ending the session only when signed in, and never a newer session
+- **`AuthProvider`:** restoring a session from `/api/auth/me`, saying it expired, finishing a sign-out that failed before restoring anything, signing out on the server, and clearing the query cache on login, logout and expiry.
 - **Query hooks** (`src/features/*/…Queries.test.tsx`): `renderHook` with a fresh query client from `src/test/queryWrapper.tsx`, and the API modules mocked with `vi.mock`. They check:
   - what each hook loads
   - that failed loads aren't retried
@@ -235,7 +251,7 @@ Playwright drives Chromium against the Vite dev server, with the API mocked usin
 - the overlap error
 - per-field validation errors
 - the rate limit message
-- session expiry: an expired or outdated stored session, a 401 during a session (without a loop), a failed login, and the token lifetime running out (using Playwright's clock)
+- sessions: a session cookie restored, one that no longer works, a token stored by an earlier version removed and never sent, a 401 during a session (without a loop), a failed login, and the session lifetime running out (using Playwright's clock). The mocked API refuses every unsafe request without the anti-forgery token, as the real one does.
 - routing:
   - each screen's address surviving a reload
   - the back button
@@ -274,6 +290,7 @@ It checks:
 - the SPA fallback for routes such as `/admin/users`, and a `404` for a missing asset
 - `/health/ready` and `/api` reaching the API, which keeps its own `Cache-Control: no-store`
 - with the seed admin set: signing in, and creating and deleting a resource, which checks that the API's SQL login can write. The new resource's `Location` header must start with `PUBLIC_ORIGIN`, which shows that the API trusts nginx's `X-Forwarded-Proto` and gets the original `Host`.
+- with the seed admin set: a browser session over HTTPS with a cookie jar. It checks the `__Host-` cookie's attributes and that the sign-in response holds no token. Sign-in without an anti-forgery token, a forged token and a cross-site request must be refused. Signing out must revoke the session, so a copy of the cookie gets `401`.
 
 It doesn't run a browser, so it can't see a CSP violation itself. When the stack was first built, a browser check against it found the hash mismatch caused by Windows line endings ([deployment](deployment.md#the-frontends-responses)). The end-to-end suite in Milestone 7 PR 3 adds browser checks of the real stack.
 

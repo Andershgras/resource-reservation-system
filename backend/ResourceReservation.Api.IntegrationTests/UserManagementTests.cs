@@ -120,13 +120,15 @@ public class UserManagementTests : ApiTestBase
     {
         var user = await SeedUserAsync(UserEmail);
         var fingerprint = UserSessionValidator.FingerprintSecurityStamp(user.SecurityStamp);
+        // A real session, so only the stamp and the role decide.
+        var sessionId = await CreateSessionAsync(user.Id);
 
-        var noStamp = await GetMyReservationsWithAsync(CreateToken(user.Id, UserRoles.User, null));
-        var wrongStamp = await GetMyReservationsWithAsync(CreateToken(user.Id, UserRoles.User, new string('0', 64)));
+        var noStamp = await GetMyReservationsWithAsync(CreateToken(user.Id, UserRoles.User, null, sessionId));
+        var wrongStamp = await GetMyReservationsWithAsync(CreateToken(user.Id, UserRoles.User, new string('0', 64), sessionId));
         // A stamp fingerprint can't be used to claim another role.
-        var otherRole = await CreateAnonymousClientWithToken(CreateToken(user.Id, UserRoles.Admin, fingerprint))
+        var otherRole = await CreateAnonymousClientWithToken(CreateToken(user.Id, UserRoles.Admin, fingerprint, sessionId))
             .GetAsync("/api/users");
-        var valid = await GetMyReservationsWithAsync(CreateToken(user.Id, UserRoles.User, fingerprint));
+        var valid = await GetMyReservationsWithAsync(CreateToken(user.Id, UserRoles.User, fingerprint, sessionId));
 
         Assert.Equal(
             [HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.OK],
@@ -214,7 +216,7 @@ public class UserManagementTests : ApiTestBase
         await using var shortTimeoutFactory = new ApiFactory(
             Fixture.ConnectionString,
             new Dictionary<string, string> { ["Scheduling:BookingLockTimeoutMilliseconds"] = "500" });
-        var client = shortTimeoutFactory.CreateClient();
+        var client = shortTimeoutFactory.CreateBrowserClient();
         client.DefaultRequestHeaders.Authorization = adminClient.DefaultRequestHeaders.Authorization;
         var heldLock = await HoldUserAdministrationLockAsync();
 
@@ -307,7 +309,11 @@ public class UserManagementTests : ApiTestBase
 
     private async Task<HttpClient> SignInAsync(string email)
     {
-        var response = await SignInResponseAsync(email);
+        var response = await CreateAnonymousClient().PostAsJsonAsync("/api/auth/token", new LoginUserDto
+        {
+            Email = email,
+            Password = Password
+        });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var auth = await response.Content.ReadFromJsonAsync<AuthResponseDto>();
 
@@ -364,12 +370,13 @@ public class UserManagementTests : ApiTestBase
     }
 
     // Signed with the test host's key, so only the claims decide whether it is accepted.
-    private static string CreateToken(int userId, string role, string? stampFingerprint)
+    private static string CreateToken(int userId, string role, string? stampFingerprint, Guid sessionId)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId.ToString()),
-            new(ClaimTypes.Role, role)
+            new(ClaimTypes.Role, role),
+            new(UserSessionValidator.SessionIdClaimType, sessionId.ToString())
         };
 
         if (stampFingerprint is not null)

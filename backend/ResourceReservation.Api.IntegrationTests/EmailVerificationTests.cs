@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -186,7 +186,9 @@ public class EmailVerificationTests : ApiTestBase
         await RegisterAndGetLinkAsync();
         var user = await LoadUserAsync();
         var client = CreateAnonymousClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CreateToken(user));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateToken(user, await CreateSessionAsync(user.Id)));
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/reservations/me")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/reservations", new CreateReservationDto
@@ -250,8 +252,8 @@ public class EmailVerificationTests : ApiTestBase
         return await context.Users.AsNoTracking().SingleAsync(user => user.Email == Email);
     }
 
-    // Signed with the test host's key, with the user's real stamp.
-    private static string CreateToken(User user)
+    // Signed with the test host's key, with the user's real stamp and a real session.
+    private static string CreateToken(User user, Guid sessionId)
     {
         var token = new JwtSecurityToken(
             issuer: ApiFactory.JwtIssuerAndAudience,
@@ -261,7 +263,8 @@ public class EmailVerificationTests : ApiTestBase
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Role, user.Role),
                 new Claim(UserSessionValidator.SecurityStampClaimType,
-                    UserSessionValidator.FingerprintSecurityStamp(user.SecurityStamp))
+                    UserSessionValidator.FingerprintSecurityStamp(user.SecurityStamp)),
+                new Claim(UserSessionValidator.SessionIdClaimType, sessionId.ToString())
             ],
             expires: DateTime.UtcNow.AddMinutes(10),
             signingCredentials: new SigningCredentials(

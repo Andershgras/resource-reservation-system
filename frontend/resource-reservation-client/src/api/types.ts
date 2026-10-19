@@ -9,13 +9,18 @@ export interface UserResponse {
   role: UserRole
 }
 
-export interface AuthResponse {
-  token: string
-  // When the token stops being accepted, as an ISO 8601 UTC time.
+// A browser session, from signing in or GET /api/auth/me. The session token
+// itself is in an httpOnly cookie, never in a response (ADR 0012).
+export interface SessionResponse {
+  // When the session ends, as an ISO 8601 UTC time.
   expiresAt: string
-  // The token lifetime, counted from when the response was sent.
+  // The session's remaining lifetime, counted from when the response was sent.
   expiresInSeconds: number
   user: UserResponse
+}
+
+export interface CsrfTokenResponse {
+  token: string
 }
 
 // A user account as admins see it.

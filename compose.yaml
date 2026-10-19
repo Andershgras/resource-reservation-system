@@ -91,8 +91,12 @@ services:
       Email__FromAddress: ${EMAIL_FROM_ADDRESS:?Set EMAIL_FROM_ADDRESS in .env}
       SeedAdmin__Email: ${SEED_ADMIN_EMAIL:-}
       SeedAdmin__Password: ${SEED_ADMIN_PASSWORD:-}
+      # Protects the anti-forgery tokens, so they survive a restart. Session
+      # cookies are JWTs and don't depend on these keys.
+      DataProtection__KeysDirectory: /var/lib/resource-reservation/keys
     volumes:
       - api-emails:/var/lib/resource-reservation/emails
+      - api-keys:/var/lib/resource-reservation/keys
     networks:
       - data
       - proxy
@@ -151,3 +155,4 @@ networks:
 volumes:
   db-data:
   api-emails:
+  api-keys:

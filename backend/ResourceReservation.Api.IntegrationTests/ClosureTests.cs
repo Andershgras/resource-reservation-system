@@ -158,7 +158,7 @@ public class ClosureTests : ApiTestBase
         await using var shortTimeoutFactory = new ApiFactory(
             Fixture.ConnectionString,
             new Dictionary<string, string> { ["Scheduling:BookingLockTimeoutMilliseconds"] = "500" });
-        var client = shortTimeoutFactory.CreateClient();
+        var client = shortTimeoutFactory.CreateBrowserClient();
         client.DefaultRequestHeaders.Authorization = adminClient.DefaultRequestHeaders.Authorization;
         await using var heldLock = await HoldResourceLockAsync(resourceId);
 

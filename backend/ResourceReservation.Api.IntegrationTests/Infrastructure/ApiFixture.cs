@@ -158,6 +158,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     {
         _connectionString = connectionString;
         _settingOverrides = settingOverrides ?? new Dictionary<string, string>();
+        // HTTPS, so the client stores and sends the API's Secure __Host- cookies,
+        // as a browser would in production.
+        ClientOptions.BaseAddress = new Uri("https://localhost");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

@@ -26,7 +26,7 @@ public class AccountEmailLoggingTests : ApiTestBase
         var logs = new CapturingLoggerProvider();
         await using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
             builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(logs)));
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         await client.PostAsJsonAsync("/api/auth/register", new RegisterUserDto
         {
@@ -76,7 +76,7 @@ public class AccountEmailLoggingTests : ApiTestBase
             builder.ConfigureLogging(logging => logging.AddProvider(logs)));
         TestEmailSink.Instance.FailWith = message => new InvalidOperationException($"Could not deliver: {message.TextBody}");
 
-        await factory.CreateClient().PostAsJsonAsync("/api/auth/register", new RegisterUserDto
+        await factory.CreateBrowserClient().PostAsJsonAsync("/api/auth/register", new RegisterUserDto
         {
             Name = "Unlucky User",
             Email = Email,

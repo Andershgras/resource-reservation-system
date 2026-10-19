@@ -5,10 +5,9 @@ The project isn't hosted. Milestone 7 makes it deploy-ready: the whole system ru
 Milestone 7 is three pull requests ([roadmap](roadmap.md#m7-deployment)). This guide describes the first one, the containers. Until the other two are merged:
 
 - **Emails aren't sent.** They are written to a volume ([reading emails](#reading-emails)), so new users can't confirm their accounts without an operator's help. Real email delivery comes in PR 3.
-- **The session token is still kept in `localStorage`.** PR 2 moves it to an httpOnly cookie.
 - **Images are built locally.** PR 3 publishes them to the GitHub container registry.
 
-Don't run a public deployment before both are done.
+Don't run a public deployment before PR 3 is done.
 
 ## Topology
 
@@ -82,9 +81,16 @@ To check the running stack from outside:
 sh deploy/smoke-test.sh
 ```
 
-It checks the redirect to HTTPS, the security and cache headers, that the Content-Security-Policy allows exactly the inline script in the served page, the SPA fallback, the proxy to the API, and that the API trusts nginx's forwarded headers. If the seed admin is set, it also signs in and creates and deletes a resource. CI runs the same checks on every push.
+It checks the redirect to HTTPS, the security and cache headers, that the Content-Security-Policy allows exactly the inline script in the served page, the SPA fallback, the proxy to the API, and that the API trusts nginx's forwarded headers. If the seed admin is set, it also:
 
-`docker compose down` stops everything and keeps the data. `docker compose down --volumes` also deletes the database and the emails.
+- gets a bearer token, and creates and deletes a resource with it
+- signs in as a browser over HTTPS, and checks the session cookie's attributes and that the response holds no token
+- checks that sign-in without an anti-forgery token, a forged token and a cross-site request are refused
+- checks that signing out revokes the session, so a copy of the cookie stops working
+
+CI runs the same checks on every push.
+
+`docker compose down` stops everything and keeps the data. `docker compose down --volumes` also deletes the database, the emails and the Data Protection keys.
 
 ### Reading emails
 
@@ -101,7 +107,7 @@ Open a file in any mail client. The files contain working verification and reset
 
 TLS ends at nginx, in every environment, including your own machine:
 
-- **Why locally too:** PR 2 moves the session to a cookie with the `__Host-` prefix, which browsers accept only with the `Secure` attribute, over HTTPS. Browsers disagree about whether plain `http://localhost` counts, so the stack uses HTTPS everywhere and behaves the same locally as in production.
+- **Why locally too:** the session cookie has the `__Host-` prefix, which browsers accept only with the `Secure` attribute, over HTTPS ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)). Browsers disagree about whether plain `http://localhost` counts, so the stack uses HTTPS everywhere and behaves the same locally as in production.
 - **Plain HTTP** on `HTTP_PORT` only redirects to `PUBLIC_ORIGIN`, keeping the path. The redirect goes to the configured origin, never to the `Host` header a client sent.
 - **Certificates:** nginx reads `tls.crt` (with any intermediate certificates after it) and `tls.key` from `TLS_CERT_DIR`, mounted read-only. nginx runs as user 101, which must be able to read the key. The container won't start without both files, or without an `https://` `PUBLIC_ORIGIN`.
 - **Renewing a certificate:** replace the files, then run `docker compose exec web nginx -s reload`. With Let's Encrypt, point `TLS_CERT_DIR` at a folder that certbot's deploy hook copies `fullchain.pem` and `privkey.pem` into as `tls.crt` and `tls.key`.
@@ -237,7 +243,7 @@ Both are anonymous and return only `Healthy` or `Unhealthy`. nginx passes them t
 ## The containers
 
 - **Non-root:** the API and migrator run as the .NET images' `app` user (uid 1654), and nginx as `nginx` (uid 101). The API listens on 8080 and nginx on 8080 and 8443, so none of them needs root.
-- **Hardening:** every service but SQL Server drops all Linux capabilities and can't gain privileges (`no-new-privileges`). The API's file system is read-only, except `/tmp` and the email volume.
+- **Hardening:** every service but SQL Server drops all Linux capabilities and can't gain privileges (`no-new-privileges`). The API's file system is read-only, except `/tmp`, the email volume and the `api-keys` volume for the Data Protection keys.
 - **Restart policy:** `unless-stopped` for the long-running services. The one-shot steps never restart.
 - **Logs** go to standard output, so `docker compose logs` shows them. The API no longer logs every SQL command, only warnings and errors from EF Core.
 
@@ -255,8 +261,8 @@ Never run production with `ASPNETCORE_ENVIRONMENT=Development`. That would load 
 ## Known limitations
 
 - **No email is sent yet.** Emails go to a volume until Milestone 7 PR 3 adds SMTP delivery.
-- **Token storage:** the JWT is kept in `localStorage`. Milestone 7 PR 2 moves it to an httpOnly cookie, before any public deployment.
-- **ASP.NET Core's Data Protection keys** are kept in memory, and the API logs warnings about it at startup. Nothing uses them yet. PR 2's cookie and anti-forgery protection will, so PR 2 stores them in a volume.
+- **Data Protection keys are stored unencrypted** in the `api-keys` volume. They protect the anti-forgery tokens. Anyone who can read the volume could forge such a token, but would still need the victim's httpOnly session cookie. Keep Docker access to administrators. When it creates a key, the API logs a warning that no key encryptor is configured, which is expected.
+- **Expired sessions stay** in the `UserSessions` table, one row per sign-in. A clean-up job comes in PR 3.
 - **Booking emails accumulate** in the `BookingNotifications` table after they are sent. Nothing removes them yet. A clean-up job comes in PR 3.
 - **Booking emails are delivered at least once, not exactly once.** Stopping the API between sending an email and recording it sends that email again after the 5-minute lease. Gives-ups are logged as errors, and kept in the table with `FailedAt` and `LastError`.
 - **Account emails are queued in memory.** A verification or reset email still queued when the API stops is lost, and the user asks again. `docker compose stop` stops the API gracefully.

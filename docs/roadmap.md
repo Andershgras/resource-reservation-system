@@ -202,7 +202,7 @@ Work continues in milestones. Each milestone is made of small changes that are v
 | M4 | Frontend architecture (routing, splitting `App.tsx` state into feature hooks, unit tests) | Done ([#55](https://github.com/Andershgras/resource-reservation-system/pull/55)) |
 | M5 | UI/UX modernisation (design system, week calendar, accessibility) | Done ([#56](https://github.com/Andershgras/resource-reservation-system/pull/56), [#57](https://github.com/Andershgras/resource-reservation-system/pull/57)) |
 | M6 | Real-world features (audit fields, booking policies, rescheduling, availability exceptions, user management, email flows) | Done ([#58](https://github.com/Andershgras/resource-reservation-system/pull/58), [#60](https://github.com/Andershgras/resource-reservation-system/pull/60), [#61](https://github.com/Andershgras/resource-reservation-system/pull/61), [#62](https://github.com/Andershgras/resource-reservation-system/pull/62)) |
-| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, httpOnly cookie authentication). Deploy-ready, with no hosted demo. | In progress: PR 1 awaiting review |
+| M7 | Deployment (Docker Compose, published images, end-to-end tests against the real stack, httpOnly cookie authentication). Deploy-ready, with no hosted demo. | In progress: PR 1 done ([#63](https://github.com/Andershgras/resource-reservation-system/pull/63)), PR 2 awaiting review |
 
 ### M1: Booking Correctness And Data Integrity
 
@@ -544,12 +544,53 @@ Follow-ups noticed during PR 1:
 - ASP.NET Core's Data Protection keys are kept in memory. Nothing uses them yet, but PR 2's cookie and anti-forgery protection will, so PR 2 stores them in a volume.
 - A load balancer in front of nginx isn't supported out of the box ([deployment](deployment.md#https)).
 
-PR 2: httpOnly cookie authentication (ADR 0012, replacing ADR 0004)
+PR 2: httpOnly cookie authentication ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md), replacing [ADR 0004](adr/0004-token-storage-and-session-expiry.md))
 
-- [ ] **Security review before any public deployment:** move the JWT from `localStorage` to an httpOnly cookie ([ADR 0004](adr/0004-token-storage-and-session-expiry.md))
-- [ ] CSRF protection for every request that changes something
-- [ ] Server-side sign-out, and `GET /api/auth/me` to restore a session on load
-- [ ] Bearer tokens kept for clients other than browsers
+Agreed decisions (19 October 2026):
+- A `UserSessions` table: signing out revokes only the current session.
+- Bearer tokens for clients other than browsers move to `POST /api/auth/token`. `/login` no longer returns a token.
+- Relaxed cookies in Development only, with a startup check that keeps them out of every other environment, so production always uses `__Host-`, `Secure` cookies.
+- Only a bearer token that passed validation exempts a request from CSRF protection. The presence of an `Authorization` header alone exempts nothing.
+- Session checks fail closed.
+- The existing security-stamp revocation and concurrency protections are kept.
+
+- [x] **Security review before any public deployment:** the session moves from `localStorage` to an httpOnly `__Host-rr-session` cookie, `Secure` and `SameSite=Strict` (from M3)
+- [x] Sessions on the server: every token carries its session's ID, checked with the user on every request, failing closed
+- [x] Server-side sign-out of one session, and `GET /api/auth/me` to restore a session on load
+- [x] CSRF protection for every unsafe request, in three layers: `SameSite=Strict`, Fetch Metadata and Origin checks, and ASP.NET Core anti-forgery tokens. Sign-in is protected too.
+- [x] Bearer tokens from `POST /api/auth/token` for clients other than browsers
+- [x] Data Protection keys kept in a volume in compose (from PR 1)
+- [x] Frontend: no session data in `localStorage`, restoring the session from `/me`, one shared anti-forgery token, a retry after a rejected token, and a failed sign-out finished on the next load. The Vite dev server proxies `/api`, so development is same-origin too.
+- [x] Tests:
+  - SQL Server tests of the cookies' attributes, sign-out, replayed cookies, failing closed, the stamp still ending cookie sessions, and each CSRF layer and exemption, against `https://localhost`
+  - the other integration tests moved to `/api/auth/token`, or a browser-like client with cookies and anti-forgery tokens
+  - unit and smoke tests, with the mocked API refusing unsafe requests without the token
+  - `deploy/smoke-test.sh` checks the browser session over HTTPS through nginx
+- [x] Docs: ADR 0012, ADR 0004 marked as replaced, README, architecture, configuration, deployment, security, testing and this roadmap
+
+Changes in behaviour in PR 2:
+- Changed: `POST /api/auth/login` sets the `__Host-rr-session` cookie and returns `{ expiresAt, expiresInSeconds, user }`, without a token. **Clients other than browsers use `POST /api/auth/token`**, which returns the token as before.
+- New: `GET /api/auth/me`, `POST /api/auth/logout` and `GET /api/auth/csrf`.
+- New: every unsafe request needs an `X-CSRF-TOKEN` header, unless it has a valid bearer token, and requests a browser marks as coming from another site are refused with `403`. The only other exception is `/api/auth/token`.
+- New: signing out revokes the session on the server. Signing in again in the same browser revokes the previous session.
+- Changed: everyone signs in once more. Tokens stored by earlier versions are removed and never sent.
+- Changed: the frontend calls the API on its own origin, `/api`. The Vite dev server proxies it and must run on port 5173.
+- Changed: the integration tests run against `https://localhost`, so they use the production cookies.
+
+Verified locally:
+- **Tests:** 158 backend unit, 244 integration, 347 frontend unit and 37 smoke tests pass.
+- **Compose:** the stack was rebuilt over the PR 1 database, which held users, and the migration only added the new table. `deploy/smoke-test.sh` passed all 30 checks.
+- **Chromium over HTTPS:**
+  - both cookies were `__Host-`, `Secure`, `HttpOnly` and `SameSite=Strict`, and `document.cookie` was empty
+  - creating a resource sent the anti-forgery token and no `Authorization` header
+  - a reload restored the session
+  - cross-site form posts were refused: without the cookie, which the browser didn't send, and as cross-site for sign-in
+  - signing out deleted the cookie, and a copy of it got `401`
+- **Restart:** an anti-forgery token from before an API restart still worked.
+
+Follow-ups noticed during PR 2:
+- Expired rows stay in `UserSessions`. The clean-up job in PR 3 should cover them, with the sent booking emails and unconfirmed accounts.
+- The Data Protection keys are stored unencrypted in their volume. Protecting them with a certificate is possible, if a deployment needs it.
 
 PR 3: real email, end-to-end tests and published images
 
@@ -557,7 +598,7 @@ PR 3: real email, end-to-end tests and published images
 - [ ] Mailpit in compose, for local development only
 - [ ] Playwright end-to-end tests against the full stack in compose
 - [ ] Images published to GHCR after CI passes, tagged with the commit SHA and `latest`
-- [ ] Clean-up of sent booking emails and of accounts that were never confirmed (from M6 PR 4)
+- [ ] Clean-up of sent booking emails, of accounts that were never confirmed (from M6 PR 4), and of expired sessions (from PR 2)
 
 ## Later Ideas
 

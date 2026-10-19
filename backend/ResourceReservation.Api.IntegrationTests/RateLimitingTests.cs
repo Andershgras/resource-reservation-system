@@ -22,7 +22,7 @@ public class RateLimitingTests : ApiTestBase
     public async Task Login_OverLimit_Returns429WithRetryAfter()
     {
         await using var factory = CreateFactory();
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         await UseUpLimitAsync(client, ClientIp);
         var response = await LoginAsync(client, ClientIp);
@@ -41,7 +41,7 @@ public class RateLimitingTests : ApiTestBase
     public async Task EmailRequests_ShareAStricterLimit_SeparateFromSignIn()
     {
         await using var factory = CreateFactory();
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         Assert.Equal(HttpStatusCode.Accepted, (await RegisterAsync(client, ClientIp, 0)).StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, (await PostEmailRequestAsync(client, ClientIp, "/api/auth/forgot-password")).StatusCode);
@@ -62,8 +62,8 @@ public class RateLimitingTests : ApiTestBase
         await using var factory = CreateFactory();
 
         // Two separate browsers, for example on the same office network.
-        await UseUpLimitAsync(factory.CreateClient(), ClientIp);
-        var response = await LoginAsync(factory.CreateClient(), ClientIp);
+        await UseUpLimitAsync(factory.CreateBrowserClient(), ClientIp);
+        var response = await LoginAsync(factory.CreateBrowserClient(), ClientIp);
 
         Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
     }
@@ -72,7 +72,7 @@ public class RateLimitingTests : ApiTestBase
     public async Task OtherIp_HasItsOwnLimit()
     {
         await using var factory = CreateFactory();
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         await UseUpLimitAsync(client, ClientIp);
         var response = await LoginAsync(client, "198.51.100.11");
@@ -84,7 +84,7 @@ public class RateLimitingTests : ApiTestBase
     public async Task ForwardedFor_WithoutTrustedProxy_DoesNotBypassLimit()
     {
         await using var factory = CreateFactory();
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         for (var attempt = 0; attempt < PermitLimit; attempt++)
         {
@@ -103,7 +103,7 @@ public class RateLimitingTests : ApiTestBase
         {
             ["ReverseProxy:KnownProxies:0"] = ProxyIp
         });
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         for (var attempt = 0; attempt < PermitLimit; attempt++)
         {
@@ -122,7 +122,7 @@ public class RateLimitingTests : ApiTestBase
     public async Task OtherEndpoints_AreNotLimited()
     {
         await using var factory = CreateFactory();
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         await UseUpLimitAsync(client, ClientIp);
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/resources");
@@ -139,7 +139,7 @@ public class RateLimitingTests : ApiTestBase
         {
             ["Cors:AllowedOrigins:0"] = origin
         });
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
 
         await UseUpLimitAsync(client, ClientIp);
         using var request = CreateLoginRequest(ClientIp);

@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { useAuth } from '../auth/authContext'
-import { expireAuthSession } from '../auth/authStorage'
+import { expireSession, getSessionGeneration } from '../auth/authSession'
 import { expectNoAxeViolations } from '../test/axe'
-import { renderScreen, testToken } from '../test/renderScreen'
+import { renderScreen } from '../test/renderScreen'
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard'
 
 // A form with one field. It has unsaved changes once anything is typed.
@@ -136,7 +136,7 @@ describe('useUnsavedChangesGuard', () => {
     const { router } = renderScreen(<DraftScreen />)
     await typeDraft()
 
-    act(() => expireAuthSession(testToken))
+    act(() => expireSession(getSessionGeneration()))
 
     expect(await screen.findByRole('heading', { name: 'Login screen' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/login')
@@ -149,7 +149,7 @@ describe('useUnsavedChangesGuard', () => {
     const { router } = renderScreen(<DraftScreen />, { withRoleGuard: false })
     await typeDraft()
 
-    act(() => expireAuthSession(testToken))
+    act(() => expireSession(getSessionGeneration()))
     await act(() => router.navigate('/login'))
 
     expect(screen.getByRole('heading', { name: 'Login screen' })).toBeInTheDocument()

@@ -6,6 +6,8 @@ export type SessionEnd = 'expired' | 'loggedOut' | null
 
 export interface AuthContextValue {
   currentUser: UserResponse | null
+  // True while the app asks the API who is signed in, after the page loads.
+  isRestoring: boolean
   sessionEnd: SessionEnd
   logIn: (credentials: LoginUserRequest) => Promise<UserResponse>
   logOut: () => void

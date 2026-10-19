@@ -109,7 +109,7 @@ public class SecurityHeadersTests : ApiTestBase
             request.Headers.Add("X-Forwarded-Proto", forwardedProto);
         }
 
-        var response = await factory.CreateClient().SendAsync(request);
+        var response = await factory.CreateBrowserClient().SendAsync(request);
         response.EnsureSuccessStatusCode();
 
         return response;

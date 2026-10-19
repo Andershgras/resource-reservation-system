@@ -88,9 +88,11 @@ check "API responses keep the API's own headers" [ "$(header Cache-Control)" = "
 # write, and the Location header shows whether the API trusts nginx's
 # X-Forwarded-Proto: it is https only if it does.
 if [ -n "${SEED_ADMIN_EMAIL:-}" ] && [ -n "${SEED_ADMIN_PASSWORD:-}" ]; then
-    fetch "$origin/api/auth/login" -H 'Content-Type: application/json' \
-        --data "{\"email\":\"$SEED_ADMIN_EMAIL\",\"password\":\"$SEED_ADMIN_PASSWORD\"}"
-    check "the seed admin can sign in" [ "$(status)" = "200" ]
+    credentials="{\"email\":\"$SEED_ADMIN_EMAIL\",\"password\":\"$SEED_ADMIN_PASSWORD\"}"
+
+    # A bearer token, as a client other than a browser signs in.
+    fetch "$origin/api/auth/token" -H 'Content-Type: application/json' --data "$credentials"
+    check "the seed admin can get a bearer token" [ "$(status)" = "200" ]
     token="$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$work/body")"
 
     fetch "$origin/api/resources" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
@@ -101,6 +103,46 @@ if [ -n "${SEED_ADMIN_EMAIL:-}" ] && [ -n "${SEED_ADMIN_PASSWORD:-}" ]; then
 
     fetch "$location" -X DELETE -H "Authorization: Bearer $token"
     check "the smoke test resource is removed again" [ "$(status)" = "204" ]
+
+    # A browser session over HTTPS through nginx, with a cookie jar and the
+    # Origin and Sec-Fetch-Site headers a browser sends (ADR 0012).
+    jar="$work/cookies"
+    browser() {
+        fetch "$@" --cookie "$jar" --cookie-jar "$jar" -H "Origin: $origin" -H 'Sec-Fetch-Site: same-origin'
+    }
+    csrf_token() {
+        browser "$origin/api/auth/csrf"
+        sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$work/body"
+    }
+
+    browser "$origin/api/auth/login" -H 'Content-Type: application/json' --data "$credentials"
+    check "signing in without an anti-forgery token is refused" [ "$(status)" = "403" ]
+
+    browser "$origin/api/auth/login" -H 'Content-Type: application/json' \
+        -H "X-CSRF-TOKEN: $(csrf_token)" --data "$credentials"
+    check "the seed admin can sign in in a browser" [ "$(status)" = "200" ]
+    session_cookie="$(grep -i '^set-cookie: __Host-rr-session=' "$work/headers" | tr -d '\r' | tr 'A-Z' 'a-z')"
+    check "the session cookie is __Host-, Secure, HttpOnly and SameSite=Strict" sh -c \
+        "echo \"\$0\" | grep -q 'secure' && echo \"\$0\" | grep -q 'httponly' && echo \"\$0\" | grep -q 'samesite=strict' && echo \"\$0\" | grep -q 'path=/'" \
+        "$session_cookie"
+    check "the sign-in response contains no token" sh -c "! grep -qi '\"token\"' \"\$0\"" "$work/body"
+    stolen_cookie="$(grep -i '__Host-rr-session' "$jar" | awk '{print $NF}')"
+
+    browser "$origin/api/auth/me"
+    check "the cookie restores the session" sh -c "[ \"\$0\" = 200 ] && grep -q \"\$1\" \"\$2\"" "$(status)" "$SEED_ADMIN_EMAIL" "$work/body"
+
+    browser "$origin/api/resources" -H 'Content-Type: application/json' -H 'X-CSRF-TOKEN: forged' \
+        --data '{"name":"Forged"}'
+    check "a request with a forged anti-forgery token is refused" [ "$(status)" = "403" ]
+
+    fetch "$origin/api/resources" --cookie "$jar" -H 'Origin: https://evil.example' -H 'Sec-Fetch-Site: cross-site' \
+        -H 'Content-Type: application/json' -H "X-CSRF-TOKEN: $(csrf_token)" --data '{"name":"Cross-site"}'
+    check "a cross-site request is refused, even with a valid token" [ "$(status)" = "403" ]
+
+    browser "$origin/api/auth/logout" -X POST -H "X-CSRF-TOKEN: $(csrf_token)"
+    check "signing out succeeds" [ "$(status)" = "204" ]
+    fetch "$origin/api/auth/me" -H "Cookie: __Host-rr-session=$stolen_cookie"
+    check "a copy of the signed-out cookie no longer works" [ "$(status)" = "401" ]
 else
     echo "skip sign-in checks: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are not set"
 fi

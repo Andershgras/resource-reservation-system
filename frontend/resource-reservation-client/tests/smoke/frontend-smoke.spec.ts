@@ -334,7 +334,8 @@ test('overlap error is shown when an active reservation already exists', async (
 })
 
 test('validation errors from the API are shown per field', async ({ page }) => {
-  await page.route('http://localhost:5052/api/auth/register', async (route) => {
+  await mockSignedOutSession(page)
+  await page.route(apiPath('/auth/register'), async (route) => {
     await route.fulfill(problemResponse(
       400,
       'One or more validation errors occurred.',
@@ -366,7 +367,8 @@ test('validation errors from the API are shown per field', async ({ page }) => {
 })
 
 test('too many login attempts shows the rate limit message', async ({ page }) => {
-  await page.route('http://localhost:5052/api/auth/login', async (route) => {
+  await mockSignedOutSession(page)
+  await page.route(apiPath('/auth/login'), async (route) => {
     const response = problemResponse(
       429,
       'Too Many Requests',
@@ -384,7 +386,7 @@ test('too many login attempts shows the rate limit message', async ({ page }) =>
   ).toBeVisible()
 })
 
-test('an expired stored session opens the login screen', async ({ page }) => {
+test('a session cookie that no longer works opens the login screen', async ({ page }) => {
   await mockApi(page)
   await storeSession(page, Date.now() - 60_000)
 
@@ -394,17 +396,31 @@ test('an expired stored session opens the login screen', async ({ page }) => {
   await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
 })
 
-test('a stored session from before expiry times were saved opens the login screen', async ({ page }) => {
+test('a token stored by an earlier version is removed and never used', async ({ page }) => {
   await mockApi(page)
-  await storeSession(page, null)
+  await page.addInitScript(() => {
+    localStorage.clear()
+    localStorage.setItem('resource-reservation-auth-token', 'old-admin-token')
+    localStorage.setItem('resource-reservation-auth-user', JSON.stringify({ id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' }))
+    localStorage.setItem('resource-reservation-auth-expires-at', String(Date.now() + 60 * 60_000))
+  })
+  const authorizationHeaders: string[] = []
+  page.on('request', (request) => {
+    const authorization = request.headers().authorization
+
+    if (authorization) {
+      authorizationHeaders.push(authorization)
+    }
+  })
 
   await page.goto('/')
 
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
-  await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('resource-reservation-auth-token'))).toBeNull()
+  expect(authorizationHeaders).toEqual([])
 })
 
-test('a valid stored session is restored', async ({ page }) => {
+test('a valid session cookie is restored', async ({ page }) => {
   await mockApi(page)
   await storeSession(page, Date.now() + 60 * 60_000)
 
@@ -421,7 +437,7 @@ test('a 401 during a session returns to the login screen once', async ({ page })
   await expect(page.getByRole('heading', { name: 'Booking operations' })).toBeVisible()
 
   // The server no longer accepts the token, for example after a key rotation.
-  await page.route('http://localhost:5052/api/resources', async (route) => {
+  await page.route(apiPath('/resources'), async (route) => {
     if (route.request().method() !== 'POST') {
       await route.fallback()
       return
@@ -431,7 +447,7 @@ test('a 401 during a session returns to the login screen once', async ({ page })
   })
   const apiRequests: string[] = []
   page.on('request', (request) => {
-    if (request.url().startsWith('http://localhost:5052/api/')) {
+    if (isApiUrl(new URL(request.url()))) {
       apiRequests.push(request.url())
     }
   })
@@ -441,7 +457,7 @@ test('a 401 during a session returns to the login screen once', async ({ page })
 
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
   await expect(page.getByText(sessionExpiredMessage)).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('resource-reservation-auth-token'))).toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('resource-reservation-signed-in'))).toBeNull()
 
   // No loop: the login screen makes no further API calls.
   const requestsAtLogout = apiRequests.length
@@ -450,7 +466,8 @@ test('a 401 during a session returns to the login screen once', async ({ page })
 })
 
 test('a failed login is not treated as an expired session', async ({ page }) => {
-  await page.route('http://localhost:5052/api/auth/login', async (route) => {
+  await mockSignedOutSession(page)
+  await page.route(apiPath('/auth/login'), async (route) => {
     await route.fulfill(problemResponse(401, 'Unauthorized', failedLoginMessage))
   })
   await page.addInitScript(() => localStorage.clear())
@@ -758,6 +775,9 @@ test('a forgotten password is reset from the emailed link', async ({ page }) => 
   await page.goto('/login')
 
   await page.getByRole('link', { name: 'Forgot your password?' }).click()
+  // The login page has an Email field too, and can still be showing while
+  // the navigation finishes, so wait for the new page before typing.
+  await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible()
   await page.getByLabel('Email').fill('smoke.user@example.com')
   await page.getByRole('button', { name: 'Send reset link' }).click()
   await expect(page.getByText(passwordResetRequestedMessage)).toBeVisible()
@@ -1018,6 +1038,7 @@ test('a session that expires with unsaved changes still ends', async ({ page }) 
 })
 
 test('an unknown address shows a not-found page', async ({ page }) => {
+  await mockSignedOutSession(page)
   await page.addInitScript(() => localStorage.clear())
 
   await page.goto('/no-such-page')
@@ -1029,32 +1050,44 @@ test('an unknown address shows a not-found page', async ({ page }) => {
 
 const sessionExpiredMessage = 'Your session has expired. Please log in again.'
 
-// Mirrors the API's login response. Tokens last two hours.
-function authResponse(token: string, user: UserResponse) {
-  const expiresInSeconds = 2 * 60 * 60
+// The app calls the API on its own origin, under /api (ADR 0012). Matched by
+// path, so the app's own source files under /src/api/ never are.
+function isApiUrl(url: URL) {
+  return url.pathname.startsWith('/api/')
+}
 
+function apiPath(path: string) {
+  return (url: URL) => url.pathname === `/api${path}`
+}
+
+// Mirrors the API's session response. Sessions last two hours.
+function sessionResponse(user: UserResponse, expiresAt = Date.now() + 2 * 60 * 60 * 1000) {
   return {
-    token,
-    expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
-    expiresInSeconds,
+    expiresAt: new Date(expiresAt).toISOString(),
+    expiresInSeconds: Math.floor((expiresAt - Date.now()) / 1000),
     user,
   }
 }
 
-// Stores a session as an earlier visit would have. A null expiry mimics a
-// session saved before expiry times were stored.
-async function storeSession(page: Page, expiresAt: number | null, role: UserRole = 'User') {
-  await page.addInitScript(({ storedExpiresAt, storedRole }) => {
-    localStorage.clear()
-    localStorage.setItem('resource-reservation-auth-token', `${storedRole.toLowerCase()}-token`)
-    localStorage.setItem('resource-reservation-auth-user', JSON.stringify(storedRole === 'Admin'
-      ? { id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' }
-      : { id: 2, name: 'Smoke Test User', email: 'smoke.user@example.com', role: 'User' }))
+const mockApiControls = new WeakMap<Page, { restoreSession: (role: UserRole, expiresAt: number) => void }>()
 
-    if (storedExpiresAt !== null) {
-      localStorage.setItem('resource-reservation-auth-expires-at', String(storedExpiresAt))
-    }
-  }, { storedExpiresAt: expiresAt, storedRole: role })
+// A session from an earlier visit: a session cookie the mocked API accepts
+// until expiresAt, and the browser's hint that a session was started here.
+// Call after mockApi.
+async function storeSession(page: Page, expiresAt: number, role: UserRole = 'User') {
+  mockApiControls.get(page)!.restoreSession(role, expiresAt)
+  await page.addInitScript(() => {
+    localStorage.clear()
+    localStorage.setItem('resource-reservation-signed-in', 'true')
+  })
+}
+
+// For tests that mock single endpoints: nobody is signed in, and the
+// anti-forgery token is available.
+async function mockSignedOutSession(page: Page) {
+  await page.route(apiPath('/auth/csrf'), (route) => route.fulfill({ json: { token: 'smoke-csrf-token' } }))
+  await page.route(apiPath('/auth/me'), (route) =>
+    route.fulfill(problemResponse(401, 'Unauthorized', 'Authentication is required.')))
 }
 
 // Mirrors the API's RFC 9457 problem details responses.
@@ -1125,6 +1158,15 @@ async function mockApi(
   }
 
   let currentUser = adminUser
+  // When the mocked session cookie stops working, or null without one.
+  let sessionExpiresAt: number | null = null
+
+  mockApiControls.set(page, {
+    restoreSession: (role, expiresAt) => {
+      currentUser = role === 'Admin' ? adminUser : normalUser
+      sessionExpiresAt = expiresAt
+    },
+  })
   let resources: ResourceResponse[] = options.seedOverlapReservation
     ? [
         {
@@ -1185,10 +1227,39 @@ async function mockApi(
     { ...normalUser, isActive: true, isEmailConfirmed: true, createdAt: '2030-01-10T08:00:00+00:00' },
   ]
 
-  await page.route('http://localhost:5052/api/**', async (route) => {
+  await page.route(isApiUrl, async (route) => {
     const request = route.request()
     const url = new URL(request.url())
     const path = url.pathname.replace('/api', '')
+
+    // Like the API, every request that changes something needs the token.
+    if (request.method() !== 'GET' && request.headers()['x-csrf-token'] !== 'smoke-csrf-token') {
+      await route.fulfill(problemResponse(
+        403,
+        'Forbidden',
+        "Your session's security token is missing or out of date. Reload the page and try again.",
+        { code: 'csrf_token_invalid' },
+      ))
+      return
+    }
+
+    if (request.method() === 'GET' && path === '/auth/csrf') {
+      await route.fulfill({ status: 200, json: { token: 'smoke-csrf-token' } })
+      return
+    }
+
+    if (request.method() === 'GET' && path === '/auth/me') {
+      await route.fulfill(sessionExpiresAt !== null && sessionExpiresAt > Date.now()
+        ? { status: 200, json: sessionResponse(currentUser, sessionExpiresAt) }
+        : problemResponse(401, 'Unauthorized', 'Authentication is required.'))
+      return
+    }
+
+    if (request.method() === 'POST' && path === '/auth/logout') {
+      sessionExpiresAt = null
+      await route.fulfill({ status: 204 })
+      return
+    }
 
     if (request.method() === 'POST' && path === '/auth/login') {
       const body = await request.postDataJSON() as { email: string }
@@ -1207,11 +1278,10 @@ async function mockApi(
       }
 
       currentUser = signingIn
+      const session = sessionResponse(currentUser)
+      sessionExpiresAt = Date.parse(session.expiresAt)
 
-      await route.fulfill({
-        status: 200,
-        json: authResponse(`${currentUser.role.toLowerCase()}-token`, currentUser),
-      })
+      await route.fulfill({ status: 200, json: session })
       return
     }
 

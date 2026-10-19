@@ -6,11 +6,10 @@ import type { UserResponse } from '../api/types'
 import { createQueryClient } from '../app/queryClient'
 import { RequireAuth } from '../app/RequireAuth'
 import { AuthProvider } from '../auth/AuthProvider'
-import { saveAuthSession } from '../auth/authStorage'
+import { startSession } from '../auth/authSession'
 import { ConfirmProvider } from '../components/ConfirmProvider'
 
 export const testAdmin: UserResponse = { id: 1, name: 'Admin', email: 'admin@example.com', role: 'Admin' }
-export const testToken = 'test-token'
 
 // Renders one screen the way the app does: a signed-in user, a data router,
 // starting at `url` (the route's `path` by default),
@@ -37,8 +36,7 @@ export function renderScreen(screen: ReactNode, options: RenderScreenOptions = {
     </ConfirmProvider>
   )
 
-  saveAuthSession({
-    token: testToken,
+  startSession({
     expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
     expiresInSeconds: 3600,
     user,

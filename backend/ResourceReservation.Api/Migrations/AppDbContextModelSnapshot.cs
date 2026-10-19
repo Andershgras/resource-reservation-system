@@ -371,6 +371,35 @@ namespace ResourceReservation.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("ResourceReservation.Api.Models.UserSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Client")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserSessions");
+                });
+
             modelBuilder.Entity("ResourceReservation.Api.Models.UserToken", b =>
                 {
                     b.Property<int>("Id")
@@ -494,6 +523,17 @@ namespace ResourceReservation.Api.Migrations
                     b.Navigation("CancelledBy");
 
                     b.Navigation("Resource");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ResourceReservation.Api.Models.UserSession", b =>
+                {
+                    b.HasOne("ResourceReservation.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });

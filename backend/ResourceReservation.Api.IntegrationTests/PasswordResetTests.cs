@@ -224,7 +224,11 @@ public class PasswordResetTests : ApiTestBase
 
     private async Task<HttpClient> SignInAsync(string password)
     {
-        var response = await SignInResponseAsync(password);
+        var response = await CreateAnonymousClient().PostAsJsonAsync("/api/auth/token", new LoginUserDto
+        {
+            Email = Email,
+            Password = password
+        });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var client = CreateAnonymousClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(

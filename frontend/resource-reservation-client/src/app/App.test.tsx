@@ -40,6 +40,7 @@ function TestAuthProvider({ auth, logIn, children }: {
   const [currentUser, setCurrentUser] = useState(auth.currentUser ?? null)
   const value: AuthContextValue = {
     currentUser,
+    isRestoring: false,
     sessionEnd: auth.sessionEnd ?? null,
     logIn: async (credentials) => {
       const loggedIn = await logIn(credentials)

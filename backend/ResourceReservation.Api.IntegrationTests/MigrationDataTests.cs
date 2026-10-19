@@ -150,8 +150,8 @@ public class MigrationDataTests : ApiTestBase
 
     private static async Task<HttpClient> SignInAsync(ApiFactory factory, string email, string password)
     {
-        var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/login", new LoginUserDto
+        var client = factory.CreateBrowserClient();
+        var response = await client.PostAsJsonAsync("/api/auth/token", new LoginUserDto
         {
             Email = email,
             Password = password

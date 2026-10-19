@@ -152,7 +152,7 @@ public class BookingPolicyTests : ApiTestBase
             TimeZoneInfo.FindSystemTimeZoneById("Europe/Copenhagen")).DateTime);
         var lastDay = today.AddDays(90).ToDateTime(TimeOnly.MinValue);
         var resourceId = await CreateResourceWithWindowAsync(adminClient, lastDay.AddHours(20), lastDay.AddHours(26));
-        var client = factory.CreateClient();
+        var client = factory.CreateBrowserClient();
         client.DefaultRequestHeaders.Authorization = userClient.DefaultRequestHeaders.Authorization;
 
         var pastHorizon = await client.PostAsJsonAsync("/api/reservations", new CreateReservationDto

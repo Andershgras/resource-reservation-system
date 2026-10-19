@@ -2,7 +2,9 @@
 using ResourceReservation.Api.Data;
 using System.Net;
 using System.Text;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -122,6 +124,15 @@ builder.Services.AddOptions<EmailRateLimitOptions>()
     .Bind(builder.Configuration.GetSection(EmailRateLimitOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+// Relaxed cookies are for the Vite dev server on plain http://localhost only.
+// Anywhere else the API refuses to start with them, so production always uses
+// __Host- cookies that are only sent over HTTPS (ADR 0012).
+builder.Services.AddOptions<AuthCookieOptions>()
+    .Bind(builder.Configuration.GetSection(AuthCookieOptions.SectionName))
+    .Validate<IHostEnvironment>(
+        (options, environment) => !options.AllowInsecureDevelopmentCookies || environment.IsDevelopment(),
+        "AuthCookies:AllowInsecureDevelopmentCookies is only allowed in the Development environment.")
+    .ValidateOnStart();
 builder.Services.AddOptions<SeedAdminOptions>()
     .Bind(builder.Configuration.GetSection(SeedAdminOptions.SectionName))
     .ValidateDataAnnotations()
@@ -148,6 +159,31 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
     });
 
 builder.Services.AddAuthRateLimiting();
+
+// Data Protection keys protect the anti-forgery tokens. Kept in a folder when
+// DataProtection:KeysDirectory is set, as in Docker Compose, so tokens survive
+// a restart. Session tokens are JWTs and don't depend on these keys.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("ResourceReservation");
+var keysDirectory = builder.Configuration["DataProtection:KeysDirectory"];
+
+if (!string.IsNullOrWhiteSpace(keysDirectory))
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+}
+
+builder.Services.AddAntiforgery();
+builder.Services.AddOptions<AntiforgeryOptions>()
+    .Configure<IOptions<AuthCookieOptions>>((options, authCookies) =>
+    {
+        options.HeaderName = AuthCookieOptions.AntiforgeryHeaderName;
+        options.Cookie.Name = authCookies.Value.AntiforgeryCookie;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = authCookies.Value.SecurePolicy;
+        options.Cookie.Path = "/";
+        // The security headers already send X-Frame-Options: DENY.
+        options.SuppressXFrameOptionsHeader = true;
+    });
 
 // Readiness checks that the database is reachable. Liveness runs no checks.
 builder.Services.AddHealthChecks()
@@ -177,15 +213,50 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
         options.Events = new JwtBearerEvents
         {
+            // A bearer header wins. Without one, the token comes from the
+            // httpOnly session cookie that POST /api/auth/login sets.
+            OnMessageReceived = context =>
+            {
+                var authorization = context.Request.Headers.Authorization.ToString();
+
+                if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    CsrfProtection.MarkBearerHeader(context.HttpContext);
+                    return Task.CompletedTask;
+                }
+
+                var cookieName = context.HttpContext.RequestServices
+                    .GetRequiredService<IOptions<AuthCookieOptions>>().Value.SessionCookie;
+                var cookieToken = context.Request.Cookies[cookieName];
+
+                if (!string.IsNullOrEmpty(cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
+
+                return Task.CompletedTask;
+            },
             // A valid signature isn't enough: the user must still be active, with
-            // the same role and security stamp as when the token was issued.
+            // the same role and security stamp as when the token was issued, and
+            // the token's session must not have expired or been revoked.
             OnTokenValidated = async context =>
             {
                 var validator = context.HttpContext.RequestServices.GetRequiredService<UserSessionValidator>();
+                var session = await validator.ValidateAsync(context.Principal!);
 
-                if (!await validator.IsCurrentAsync(context.Principal!))
+                if (session is null)
                 {
-                    context.Fail("The token's user is no longer active or has changed.");
+                    context.Fail("The token's user or session is no longer current.");
+                    return;
+                }
+
+                context.HttpContext.Features.Set(session);
+
+                // Only a bearer header that passed every check exempts the
+                // request from CSRF protection.
+                if (CsrfProtection.HasBearerHeader(context.HttpContext))
+                {
+                    CsrfProtection.MarkValidatedBearer(context.HttpContext);
                 }
             },
             OnChallenge = context =>
@@ -215,7 +286,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter your JWT token without the Bearer prefix."
+        Description = "A token from POST /api/auth/token, without the Bearer prefix."
     });
 
     options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
@@ -301,6 +372,10 @@ app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
+// After authentication, so it knows whether a bearer token was accepted, and
+// after authorization, so an unauthenticated request to a protected endpoint
+// gets its 401 first. Before the endpoints, so a rejected request changes nothing.
+app.UseCsrfProtection();
 
 app.MapControllers();
 
