@@ -169,12 +169,17 @@ jobs:
           path: frontend/resource-reservation-client/test-results
           retention-days: 7
 
-  # Builds the three images and runs the whole stack as docker compose would in
-  # production, then checks it from outside through nginx. See
-  # docs/deployment.md. Images are only built here, never published.
+  # Builds the three images and runs the whole stack with docker compose, plus
+  # Mailpit, then checks it from outside through nginx: the deploy smoke test,
+  # then the end-to-end tests in a real browser. See docs/deployment.md and
+  # docs/testing.md. Images are only built here; the publish job pushes them.
   containers:
     name: Container stack
     runs-on: ubuntu-latest
+    env:
+      # The stack with Mailpit catching every email. Mailpit is for CI and
+      # local runs only; production runs compose.yaml alone.
+      COMPOSE_FILE: compose.yaml:compose.mailpit.yaml
 
     steps:
       - name: Checkout repository
@@ -184,7 +189,13 @@ jobs:
       - name: Create .env and a localhost certificate
         run: |
           secret() { echo "Ci1-$(openssl rand -base64 24 | tr -d '/+=')"; }
-          sed             -e "s|^MSSQL_SA_PASSWORD=.*|MSSQL_SA_PASSWORD=$(secret)|"             -e "s|^APP_DB_PASSWORD=.*|APP_DB_PASSWORD=$(secret)|"             -e "s|^JWT_KEY=.*|JWT_KEY=$(openssl rand -base64 48 | tr -d '/+=')|"             -e "s|^SEED_ADMIN_EMAIL=.*|SEED_ADMIN_EMAIL=admin@example.com|"             -e "s|^SEED_ADMIN_PASSWORD=.*|SEED_ADMIN_PASSWORD=$(secret)|"             .env.example > .env
+          sed \
+            -e "s|^MSSQL_SA_PASSWORD=.*|MSSQL_SA_PASSWORD=$(secret)|" \
+            -e "s|^APP_DB_PASSWORD=.*|APP_DB_PASSWORD=$(secret)|" \
+            -e "s|^JWT_KEY=.*|JWT_KEY=$(openssl rand -base64 48 | tr -d '/+=')|" \
+            -e "s|^SEED_ADMIN_EMAIL=.*|SEED_ADMIN_EMAIL=admin@example.com|" \
+            -e "s|^SEED_ADMIN_PASSWORD=.*|SEED_ADMIN_PASSWORD=$(secret)|" \
+            .env.example > .env
           sh deploy/create-dev-certificate.sh
 
       - name: Build images
@@ -196,6 +207,37 @@ jobs:
       - name: Smoke test through nginx
         run: sh deploy/smoke-test.sh
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: frontend/resource-reservation-client/package-lock.json
+
+      - name: Install end-to-end test dependencies
+        working-directory: frontend/resource-reservation-client
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # Against the real stack: register, confirm through the email in
+      # Mailpit, then book, move and cancel. See docs/testing.md.
+      - name: Run end-to-end tests
+        working-directory: frontend/resource-reservation-client
+        run: |
+          set -a
+          . ../../.env
+          set +a
+          npm run test:e2e
+
+      - name: Upload end-to-end test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: frontend/resource-reservation-client/test-results
+          retention-days: 7
+
       - name: Show container logs
         if: failure()
         run: docker compose logs --no-color
@@ -203,3 +245,95 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose down --volumes
+
+  # Publishes the three images to the GitHub container registry, only for a
+  # push to main and only after every other job in this workflow has passed.
+  # This is the only job whose token can write packages; the jobs that run
+  # the tests can't. See docs/deployment.md#published-images.
+  publish:
+    name: Publish images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, migration-bundle, frontend, containers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # One publish at a time, the newest last, so latest never goes backwards.
+    concurrency:
+      group: publish-images
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Registry names must be lower case.
+      - name: Image names
+        id: names
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/resource-reservation" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Sign in to the GitHub container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: api
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.names.outputs.prefix }}-api:${{ github.sha }}
+            ${{ steps.names.outputs.prefix }}-api:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Resource Reservation API
+
+      - name: Publish the migrator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: migrator
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.names.outputs.prefix }}-migrator:${{ github.sha }}
+            ${{ steps.names.outputs.prefix }}-migrator:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Resource Reservation database migrations
+
+      - name: Publish the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend/resource-reservation-client
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.names.outputs.prefix }}-web:${{ github.sha }}
+            ${{ steps.names.outputs.prefix }}-web:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Resource Reservation frontend and nginx
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published images"
+            echo
+            for image in api migrator web; do
+              echo "- \`${{ steps.names.outputs.prefix }}-$image:${{ github.sha }}\` (also \`latest\`)"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
