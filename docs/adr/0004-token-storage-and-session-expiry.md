@@ -1,6 +1,6 @@
 # ADR 0004: Keep The Token In localStorage And Handle Session Expiry In The Frontend
 
-- **Status:** Accepted for Milestone 3. To be reviewed before any public deployment (Milestone 7).
+- **Status:** Superseded by [ADR 0012](0012-cookie-sessions-and-csrf.md) in Milestone 7. The session-expiry handling below still applies; the token is no longer kept in `localStorage`.
 - **Date:** 2026-10-12
 - **Related findings:** M3 in the [initial audit](../audit/2026-10-initial-audit.md)
 

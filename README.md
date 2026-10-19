@@ -65,9 +65,11 @@ A week of free and reserved time for one resource, with a time being chosen. A f
 - User registration, confirmed through an emailed link before the account can sign in
 - Registration and password reset answer the same whether or not an address has an account
 - Password reset from an emailed link, which signs out every device
-- User login
-- JWT-based authentication
-- Session expiry: the frontend returns to the login screen when the token expires or the API rejects it
+- User login, with the session in an httpOnly, `SameSite=Strict` cookie that scripts can't read
+- Signing out revokes the session on the server, for that device only
+- CSRF protection on every request that changes something: Fetch Metadata and Origin checks, and anti-forgery tokens
+- Bearer tokens for clients other than browsers
+- Session expiry: the frontend returns to the login screen when the session expires or the API rejects it
 - Rate-limited login and registration
 - Five failed sign-ins lock an account for 15 minutes, without revealing whether the account exists
 - Role changes and deactivation end the user's existing sessions at once
@@ -235,7 +237,11 @@ The frontend provides role-based workflows. Admin users manage the booking setup
 
 ```text
 POST /api/auth/register                202, the same answer for every address
-POST /api/auth/login
+POST /api/auth/login                   browsers: sets the httpOnly session cookie
+POST /api/auth/token                   other clients: returns a bearer token
+GET  /api/auth/me                      the signed-in user and the session's remaining lifetime
+POST /api/auth/logout                  revokes the current session and deletes the cookie
+GET  /api/auth/csrf                    an anti-forgery token for X-CSRF-TOKEN
 POST /api/auth/resend-verification     202, the same answer for every address
 POST /api/auth/verify-email            { token, password }
 POST /api/auth/forgot-password         202, the same answer for every address
@@ -245,7 +251,11 @@ POST /api/auth/reset-password          { token, password, name? }
 
 Registration creates an unconfirmed account and emails a link, or emails a notice if the address already has an account. An unconfirmed account can't sign in (`403` after the right password) until `verify-email` is called with the link's token and the account's password. A password reset ends every session. Links work once and expire after 24 hours (verification) or 1 hour (reset). See [ADR 0011](docs/adr/0011-email-flows.md).
 
-Login returns the token, `expiresAt` (UTC) and `expiresInSeconds`. Clients should time the session from `expiresInSeconds`, because their own clock may be wrong.
+**Browsers** sign in with `/login`, which puts the token in a `__Host-rr-session` cookie: `HttpOnly`, `Secure`, `SameSite=Strict`. The response has the user, `expiresAt` (UTC) and `expiresInSeconds`, but never the token. Every request that changes something needs an anti-forgery token from `/csrf` in the `X-CSRF-TOKEN` header, and is refused if the browser marks it as coming from another site. Signing in is protected too.
+
+**Other clients** sign in with `/token` and send `Authorization: Bearer <token>`. A request whose bearer token passes every check needs no anti-forgery token. `/logout` with that header revokes the token.
+
+Every sign-in is a session on the server, checked on every request, so signing out ends it at once. Clients should time the session from `expiresInSeconds`, because their own clock may be wrong. See [ADR 0012](docs/adr/0012-cookie-sessions-and-csrf.md).
 
 Login, verification and reset share a rate limit per client IP address, using a token bucket:
 - A client starts with 10 attempts, then gets one more every 6 seconds, up to 10. That allows 10 attempts per minute sustained, with a burst of up to about 20 in the first minute.
@@ -365,7 +375,7 @@ Validation errors also include `errors`, keyed by field name. Unexpected server 
 | Status | Meaning |
 |---|---|
 | `400` | Invalid input, or a business rule was broken (for example, outside availability or in the past) |
-| `401` | Missing or invalid token |
+| `401` | No valid session: missing, expired or revoked, or an invalid token |
 | `403` | Authenticated, but not allowed |
 | `404` | Resource, availability or reservation not found |
 | `409` | The time overlaps an active reservation |
@@ -456,13 +466,7 @@ The Vite development server usually runs at:
 http://localhost:5173
 ```
 
-The frontend expects the API at:
-
-```text
-http://localhost:5052/api
-```
-
-This can be overridden with `VITE_API_BASE_URL`.
+The dev server passes `/api` on to the API at `http://localhost:5052`, so the app and the API share one origin, as they do behind nginx, and the session cookie works. The dev server must run on port 5173, which `Frontend:BaseUrl` names, because the API only accepts changes from that origin. In Development the cookies drop the `__Host-` prefix and `Secure`, because the dev server uses plain HTTP ([configuration](docs/configuration.md#sessions-and-csrf)).
 
 ## Verification
 

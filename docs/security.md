@@ -5,8 +5,9 @@ This page describes how the application protects accounts and data, and lists th
 ## Authentication
 
 - **Passwords** are hashed with ASP.NET Core Identity's `PasswordHasher`: PBKDF2 with HMAC-SHA512, a random salt and many iterations. Passwords must be at least 8 characters.
-- **Login** returns a JWT signed with HMAC-SHA256 using `Jwt:Key`. The API checks the signature, issuer, audience and lifetime of every token. ASP.NET Core allows five minutes of clock skew.
-- **Tokens last** `Jwt:ExpiryMinutes`, 120 by default. The login response includes `expiresAt` and `expiresInSeconds`.
+- **Sessions:** signing in issues a JWT signed with HMAC-SHA256 using `Jwt:Key`. Browsers get it in an httpOnly session cookie from `POST /api/auth/login`. Other clients get it as a bearer token from `POST /api/auth/token` ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)). The API checks the signature, issuer, audience and lifetime of every token. ASP.NET Core allows five minutes of clock skew.
+- **Tokens last** `Jwt:ExpiryMinutes`, 120 by default. Both responses include `expiresAt` and `expiresInSeconds`.
+- **Every sign-in is a session on the server,** a `UserSessions` row whose ID the token carries. Signing out revokes it, and a revoked, expired, missing or someone else's session is rejected. The check fails closed: a token without a session ID is refused, and a database error fails the request rather than letting it through.
 - **Tokens are checked against the database** on every authenticated request. The user must still be active, with the role and security stamp the token was issued with. Changing a role or deactivating an account sets a new stamp, so the user's existing tokens stop working on their next request ([ADR 0010](adr/0010-user-management-and-account-security.md)). Tokens carry a SHA-256 fingerprint of the stamp, never the stamp, and the API never returns it.
 - **Every failed sign-in gets the same answer**, whether the email is unknown, the password is wrong or the account is locked: "Invalid email or password. After repeated failed attempts, sign-in pauses for a few minutes." Each also verifies one password hash and runs the same failure update, so they take about the same time ([login timing](#login-timing)).
 - **Deactivated accounts** never get a token. They are told "This account has been deactivated." only after the right password.
@@ -40,21 +41,51 @@ Verification and reset links ([ADR 0011](adr/0011-email-flows.md)):
 
 ## Sessions in the browser
 
-The frontend keeps the token in `localStorage` ([ADR 0004](adr/0004-token-storage-and-session-expiry.md)).
+The session token is kept in an httpOnly cookie, `__Host-rr-session`, that scripts can't read ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)):
 
-- **Restoring a session:** a stored session is only restored if it hasn't expired. The expiry is timed on the browser's own clock from `expiresInSeconds`, so a wrong system clock doesn't end sessions early.
-- **Expiry:** when the token's lifetime runs out, the frontend returns to the login screen and says the session has expired.
-- **Rejected tokens:** a `401` for a request that sent a token ends the session the same way. A `401` without a token, such as a failed login, is shown as an ordinary error, so the login screen can't loop.
-- **Logout** only removes the token from the browser. The token itself stays valid until it expires, unless its user's role or status changes, which revokes it.
+| Attribute | Why |
+|---|---|
+| `HttpOnly` | Scripts, including injected ones, can't read or copy the session |
+| `Secure` and the `__Host-` prefix | Only sent over HTTPS, for this exact host and `Path=/`. No subdomain or other site can set or overwrite it. |
+| `SameSite=Strict` | Not sent with requests that another site starts |
+| `Expires` | The token's expiry, so the browser drops it when the session ends |
 
-**XSS risk.** Any script that runs on the frontend's origin can read `localStorage`, and so steal the token. The API's security headers protect API responses only. They don't protect the frontend's JavaScript. What reduces the risk today:
+- **Restoring a session:** on page load the frontend asks `GET /api/auth/me` who is signed in. Nothing about the session is stored in the browser except a hint that one was started, so the login screen can say it expired. A token stored by an earlier version is removed and never sent.
+- **Expiry:** the frontend times the session from `expiresInSeconds` on the browser's own clock, so a wrong system clock doesn't end sessions early. When it runs out, the frontend returns to the login screen and says the session has expired.
+- **Rejected sessions:** a `401` for a request made while signed in ends the session the same way. A `401` while signed out, such as a failed login, is shown as an ordinary error, so the login screen can't loop. A late `401` from an older session can't end a newer one.
+- **Signing out** revokes the session on the server and deletes the cookie. A copy of the cookie stops working. The user's sessions on other devices keep working. If the sign-out request fails, for example while offline, the next page load finishes it before restoring anything.
+- **Signing in again** in the same browser revokes the previous session.
+
+**XSS.** An injected script can't read the session cookie, so it can't take the session elsewhere. While the page is open it could still make requests as the user. What makes injecting script hard:
 
 - React escapes rendered values, and the frontend doesn't use `dangerouslySetInnerHTML`.
-- Tokens are short-lived.
-
 - In Docker Compose, nginx gives the frontend a strict Content-Security-Policy: scripts only from the app's own origin, plus the inline theme script in `index.html`, allowed by its hash ([deployment](deployment.md#the-frontends-responses)). An injected inline script or a script from another site doesn't run.
 
-**Before any public deployment**, Milestone 7 PR 2 moves the token to an httpOnly cookie. This is tracked in the [roadmap](roadmap.md#m7-deployment).
+**Development** runs the Vite dev server on plain `http://localhost`, where browsers disagree about `Secure` cookies. `AuthCookies:AllowInsecureDevelopmentCookies`, set only in `appsettings.Development.json`, drops the `__Host-` prefix and sends `Secure` only over HTTPS. The API refuses to start with it outside the Development environment.
+
+## Cross-site request forgery
+
+Cookies are sent by the browser automatically, so every unsafe `/api` request (POST, PUT, PATCH, DELETE) is checked in three layers ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md#csrf-protection)):
+
+1. **`SameSite=Strict`** session and anti-forgery cookies, which browsers don't send with requests another site starts.
+2. **Fetch Metadata and Origin:** a request is rejected if the browser marks it as coming from another site (`Sec-Fetch-Site` other than `same-origin`), or if its `Origin` is neither the frontend's nor the API's own, unless the origin is in `Cors:AllowedOrigins`.
+3. **Anti-forgery tokens:** ASP.NET Core's anti-forgery tokens, bound to the signed-in user, sent in `X-CSRF-TOKEN` and matched against the httpOnly `__Host-rr-csrf` cookie. The frontend gets the token from `GET /api/auth/csrf`.
+
+A rejection is a `403` problem response with `code` set to `cross_site_request` or `csrf_token_invalid`, and changes nothing. Signing in is protected too, so another site can't sign a visitor into the attacker's account.
+
+**Exemptions:**
+
+- **A request whose bearer token passed every check.** Another site can't make a browser send an `Authorization` header. A bearer header that fails validation exempts nothing: the request is unauthenticated, and checked like any other.
+- **`POST /api/auth/token`**, which neither reads nor sets cookies. It still gets the Fetch Metadata and Origin checks.
+
+Tests cover each layer:
+
+- requests without a token, with a forged token, or with a token from before signing in
+- cross-site `Sec-Fetch-Site` and foreign `Origin` values
+- sign-in without a token
+- a bearer header that fails validation, which must not exempt the request
+
+**The anti-forgery tokens use the Data Protection keys,** which Docker Compose keeps in a volume (`DataProtection:KeysDirectory`), so they survive restarts. If the keys are lost anyway, the frontend fetches a new token and retries once.
 
 ## Brute-force protection
 
@@ -125,12 +156,14 @@ Every error is an RFC 9457 problem response. Unexpected exceptions are logged on
 |---|---|---|
 | **Login timing is reduced, not constant** | Small timing differences remain, such as the database lookup | See [login timing](#login-timing) below |
 | **Lockout can be used against a user.** Anyone who knows an email can lock that account for 15 minutes at a time | The real user can't sign in during the lockout | Attempts during a lockout don't extend it, and the per-IP rate limit slows the attack. Admins can't unlock accounts by hand yet. |
-| No server-side logout | A stolen token works until it expires, unless its user's role or status changes | Short token lifetime for now. Milestone 7 PR 2 adds server-side sign-out. |
-| Token in `localStorage` | Readable by any script that runs on the frontend's origin. The Content-Security-Policy makes injecting such a script much harder. | Milestone 7 PR 2 moves it to an httpOnly cookie, before public deployment |
+| **Data Protection keys are stored unencrypted** in their folder | Anyone who can read the volume could forge anti-forgery tokens. They would still need the victim's session cookie, which is httpOnly and `SameSite=Strict`. | Keep the volume readable only by the API. Keys can be protected with a certificate if needed. |
+| **Expired session rows stay** in `UserSessions` | The table grows by one row per sign-in | A clean-up job in Milestone 7 PR 3 |
 | Rate limit counters are per API instance | With several instances, each one counts separately | A shared store such as Redis if the API is scaled out |
 | **Account emails are queued in memory** | A verification or reset email still queued when the API restarts is lost | The user asks for another. Booking emails use a database outbox and survive restarts. |
 | **The response time floor has limits** | Under heavy load, registration and reset requests can take longer than 250 ms, and small timing differences could show again | Raise `AccountTokens:MinimumResponseMilliseconds` if needed |
 | **Development email only** | Emails are written as files, not sent, also in Docker Compose | SMTP delivery in Milestone 7 PR 3 |
+
+Fixed in Milestone 7 PR 2: the session token is in an httpOnly cookie instead of `localStorage`, and signing out revokes the session on the server ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)).
 
 Fixed in Milestone 6 PR 4: registration no longer reveals existing accounts, and users can reset a forgotten password themselves.
 

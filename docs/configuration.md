@@ -42,6 +42,17 @@ ReverseProxy__KnownProxies__0=10.0.0.5
 | `AccountLockout:MaxFailedAttempts` | No | `5` | 1–100. Failed sign-ins in a row that lock an account. A successful sign-in clears the count. |
 | `AccountLockout:LockoutMinutes` | No | `15` | 1–1440 minutes. How long a lockout lasts. Attempts during it don't extend it. See [security](security.md#brute-force-protection). |
 
+### Sessions and CSRF
+
+Browser sessions use an httpOnly cookie, and every unsafe request needs an anti-forgery token ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)).
+
+| Setting | Required | Default | Notes |
+|---|---|---|---|
+| `AuthCookies:AllowInsecureDevelopmentCookies` | No | `false` | Names the cookies `rr-session` and `rr-csrf` instead of `__Host-rr-session` and `__Host-rr-csrf`, and marks them `Secure` only over HTTPS, for the Vite dev server on plain `http://localhost`. `appsettings.Development.json` sets it. **The API refuses to start with it outside the Development environment.** |
+| `DataProtection:KeysDirectory` | No | None | The folder for ASP.NET Core's Data Protection keys, which protect the anti-forgery tokens. Without it, keys are kept in memory and change at every restart, so the frontend fetches a new token and retries once. Docker Compose uses a volume. Keep the folder readable only by the API: the keys are stored unencrypted. |
+
+The origin that unsafe browser requests must come from is `Frontend:BaseUrl`'s, plus any in `Cors:AllowedOrigins`.
+
 ### Scheduling
 
 | Setting | Required | Default | Notes |
@@ -86,7 +97,7 @@ Emails are verification and reset links, account notices and booking emails ([AD
 
 | Setting | Required | Default | Notes |
 |---|---|---|---|
-| `Cors:AllowedOrigins` | No | None | Browser origins that may call the API from another origin, such as `https://app.example.com`. Each entry must be an exact origin with no path or wildcard. Leave empty when the frontend and API share an origin. Development also allows the Vite dev server on `localhost` ports 5173–5185. |
+| `Cors:AllowedOrigins` | No | None | Browser origins that may call the API from another origin, such as `https://app.example.com`, with bearer tokens from `/api/auth/token`. The session cookie only works on the same origin. Each entry must be an exact origin with no path or wildcard. Leave empty when the frontend and API share an origin. Development also allows the Vite dev server on `localhost` ports 5173–5185. |
 | `ReverseProxy:KnownProxies` | No | None | IP addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, such as `10.0.0.5`. With none configured, forwarded headers are ignored. |
 | `ReverseProxy:KnownNetworks` | No | None | The same as `KnownProxies`, as CIDR ranges such as `10.0.0.0/24` |
 
@@ -118,7 +129,7 @@ See [deployment](deployment.md#https-termination-and-redirection) for how these 
 
 | Variable | Default | Notes |
 |---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:5052/api` | The API's base URL. It is baked into the build, so set it before `npm run build`. See `.env.example`. The frontend image builds with `/api`, the API on the same origin, behind nginx. |
+| `VITE_API_BASE_URL` | `/api` | The API's base URL. It is baked into the build, so set it before `npm run build`. The default is the API on the same origin: through the Vite dev server's proxy to `http://localhost:5052` in development, and behind nginx in the frontend image. Session cookies need the same origin ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)). |
 
 ## Docker Compose
 

@@ -15,7 +15,7 @@ flowchart LR
     end
     DB[("SQL Server")]
 
-    Browser -- "JSON over HTTPS<br/>JWT bearer token" --> Controllers
+    Browser -- "JSON over HTTPS<br/>httpOnly session cookie<br/>and anti-forgery token" --> Controllers
     Data --> DB
 ```
 
@@ -206,7 +206,7 @@ Booking and availability times are wall-clock times in the configured scheduling
 
 | Concern | How it works |
 |---|---|
-| Authentication | JWT bearer tokens signed with HMAC-SHA256. They last `Jwt:ExpiryMinutes` (120 by default). Every request also checks the token's user is still active with the same role and security stamp. Five failed sign-ins lock an account for 15 minutes. See [ADR 0010](adr/0010-user-management-and-account-security.md). |
+| Authentication | JWTs signed with HMAC-SHA256, in an httpOnly session cookie for browsers or a bearer header for other clients. They last `Jwt:ExpiryMinutes` (120 by default). Every request also checks the token's user is still active with the same role and security stamp, and that its session in `UserSessions` hasn't expired or been revoked. Every unsafe request is protected against CSRF. See [ADR 0010](adr/0010-user-management-and-account-security.md) and [ADR 0012](adr/0012-cookie-sessions-and-csrf.md). |
 | Authorization | `[Authorize]` and `[Authorize(Roles = "Admin")]` on controllers. Services check ownership. Role and status changes run under an application lock that keeps an active admin. |
 | Errors | RFC 9457 problem details for every error, with `traceId` |
 | Configuration | Typed options validated at startup. See [configuration](configuration.md). |
@@ -248,8 +248,9 @@ Middleware runs in this order for every request:
 6. **HTTPS redirection**
 7. **CORS**
 8. **Rate limiter:** after CORS, so the browser can read a 429. It only applies to the auth endpoints.
-9. **Authentication and authorization:** after the token's signature and lifetime, `UserSessionValidator` checks its user in the database.
-10. **Endpoints:** the controllers and health checks.
+9. **Authentication and authorization:** the token comes from a bearer header, or else the session cookie. After its signature and lifetime, `UserSessionValidator` checks its user and its session in the database.
+10. **CSRF protection:** every unsafe `/api` request, unless its bearer token was accepted, must come from the frontend's origin and carry a valid anti-forgery token ([ADR 0012](adr/0012-cookie-sessions-and-csrf.md)). After authorization, so a protected endpoint answers `401` first, and before the endpoints, so a rejected request changes nothing.
+11. **Endpoints:** the controllers and health checks.
 
 ## Frontend
 
@@ -259,7 +260,7 @@ The frontend is a Vite-built React and TypeScript app. Routing uses React Router
 flowchart TB
     subgraph Providers["main.tsx"]
         QC[QueryClientProvider]
-        AP["AuthProvider<br/>user, session expiry, clears the cache"]
+        AP["AuthProvider<br/>restores the session from /auth/me,<br/>session expiry, clears the cache"]
         BR["RouterProvider<br/>data router (createBrowserRouter)"]
     end
     App["app/App.tsx<br/>route table"]
@@ -269,7 +270,7 @@ flowchart TB
     AdminPages["Resources, Calendar, Availability,<br/>Weekly schedule, Closures,<br/>Reservations, Users"]
     UserPages["Booking, My reservations"]
     Hooks["features/*/…Queries.ts<br/>TanStack Query hooks"]
-    Api["api/client.ts<br/>bearer token, problem details"]
+    Api["api/client.ts<br/>same origin, anti-forgery token,<br/>problem details"]
 
     QC --> AP --> BR --> App
     App --> Login
@@ -338,7 +339,7 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0001: Store times as wall-clock time in one configured time zone](adr/0001-time-zone-convention.md)
 - [ADR 0002: Serialize bookings per resource with a SQL Server application lock](adr/0002-reservation-concurrency.md)
 - [ADR 0003: Problem details for errors and result types for expected failures](adr/0003-error-handling.md)
-- [ADR 0004: Keep the token in localStorage and handle session expiry in the frontend](adr/0004-token-storage-and-session-expiry.md)
+- [ADR 0004: Keep the token in localStorage and handle session expiry in the frontend](adr/0004-token-storage-and-session-expiry.md) (superseded by ADR 0012)
 - [ADR 0005: Database migrations as a separate deployment step](adr/0005-migrations-in-deployment.md)
 - [ADR 0006: Frontend routing and server state](adr/0006-frontend-routing-and-state.md)
 - [ADR 0007: Plain CSS with design tokens and shared components](adr/0007-design-system.md)
@@ -346,3 +347,4 @@ The routes run in a data router (`createBrowserRouter`), only so that forms can 
 - [ADR 0009: Closures (availability exceptions)](adr/0009-availability-exceptions.md)
 - [ADR 0010: User management and account security](adr/0010-user-management-and-account-security.md)
 - [ADR 0011: Email verification, password reset and booking emails](adr/0011-email-flows.md)
+- [ADR 0012: Browser sessions in an httpOnly cookie, with server-side sign-out and CSRF protection](adr/0012-cookie-sessions-and-csrf.md)
