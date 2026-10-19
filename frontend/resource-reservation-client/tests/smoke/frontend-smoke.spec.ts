@@ -775,6 +775,9 @@ test('a forgotten password is reset from the emailed link', async ({ page }) => 
   await page.goto('/login')
 
   await page.getByRole('link', { name: 'Forgot your password?' }).click()
+  // The login page has an Email field too, and can still be showing while
+  // the navigation finishes, so wait for the new page before typing.
+  await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible()
   await page.getByLabel('Email').fill('smoke.user@example.com')
   await page.getByRole('button', { name: 'Send reset link' }).click()
   await expect(page.getByText(passwordResetRequestedMessage)).toBeVisible()
