@@ -178,10 +178,14 @@ public class LoginTests : ApiTestBase
         var client = CreateAnonymousClient();
 
         // Correct and wrong passwords race. Whatever the order, the account
-        // ends up locked once, with a consistent count.
+        // ends up locked once, with a consistent count. Each attempt has its
+        // own client, as separate attackers and browsers would: in one shared
+        // cookie jar, a sign-in that succeeds first would turn the anonymous
+        // anti-forgery token of the attempts still in flight into the wrong
+        // user's, and they would be refused before reaching the lockout.
         var responses = await Task.WhenAll(Enumerable.Range(0, MaxFailedAttempts * 3)
-            .Select(_ => LoginAsync(client, WrongPassword))
-            .Concat(Enumerable.Range(0, MaxFailedAttempts).Select(_ => LoginAsync(client, Password))));
+            .Select(_ => LoginAsync(CreateAnonymousClient(), WrongPassword))
+            .Concat(Enumerable.Range(0, MaxFailedAttempts).Select(_ => LoginAsync(CreateAnonymousClient(), Password))));
 
         var reloaded = await ReloadAsync(user.Id);
         Assert.NotNull(reloaded.LockoutEndsAt);
